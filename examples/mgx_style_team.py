@@ -675,7 +675,12 @@ class MetaGPTAdapter:
             # Strateji 3: _memory private attribute (son çare - riskli ama gerekli)
             if hasattr(mem_store, "_memory"):
                 mem_store._memory = messages_to_keep
-                logger.warning("⚠️ _memory private attribute kullanıldı - MetaGPT güncellemesinde kırılabilir!")
+                logger.warning(
+                    "⚠️ UYARI: MetaGPT private attribute (_memory) kullanılıyor!\n"
+                    "   This is a fallback strategy and may break with MetaGPT updates.\n"
+                    "   Please submit public API request to MetaGPT project.\n"
+                    "   GitHub: https://github.com/geekan/MetaGPT/issues"
+                )
                 return True
             
             # Hiçbir strateji çalışmadı
@@ -1135,10 +1140,11 @@ class Charlie(RelevantMemoryMixin, Role):
         self.set_actions([ReviewCode])
         self._watch([WriteTest])  # Bob'un testlerini izle
         
-        # İnsan etkileşimi flag'i (TODO: Gerçek human-in-the-loop henüz implement edilmedi)
+        # İnsan etkileşimi flag'i - Terminal input ile çalışıyor
         if is_human:
             self.is_human = True
-            logger.info(f"👤 {self.name} ({self.profile}): HUMAN FLAG SET - Şu an LLM kullanıyor (ileride terminal input eklenecek)")
+            logger.info(f"👤 {self.name} ({self.profile}): İNSAN REVIEWER MODU AKTİF")
+            logger.info(f"   Sıra size gelince terminal'den input beklenir (ENTER ile submit)")
     
     async def _act(self) -> Message:
         logger.info("🔍 CHARLIE: _act() çağrıldı - Review başlıyor...")
