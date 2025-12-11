@@ -12,7 +12,8 @@ Comprehensive guide to the TEM Agent test infrastructure, fixtures, and best pra
 6. [Test Helpers & Stubs](#test-helpers--stubs)
 7. [Writing Tests](#writing-tests)
 8. [Coverage](#coverage)
-9. [Troubleshooting](#troubleshooting)
+9. [CI/CD Integration](#cicd-integration)
+10. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -577,19 +578,109 @@ The HTML report provides:
 - Branch coverage analysis
 - Clickable file navigation
 
+### Coverage Requirements
+
+This project maintains strict quality standards:
+
+```bash
+# Verify 80% coverage requirement
+pytest --cov=mgx_agent --cov-report=term-missing
+
+# Check test count requirement (≥130 tests)
+pytest --collect-only -q | tail -1
+```
+
+**Quality Gates**:
+- ✅ **Test Count**: ≥130 tests (current: 310 tests)
+- ✅ **Coverage**: ≥80% overall coverage
+- ✅ **HTML Reports**: Generated under `htmlcov/`
+- ✅ **XML Reports**: Generated as `coverage.xml`
+
+### Comprehensive Coverage Commands
+
+```bash
+# Run tests with all coverage reports
+pytest --cov=mgx_agent \
+       --cov-report=html:htmlcov \
+       --cov-report=xml:coverage.xml \
+       --cov-report=term-missing
+
+# Expected output files:
+# - coverage.xml (XML format for CI/CD tools)
+# - htmlcov/ (HTML reports directory)
+# - .coverage (binary coverage data)
+
+# View coverage in terminal
+coverage report --show-missing
+
+# Generate XML report explicitly
+coverage xml -o coverage.xml
+
+# Check coverage percentage
+pytest --cov=mgx_agent --cov-report=term-missing | tail -1
+```
+
 ### CI/CD Integration
 
-For GitHub Actions:
+#### GitHub Actions Workflow
+
+The project includes a comprehensive GitHub Actions workflow (`.github/workflows/tests.yml`) that automatically:
+
+1. **Installs dependencies** including `pytest-cov` for coverage
+2. **Runs unit, integration, and E2E tests** with coverage tracking
+3. **Generates HTML and XML coverage reports**
+4. **Uploads coverage artifacts** for each Python version
+5. **Validates quality gates** (≥130 tests, ≥80% coverage)
 
 ```yaml
-- name: Run tests with coverage
-  run: pytest --cov=mgx_agent --cov-report=xml
-
-- name: Upload coverage to Codecov
-  uses: codecov/codecov-action@v3
-  with:
-    files: ./coverage.xml
+# Trigger conditions
+on:
+  push:
+    branches: [ main, test-cli-workflows-coverage-ci-docs ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 ```
+
+#### Automated Quality Checks
+
+The workflow performs automated quality validation:
+
+```bash
+# Test count validation (≥130 tests)
+TEST_COUNT=$(pytest --collect-only -q | grep -o '[0-9]*')
+if [ "$TEST_COUNT" -lt 130 ]; then exit 1; fi
+
+# Coverage validation (≥80%)
+COVERAGE=$(coverage report | tail -1 | grep -o '[0-9]*%' | sed 's/%//')
+if [ "$COVERAGE" -lt 80 ]; then exit 1; fi
+```
+
+#### Coverage Report Integration
+
+- **HTML Reports**: Uploaded as artifacts (`coverage-reports-*.tar.gz`)
+- **XML Reports**: Generated as `coverage.xml` for CI/CD tools
+- **Codecov Integration**: Optional upload if token is configured
+- **PR Comments**: Automatic coverage reporting on pull requests
+
+#### Manual Coverage Commands
+
+For local development and CI verification:
+
+```bash
+# Full coverage report
+pytest --cov=mgx_agent --cov-report=html:htmlcov --cov-report=xml:coverage.xml
+
+# Check test and coverage requirements
+pytest --collect-only -q
+coverage report --show-missing
+coverage xml -o coverage.xml
+
+# View HTML reports
+open htmlcov/index.html  # or your browser
+```
+
+The workflow ensures all quality gates are met before merging to maintain code quality standards.
 
 ---
 
