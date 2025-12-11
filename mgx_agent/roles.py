@@ -42,6 +42,7 @@ from mgx_agent.actions import (
     WriteTest,
     ReviewCode,
 )
+from mgx_agent.performance.async_tools import AsyncTimer, with_timeout
 
 
 # ============================================
@@ -469,6 +470,7 @@ class Alex(RelevantMemoryMixin, Role):
         print(f"{'='*60}")
         
         # ÖNCE: MGXStyleTeam'den task_spec'i al (tek kaynak - hafıza taraması yerine)
+        # This avoids repeated memory scans - task spec is set once by Mike
         instruction = ""
         plan = ""
         complexity = "N/A"

@@ -18,6 +18,7 @@ Açık kaynak MetaGPT'yi MGX'e benzer şekilde çalıştıran örnek.
 import asyncio
 import hashlib
 import json
+import os
 import re
 import time
 from dataclasses import dataclass
@@ -46,6 +47,13 @@ from mgx_agent.actions import (
     ReviewCode,
 )
 from mgx_agent.roles import Mike, Alex, Bob, Charlie
+from mgx_agent.performance.async_tools import (
+    AsyncTimer,
+    bounded_gather,
+    with_timeout,
+    run_in_thread,
+    PhaseTimings,
+)
 
 
 # ============================================
@@ -301,6 +309,7 @@ class MGXStyleTeam:
         self.max_memory_size = config.max_memory_size
         self.human_mode = config.human_reviewer
         self.metrics: List[TaskMetrics] = [] if config.enable_metrics else None
+        self.phase_timings = PhaseTimings()  # Track phase durations
         
         # Her role için farklı LLM config'leri yükle
         if config.use_multi_llm:
@@ -557,8 +566,21 @@ class MGXStyleTeam:
         if not mike:
             mike = Mike(context=self.context)
         
-        # Mike analiz etsin
-        analysis = await mike.analyze_task(task)
+        # Mike analiz etsin (with timing and timeout)
+        async with AsyncTimer("analyze_and_plan", log_on_exit=True) as timer:
+            try:
+                analysis = await asyncio.wait_for(
+                    mike.analyze_task(task),
+                    timeout=120.0  # 2 minute timeout for analysis
+                )
+            except asyncio.TimeoutError:
+                logger.error("⏱️  Analysis timeout (120s) exceeded")
+                raise
+        
+        # Record timing
+        self.phase_timings.analysis_duration = timer.duration
+        self.phase_timings.planning_duration = timer.duration  # Combined for now
+        self.phase_timings.add_phase("analyze_and_plan", timer.duration)
         
         # ÖNEMLİ: Plan mesajını team environment'a publish et
         # Bu sayede Alex (Engineer) plan mesajını alacak
@@ -707,15 +729,23 @@ class MGXStyleTeam:
             # İlk tur: Ana geliştirme
             print_phase_header("TUR 1: Ana Geliştirme", "🔄")
             
-            await self.team.run(n_round=n_round)
+            # Wrap main execution with timer
+            async with AsyncTimer("main_development_round", log_on_exit=True) as exec_timer:
+                await self.team.run(n_round=n_round)
+                
+                # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
+                # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
+                logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
+                await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
             
-            # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
-            # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
-            logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
-            await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
+            # Record execution timing
+            self.phase_timings.execution_duration = exec_timer.duration
+            self.phase_timings.add_phase("main_development", exec_timer.duration)
             
-            # Tur sonrası hafıza temizliği
-            self.cleanup_memory()
+            # Tur sonrası hafıza temizliği (offload to thread)
+            async with AsyncTimer("cleanup_after_main", log_on_exit=False) as cleanup_timer:
+                await run_in_thread(self.cleanup_memory)
+            self.phase_timings.add_phase("cleanup_after_main", cleanup_timer.duration)
         
             # Review sonucunu kontrol et
             revision_count = 0
@@ -838,16 +868,19 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
                     self.team.env.publish_message(improvement_msg)
                     logger.info("📤 İyileştirme talebi ve plan mesajı Alex'e iletildi!")
                     
-                    # Tekrar çalıştır
-                    await self.team.run(n_round=n_round)
+                    # Tekrar çalıştır (with timing)
+                    async with AsyncTimer(f"revision_round_{revision_count}", log_on_exit=True) as rev_timer:
+                        await self.team.run(n_round=n_round)
+                        
+                        # Charlie'nin revision turunda da review yapması için ek round
+                        # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
+                        logger.debug("🔍 Charlie'nin revision review yapması için ek round çalıştırılıyor...")
+                        await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
                     
-                    # Charlie'nin revision turunda da review yapması için ek round
-                    # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
-                    logger.debug("🔍 Charlie'nin revision review yapması için ek round çalıştırılıyor...")
-                    await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
+                    self.phase_timings.add_phase(f"revision_round_{revision_count}", rev_timer.duration)
                     
-                    # Her tur sonrası hafıza temizliği
-                    self.cleanup_memory()
+                    # Her tur sonrası hafıza temizliği (offload to thread)
+                    await run_in_thread(self.cleanup_memory)
                 else:
                     # Review OK - döngüden çık
                     print(f"\n✅ Review ONAYLANDI - Düzeltme gerekmiyor.")
@@ -861,11 +894,34 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             metric.token_usage = self._calculate_token_usage()
             metric.estimated_cost = budget["investment"]
             
-            # Final sonuçları topla ve kaydet
-            results = self._collect_results()
+            # Final operations: run results collection and cleanup concurrently
+            async with AsyncTimer("final_operations", log_on_exit=True) as final_timer:
+                # Use TaskGroup for concurrent final operations (Python 3.11+)
+                # Fallback to gather for older Python versions
+                try:
+                    # Try Python 3.11+ TaskGroup
+                    async with asyncio.TaskGroup() as tg:
+                        # Collect results in thread (file I/O)
+                        results_task = tg.create_task(
+                            run_in_thread(self._collect_results)
+                        )
+                        # Final cleanup in thread
+                        cleanup_task = tg.create_task(
+                            run_in_thread(self.cleanup_memory)
+                        )
+                    
+                    results = results_task.result()
+                except AttributeError:
+                    # Fallback for Python < 3.11: use gather
+                    logger.debug("TaskGroup not available, using asyncio.gather")
+                    results, _ = await asyncio.gather(
+                        run_in_thread(self._collect_results),
+                        run_in_thread(self.cleanup_memory)
+                    )
             
-            # Final hafıza temizliği
-            self.cleanup_memory()
+            self.phase_timings.cleanup_duration = final_timer.duration
+            self.phase_timings.add_phase("final_operations", final_timer.duration)
+            self.phase_timings.total_duration = time.time() - start_time
             
             # Kullanıcıya görünen bilgi _show_metrics_report ile basılıyor
             logger.debug(f"Görev tamamlandı - {revision_count} düzeltme turu yapıldı")
@@ -934,6 +990,14 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
 💰 Toplam Maliyet: ${total_cost:.4f}
 """
         return summary
+    
+    def get_phase_timings(self) -> dict:
+        """Get phase timing data for the current task."""
+        return self.phase_timings.to_dict()
+    
+    def show_phase_timings(self) -> str:
+        """Get a formatted phase timings report."""
+        return self.phase_timings.summary()
     
     def _collect_raw_results(self) -> tuple:
         """Üretilen kod, test ve review'ları ham olarak döndür
