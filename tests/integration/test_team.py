@@ -179,43 +179,49 @@ class TestBudgetTuning:
         """Test budget tuning for XS complexity."""
         budget = mgx_team_instance._tune_budget("XS")
         
-        assert budget["investment"] == 0.5
+        # XS and S: base investment=1.5, n_round=2 (from team.py line 598)
+        assert budget["investment"] == 1.5
         assert budget["n_round"] == 2
     
     def test_tune_budget_s(self, mgx_team_instance):
         """Test budget tuning for S complexity."""
         budget = mgx_team_instance._tune_budget("S")
         
-        assert budget["investment"] == 1.0
-        assert budget["n_round"] == 3
+        # XS and S: base investment=1.5, n_round=2 (from team.py line 598)
+        assert budget["investment"] == 1.5
+        assert budget["n_round"] == 2
     
     def test_tune_budget_m(self, mgx_team_instance):
         """Test budget tuning for M complexity."""
         budget = mgx_team_instance._tune_budget("M")
         
-        assert budget["investment"] == 2.0
-        assert budget["n_round"] == 4
+        # M: base investment=3.0, n_round=3 (from team.py line 600)
+        assert budget["investment"] == 3.0
+        assert budget["n_round"] == 3
     
     def test_tune_budget_l(self, mgx_team_instance):
         """Test budget tuning for L complexity."""
         budget = mgx_team_instance._tune_budget("L")
         
-        assert budget["investment"] == 4.0
-        assert budget["n_round"] == 5
+        # L and XL: base investment=5.0, n_round=4 (from team.py line 602)
+        assert budget["investment"] == 5.0
+        assert budget["n_round"] == 4
     
     def test_tune_budget_xl(self, mgx_team_instance):
         """Test budget tuning for XL complexity."""
         budget = mgx_team_instance._tune_budget("XL")
         
-        assert budget["investment"] == 8.0
-        assert budget["n_round"] == 6
+        # L and XL: base investment=5.0, n_round=4 (from team.py line 602)
+        assert budget["investment"] == 5.0
+        assert budget["n_round"] == 4
     
     def test_tune_budget_unknown_defaults_to_xs(self, mgx_team_instance):
-        """Test budget tuning defaults to XS for unknown complexity."""
+        """Test budget tuning defaults to L/XL for unknown complexity."""
         budget = mgx_team_instance._tune_budget("UNKNOWN")
         
-        assert budget["investment"] == 0.5
-        assert budget["n_round"] == 2
+        # Unknown falls to else (L/XL): investment=5.0, n_round=4
+        assert budget["investment"] == 5.0
+        assert budget["n_round"] == 4
     
     def test_tune_budget_respects_multiplier(self, team_config):
         """Test budget multiplier affects investment."""
@@ -233,8 +239,8 @@ class TestBudgetTuning:
             
             budget = team._tune_budget("M")
             
-            # Investment should be doubled: 2.0 * 2.0 = 4.0
-            assert budget["investment"] == 4.0
+            # M base is 3.0, multiplied by 2.0 = 6.0
+            assert budget["investment"] == 6.0
 
 
 # ============================================
@@ -246,36 +252,37 @@ class TestComplexityParsing:
     
     def test_get_complexity_from_json(self, mgx_team_instance):
         """Test extracting complexity from JSON in plan."""
-        mgx_team_instance.set_task_spec(
-            task="Test",
-            complexity="L",
-            plan="Plan text",
-            is_revision=False,
-            review_notes=""
+        # Create a mock plan message with JSON complexity
+        from tests.helpers import MockMessage
+        mgx_team_instance.last_plan = MockMessage(
+            role="assistant",
+            content="---JSON_START---\n{\"complexity\": \"L\", \"task\": \"test\"}\n---JSON_END---"
         )
         
         complexity = mgx_team_instance._get_complexity_from_plan()
         
         assert complexity == "L"
     
-    def test_get_complexity_defaults_to_xs(self, mgx_team_instance):
-        """Test complexity defaults to XS when not found."""
-        # No task spec set
+    def test_get_complexity_defaults_to_m(self, mgx_team_instance):
+        """Test complexity defaults to M when not found."""
+        # No last_plan set (implementation defaults to M at line 624)
         complexity = mgx_team_instance._get_complexity_from_plan()
         
-        assert complexity == "XS"
+        assert complexity == "M"
     
     def test_get_complexity_from_plan_content(self, mgx_team_instance):
         """Test extracting complexity from plan content with regex."""
-        # Set up plan with complexity in content
-        mgx_team_instance.current_task_spec = {
-            "plan": "KARMAŞIKLIK: XL\nThis is a complex task"
-        }
+        # Set up plan with complexity in content (regex pattern)
+        from tests.helpers import MockMessage
+        mgx_team_instance.last_plan = MockMessage(
+            role="assistant",
+            content="KARMAŞIKLIK: XL\nThis is a complex task"
+        )
         
         complexity = mgx_team_instance._get_complexity_from_plan()
         
-        # Should extract XL from plan content
-        assert complexity in ["XL", "XS"]  # Depends on implementation
+        # Should extract XL from plan content via regex
+        assert complexity == "XL"
 
 
 # ============================================
