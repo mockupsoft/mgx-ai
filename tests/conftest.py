@@ -43,6 +43,21 @@ class MetaGPTStub:
     Team = MockTeam
 
 
+class MetaGPTActionsStub:
+    """Stub for metagpt.actions module."""
+    Action = MockAction
+
+
+class MetaGPTRolesStub:
+    """Stub for metagpt.roles module."""
+    Role = MockRole
+
+
+class MetaGPTTeamStub:
+    """Stub for metagpt.team module."""
+    Team = MockTeam
+
+
 class MetaGPTLogsStub:
     """Stub for metagpt.logs module."""
     logger = mock_logger
@@ -53,10 +68,31 @@ class MetaGPTTypesStub:
     Message = MockMessage
 
 
+class MetaGPTSchemaStub:
+    """Stub for metagpt.schema module."""
+    Message = MockMessage
+
+
+class MetaGPTContextStub:
+    """Stub for metagpt.context module."""
+    pass
+
+
+class MetaGPTConfigStub:
+    """Stub for metagpt.config module."""
+    pass
+
+
 # Register stubs before any imports that might use MetaGPT
 sys.modules['metagpt'] = MetaGPTStub()
+sys.modules['metagpt.actions'] = MetaGPTActionsStub()
+sys.modules['metagpt.roles'] = MetaGPTRolesStub()
+sys.modules['metagpt.team'] = MetaGPTTeamStub()
 sys.modules['metagpt.logs'] = MetaGPTLogsStub()
 sys.modules['metagpt.types'] = MetaGPTTypesStub()
+sys.modules['metagpt.schema'] = MetaGPTSchemaStub()
+sys.modules['metagpt.context'] = MetaGPTContextStub()
+sys.modules['metagpt.config'] = MetaGPTConfigStub()
 
 
 # ============================================
