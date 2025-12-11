@@ -72,6 +72,7 @@ class MockMessage:
     role: str
     content: str
     name: Optional[str] = None
+    cause_by: Optional[Any] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
     timestamp: Optional[datetime] = None
     
@@ -121,21 +122,28 @@ class MockAction:
 # Role Stub
 # ============================================
 
-@dataclass
 class MockRole:
     """Mock Role class mimicking MetaGPT Role."""
     
+    # Default class attributes - subclasses can override
     name: str = "MockRole"
     profile: str = "Mock role for testing"
     goal: str = "Complete test tasks"
     constraints: str = "Follow test constraints"
     
-    def __post_init__(self):
-        self.memory = MockMemory()
-        self.actions: List[MockAction] = []
-        self.watch: Set[str] = set()
-        self.rc = MockContext()
-        self._messages: List[MockMessage] = []
+    def __init__(self, **kwargs):
+        # Don't override name/profile/goal if subclass already set them as class attributes
+        # Just initialize other attributes
+        if not hasattr(self, 'memory'):
+            self.memory = MockMemory()
+        if not hasattr(self, 'actions'):
+            self.actions: List[MockAction] = []
+        if not hasattr(self, 'watch'):
+            self.watch: Set[str] = set()
+        if not hasattr(self, 'rc'):
+            self.rc = MockContext()
+        if not hasattr(self, '_messages'):
+            self._messages: List[MockMessage] = []
     
     async def _act(self) -> MockMessage:
         """Mock act method."""
@@ -154,9 +162,19 @@ class MockRole:
         """Add action to role."""
         self.actions.append(action)
     
+    def set_actions(self, actions: list):
+        """Set multiple actions for role."""
+        self.actions = list(actions)
+    
     def set_watch(self, watched: Set[str]):
         """Set watched roles."""
         self.watch = watched
+    
+    def _watch(self, actions: list):
+        """Watch specific actions."""
+        for action in actions:
+            action_name = action.__name__ if hasattr(action, '__name__') else str(action)
+            self.watch.add(action_name)
 
 
 # ============================================
@@ -185,20 +203,36 @@ class MockContext:
 class MockMemory:
     """Mock memory store."""
     
-    storage: Dict[str, Any] = field(default_factory=dict)
+    storage: List[MockMessage] = field(default_factory=list)
     messages: List[MockMessage] = field(default_factory=list)
+    _data: Dict[str, Any] = field(default_factory=dict)
     
-    def add(self, key: str, value: Any):
-        """Add item to memory."""
-        self.storage[key] = value
+    def add(self, key_or_message: Any, value: Any = None):
+        """Add item to memory (support both dict and message styles)."""
+        if value is not None:
+            # Dict-style: add(key, value)
+            self._data[key_or_message] = value
+        elif hasattr(key_or_message, 'content'):
+            # Message-style: add(message)
+            self.storage.append(key_or_message)
+            self.messages.append(key_or_message)
+        else:
+            # Fallback: treat as key
+            self._data[str(key_or_message)] = None
     
-    def get(self, key: str, default: Any = None) -> Any:
-        """Get item from memory."""
-        return self.storage.get(key, default)
+    def get(self, key: Any = None, default: Any = None) -> Any:
+        """Get item from memory - supports both dict and message list access."""
+        if key is None:
+            # No args: return all messages (MetaGPT memory.get() style)
+            return self.messages.copy() if self.messages else self.storage.copy()
+        else:
+            # With key: dict-style access
+            return self._data.get(key, default)
     
     def add_message(self, message: MockMessage):
         """Add message to memory."""
         self.messages.append(message)
+        self.storage.append(message)
     
     def get_messages(self) -> List[MockMessage]:
         """Get all messages."""
@@ -208,6 +242,11 @@ class MockMemory:
         """Clear memory."""
         self.storage.clear()
         self.messages.clear()
+        self._data.clear()
+    
+    def __iter__(self):
+        """Support iteration over messages."""
+        return iter(self.storage)
 
 
 # ============================================

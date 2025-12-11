@@ -33,6 +33,16 @@ from metagpt.logs import logger
 from metagpt.roles import Role
 from metagpt.schema import Message
 
+# Import from mgx_agent package for modular structure
+from mgx_agent.adapter import MetaGPTAdapter
+from mgx_agent.actions import (
+    AnalyzeTask,
+    DraftPlan,
+    WriteCode,
+    WriteTest,
+    ReviewCode,
+)
+
 
 # ============================================
 # GÖREV KARMAŞIKLIK DEĞERLENDİRME

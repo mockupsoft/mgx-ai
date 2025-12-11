@@ -55,6 +55,7 @@ class MetaGPTRolesStub:
 
 class MetaGPTTeamStub:
     """Stub for metagpt.team module."""
+    
     Team = MockTeam
 
 
@@ -75,12 +76,22 @@ class MetaGPTSchemaStub:
 
 class MetaGPTContextStub:
     """Stub for metagpt.context module."""
-    pass
+    
+    Context = MockContext
 
 
 class MetaGPTConfigStub:
     """Stub for metagpt.config module."""
-    pass
+    
+    class Config:
+        """Stub Config class for MetaGPT."""
+        
+        @staticmethod
+        def from_home(filename: str):
+            """Mock from_home method."""
+            mock_config = MockContext()
+            mock_config.model = f"mock-model-{filename}"
+            return mock_config
 
 
 # Register stubs before any imports that might use MetaGPT
