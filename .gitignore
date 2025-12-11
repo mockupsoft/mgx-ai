@@ -70,6 +70,7 @@ __pycache__/
 .pytest_cache/
 .coverage*
 htmlcov/
+coverage.xml
 dist/
 build/
 *.egg-info/
