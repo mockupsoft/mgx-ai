@@ -10,6 +10,13 @@ from enum import Enum
 from pydantic import BaseModel, Field, validator
 from metagpt.logs import logger
 
+__all__ = [
+    'TaskComplexity',
+    'LogLevel', 
+    'TeamConfig',
+    'DEFAULT_CONFIG',
+]
+
 
 class TaskComplexity:
     """Görev karmaşıklık seviyeleri"""
@@ -49,7 +56,7 @@ class TeamConfig(BaseModel):
     
     # Budget ayarları
     default_investment: float = Field(default=3.0, ge=0.5, le=20.0, description="Varsayılan investment ($)")
-    budget_multiplier: float = Field(default=1.0, ge=0.1, le=5.0, description="Budget çarpanı")
+    budget_multiplier: float = Field(default=1.0, description="Budget çarpanı")
     
     # LLM ayarları
     use_multi_llm: bool = Field(default=False, description="Her role farklı LLM")
