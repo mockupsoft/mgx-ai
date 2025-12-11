@@ -43,6 +43,15 @@ from .roles import (
 # Team
 from .team import MGXStyleTeam
 
+# Performance (Async Tools)
+from .performance.async_tools import (
+    AsyncTimer,
+    bounded_gather,
+    with_timeout,
+    run_in_thread,
+    PhaseTimings,
+)
+
 __all__ = [
     # Config
     'TaskComplexity',
@@ -75,6 +84,13 @@ __all__ = [
     
     # Team
     'MGXStyleTeam',
+    
+    # Performance
+    'AsyncTimer',
+    'bounded_gather',
+    'with_timeout',
+    'run_in_thread',
+    'PhaseTimings',
 ]
 
 __version__ = '1.0.0'
