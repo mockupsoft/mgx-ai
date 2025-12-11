@@ -1,0 +1,21 @@
+# Development and Testing Requirements
+# Install with: pip install -r requirements-dev.txt
+
+# Testing Framework
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+freezegun>=1.2.2
+
+# MetaGPT & Core Dependencies
+metagpt>=0.8.0
+pydantic>=2.0.0
+tenacity>=8.2.0
+
+# Stubs and Type Hints
+types-freezegun>=1.4.4
+
+# Additional Testing Tools
+pytest-xdist>=3.3.0  # Parallel test execution
+pytest-timeout>=2.1.0  # Test timeouts
+pytest-mock>=3.11.1  # Mocking utilities
