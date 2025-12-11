@@ -18,3 +18,47 @@
 2025-12-11 06:34:17.790 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
 2025-12-11 06:34:31.018 | INFO     | metagpt.config:__init__:43 - Config loading done.
 2025-12-11 06:34:31.019 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:50:11.630 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:51:14.416 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:51:14.416 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:51:30.526 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:51:30.526 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:54:30.776 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:54:30.777 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:56:55.345 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:56:55.345 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:57:11.544 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:57:11.545 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:58:17.616 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:58:17.616 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:58:49.123 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:58:49.124 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:58:49.213 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 09:59:23.566 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 09:59:23.567 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 09:59:23.671 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 10:00:30.382 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:00:30.383 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:01:00.334 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:01:00.335 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:01:00.567 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 10:01:00.571 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.1x - Maliyet patlaması riski!
+2025-12-11 10:01:33.737 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:01:33.738 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:01:33.967 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 10:01:33.970 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.1x - Maliyet patlaması riski!
+2025-12-11 10:02:47.787 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:02:47.788 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:02:47.974 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 10:02:47.978 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.1x - Maliyet patlaması riski!
+2025-12-11 10:03:01.003 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:03:01.004 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:03:22.492 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:03:22.493 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:03:22.763 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 10:03:22.766 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.1x - Maliyet patlaması riski!
+2025-12-11 10:05:05.526 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-11 10:05:05.527 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
+2025-12-11 10:05:05.727 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.5x - Maliyet patlaması riski!
+2025-12-11 10:05:05.730 | WARNING  | mgx_agent.config:validate_budget_multiplier:88 - ⚠️ budget_multiplier çok yüksek: 10.1x - Maliyet patlaması riski!
+2025-12-11 10:30:14.997 | INFO     | metagpt.config:__init__:43 - Config loading done.
