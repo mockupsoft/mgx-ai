@@ -11,6 +11,8 @@ from mgx_agent.performance.async_tools import (
     run_in_thread,
     PhaseTimings,
 )
+from mgx_agent.performance.profiler import PerformanceProfiler
+from mgx_agent.performance.load_harness import Scenario, run_load_test
 
 __all__ = [
     "AsyncTimer",
@@ -18,4 +20,7 @@ __all__ = [
     "with_timeout",
     "run_in_thread",
     "PhaseTimings",
+    "PerformanceProfiler",
+    "Scenario",
+    "run_load_test",
 ]

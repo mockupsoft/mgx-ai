@@ -23,7 +23,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
+from typing import List, Optional, Sequence, Any, Dict, Tuple
 from enum import Enum
 
 from pydantic import BaseModel, Field, validator
@@ -278,8 +278,20 @@ def print_phase_header(phase: str, emoji: str = "🔄"):
 # ============================================
 class MGXStyleTeam:
     """MGX tarzı takım yöneticisi"""
-    
-    def __init__(self, config: TeamConfig = None, human_reviewer: bool = False, max_memory_size: int = 50):
+
+    _GLOBAL_ANALYSIS_CACHE: Dict[str, Tuple[float, Any]] = {}
+
+    def __init__(
+        self,
+        config: TeamConfig = None,
+        human_reviewer: bool = False,
+        max_memory_size: int = 50,
+        *,
+        context_override: Optional[Any] = None,
+        team_override: Optional[Any] = None,
+        roles_override: Optional[Sequence[Any]] = None,
+        output_dir_base: Optional[str] = "output",
+    ):
         """
         MGX tarzı takım oluştur.
         
@@ -299,8 +311,9 @@ class MGXStyleTeam:
         self._log_config()
         
         # Config'den değerleri al
-        self.context = Context()
-        self.team = Team(context=self.context)
+        self.output_dir_base = output_dir_base
+        self.context = context_override if context_override is not None else Context()
+        self.team = team_override if team_override is not None else Team(context=self.context)
         self.plan_approved = False
         self.current_task = None
         self.current_task_spec = None  # Tek kaynak: task, plan, complexity bilgisi
@@ -310,44 +323,65 @@ class MGXStyleTeam:
         self.human_mode = config.human_reviewer
         self.metrics: List[TaskMetrics] = [] if config.enable_metrics else None
         self.phase_timings = PhaseTimings()  # Track phase durations
+
+        # Cache stats (used by performance suite)
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._analysis_cache: Dict[str, Tuple[float, Any]] = {}
         
-        # Her role için farklı LLM config'leri yükle
-        if config.use_multi_llm:
-            try:
-                mike_config = Config.from_home("mike_llm.yaml")
-                alex_config = Config.from_home("alex_llm.yaml")
-                bob_config = Config.from_home("bob_llm.yaml")
-                charlie_config = Config.from_home("charlie_llm.yaml")
-                self.multi_llm_mode = True
-                logger.info("🎯 Multi-LLM modu aktif - Her role farklı model kullanacak!")
-            except Exception as e:
+        # Her role için farklı LLM config'leri yükle (veya test harness overrides)
+        if roles_override is not None:
+            roles_list = list(roles_override)
+            self.multi_llm_mode = False
+        else:
+            if config.use_multi_llm:
+                try:
+                    mike_config = Config.from_home("mike_llm.yaml")
+                    alex_config = Config.from_home("alex_llm.yaml")
+                    bob_config = Config.from_home("bob_llm.yaml")
+                    charlie_config = Config.from_home("charlie_llm.yaml")
+                    self.multi_llm_mode = True
+                    logger.info("🎯 Multi-LLM modu aktif - Her role farklı model kullanacak!")
+                except Exception:
+                    mike_config = alex_config = bob_config = charlie_config = None
+                    self.multi_llm_mode = False
+                    logger.info("📦 Tek LLM modu - Tüm roller aynı modeli kullanacak")
+            else:
                 mike_config = alex_config = bob_config = charlie_config = None
                 self.multi_llm_mode = False
                 logger.info("📦 Tek LLM modu - Tüm roller aynı modeli kullanacak")
-        else:
-            mike_config = alex_config = bob_config = charlie_config = None
-            self.multi_llm_mode = False
-            logger.info("📦 Tek LLM modu - Tüm roller aynı modeli kullanacak")
-        
-        # Takımı oluştur (her role farklı config ile)
-        roles_list = [
-            Mike(config=mike_config) if mike_config else Mike(),
-            Alex(config=alex_config) if alex_config else Alex(),
-            Bob(config=bob_config) if bob_config else Bob(),
-            Charlie(is_human=config.human_reviewer, config=charlie_config) if charlie_config else Charlie(is_human=config.human_reviewer)
-        ]
-        
+
+            # Takımı oluştur (her role farklı config ile)
+            roles_list = [
+                Mike(config=mike_config) if mike_config else Mike(),
+                Alex(config=alex_config) if alex_config else Alex(),
+                Bob(config=bob_config) if bob_config else Bob(),
+                Charlie(is_human=config.human_reviewer, config=charlie_config)
+                if charlie_config
+                else Charlie(is_human=config.human_reviewer),
+            ]
+
         # Role'lara team referansı ekle (progress bar için)
         for role in roles_list:
-            role._team_ref = self
-        
-        self.team.hire(roles_list)
-        
+            try:
+                role._team_ref = self
+            except Exception:
+                pass
+
+        if hasattr(self.team, "hire"):
+            self.team.hire(roles_list)
+
         # Role referanslarını sakla (team.env.roles erişimini azaltmak için)
-        self._mike = roles_list[0]  # Mike
-        self._alex = roles_list[1]   # Alex
-        self._bob = roles_list[2]    # Bob
-        self._charlie = roles_list[3]  # Charlie
+        if len(roles_list) >= 4:
+            self._mike = roles_list[0]
+            self._alex = roles_list[1]
+            self._bob = roles_list[2]
+            self._charlie = roles_list[3]
+        else:
+            self._mike = roles_list[0] if roles_list else None
+            self._alex = None
+            self._bob = None
+            self._charlie = None
         
         # Multi-LLM sanity check: Gerçekten farklı modeller kullanılıyor mu?
         if self.multi_llm_mode:
@@ -549,10 +583,60 @@ class MGXStyleTeam:
     async def analyze_and_plan(self, task: str) -> str:
         """Görevi analiz et ve plan oluştur"""
         self.current_task = task
-        
+
         # Kullanıcıya görünen bilgi main() fonksiyonunda print ile basılıyor
         logger.debug(f"Yeni görev analiz ediliyor: {task}")
-        
+
+        # Global cache (perf + load tests) - plan generation is one of the hottest paths.
+        if self.config.enable_caching:
+            cache_key = hashlib.sha256(task.encode("utf-8")).hexdigest()
+            cache_store = self._GLOBAL_ANALYSIS_CACHE if os.getenv("MGX_GLOBAL_CACHE") == "1" else self._analysis_cache
+            cached = cache_store.get(cache_key)
+
+            if cached is not None:
+                cached_at, cached_plan = cached
+                if (time.time() - cached_at) < self.config.cache_ttl_seconds:
+                    cache_start = time.perf_counter()
+                    self._cache_hits += 1
+                    prof = None
+
+                    try:
+                        from mgx_agent.performance.profiler import get_active_profiler
+
+                        prof = get_active_profiler()
+                        if prof is not None:
+                            prof.record_cache(True)
+                    except Exception:
+                        prof = None
+
+                    self.last_plan = cached_plan
+                    self.add_to_memory("Mike", "AnalyzeTask + DraftPlan (cache)", cached_plan.content)
+
+                    if self.config.auto_approve_plan:
+                        self._log("🤖 Auto-approve aktif, plan otomatik onaylandı", "info")
+                        self.approve_plan()
+
+                    if prof is not None:
+                        prof.record_timer("analyze_and_plan_cache_hit", time.perf_counter() - cache_start)
+
+                    return cached_plan.content
+
+                # TTL expired
+                try:
+                    del cache_store[cache_key]
+                except KeyError:
+                    pass
+
+            self._cache_misses += 1
+            try:
+                from mgx_agent.performance.profiler import get_active_profiler
+
+                prof = get_active_profiler()
+                if prof is not None:
+                    prof.record_cache(False)
+            except Exception:
+                pass
+
         # Team'deki Mike'ı bul (saklanan referansı kullan - team.env.roles erişimini azalt)
         mike = getattr(self, '_mike', None)
         if not mike:
@@ -585,7 +669,13 @@ class MGXStyleTeam:
         # ÖNEMLİ: Plan mesajını team environment'a publish et
         # Bu sayede Alex (Engineer) plan mesajını alacak
         self.last_plan = analysis
-        
+
+        # Cache the plan for repeated identical tasks (useful for perf/load tests)
+        if self.config.enable_caching:
+            cache_key = hashlib.sha256(task.encode("utf-8")).hexdigest()
+            cache_store = self._GLOBAL_ANALYSIS_CACHE if os.getenv("MGX_GLOBAL_CACHE") == "1" else self._analysis_cache
+            cache_store[cache_key] = (time.time(), analysis)
+
         # Hafızaya ekle
         self.add_to_memory("Mike", "AnalyzeTask + DraftPlan", analysis.content)
         
@@ -1079,8 +1169,11 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         # re ve datetime zaten en üstte import edilmiş
         
         # Output dizini oluştur
+        if not self.output_dir_base:
+            return
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = f"output/mgx_team_{timestamp}"
+        output_dir = f"{self.output_dir_base}/mgx_team_{timestamp}"
         os.makedirs(output_dir, exist_ok=True)
         
         # Kod dosyasını kaydet

@@ -74,44 +74,53 @@ class PhaseTimings:
 class AsyncTimer:
     """
     Context manager for timing async operations.
-    
+
     Usage:
         async with AsyncTimer("my_operation") as timer:
             await some_async_function()
         print(f"Duration: {timer.duration}s")
     """
-    
+
     def __init__(self, operation_name: str = "operation", log_on_exit: bool = True):
-        """
-        Initialize timer.
-        
-        Args:
-            operation_name: Name of the operation being timed
-            log_on_exit: Whether to log duration on exit
-        """
+        """Initialize timer."""
         self.operation_name = operation_name
         self.log_on_exit = log_on_exit
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
         self.duration: float = 0.0
-    
+
     async def __aenter__(self):
         """Start timing."""
-        self.start_time = time.time()
+        self.start_time = time.perf_counter()
         logger.debug(f"⏱️  Starting: {self.operation_name}")
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Stop timing and optionally log."""
-        self.end_time = time.time()
-        self.duration = self.end_time - self.start_time
-        
+        self.end_time = time.perf_counter()
+        if self.start_time is None:
+            self.duration = 0.0
+        else:
+            self.duration = self.end_time - self.start_time
+
+        try:
+            from mgx_agent.performance.profiler import get_active_profiler
+
+            profiler = get_active_profiler()
+            if profiler is not None:
+                profiler.record_timer(self.operation_name, self.duration)
+        except Exception:
+            # Profiler must never break business logic.
+            pass
+
         if self.log_on_exit:
             if exc_type is None:
                 logger.info(f"✅ {self.operation_name}: {self.duration:.3f}s")
             else:
-                logger.warning(f"⚠️  {self.operation_name}: {self.duration:.3f}s (error: {exc_type.__name__})")
-        
+                logger.warning(
+                    f"⚠️  {self.operation_name}: {self.duration:.3f}s (error: {exc_type.__name__})"
+                )
+
         return False
     
     def get_duration(self) -> float:
