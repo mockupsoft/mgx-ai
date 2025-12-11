@@ -32,6 +32,20 @@ from metagpt.actions import Action
 from metagpt.logs import logger
 from metagpt.roles import Role
 from metagpt.schema import Message
+from metagpt.team import Team
+from metagpt.context import Context
+from metagpt.config import Config
+
+# Import from mgx_agent package for modular structure  
+from mgx_agent.adapter import MetaGPTAdapter
+from mgx_agent.actions import (
+    AnalyzeTask,
+    DraftPlan,
+    WriteCode,
+    WriteTest,
+    ReviewCode,
+)
+from mgx_agent.roles import Mike, Alex, Bob, Charlie
 
 
 # ============================================
