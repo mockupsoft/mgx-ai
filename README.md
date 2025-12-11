@@ -321,47 +321,100 @@ python examples/mgx_style_team.py \
 
 ---
 
-## 🧪 Test Coverage
+## 🧪 Test Coverage & Testing
 
 ### Mevcut Durum
 ```
-Test Coverage: 🔴 2% (CRITICAL)
-├─ mgx_agent_utils.py: ✅ 100% (6/6 tests passing)
-├─ mgx_agent package:  🔴 0% (Phase 3 WIP)
-└─ Integration tests:  🔴 0% (Phase 3 WIP)
+Test Coverage: 🟡 2% (Baseline)
+├─ mgx_agent_utils.py:  ✅ 100% (6/6 tests passing)
+├─ mgx_agent package:   🟡 2%  (Phase 3 WIP)
+├─ Unit tests:          🟡 In progress
+├─ Integration tests:   🟡 In progress
+└─ E2E tests:           🟡 Planned
 
-Hedef: 80% (Phase 3)
+Hedef: 80% (Phase 3) 📈
 ```
 
-### Test Çalıştırma
+### Pytest Setup ✅
+
+Phase 3 test infrastructure is now complete:
 
 ```bash
-# Manual utility tests
-python -c "
-from mgx_agent_utils import (
-    extract_code_blocks,
-    parse_json_block,
-    validate_task_description
-)
+# 1. Install test dependencies
+pip install -r requirements-dev.txt
 
-# Test 1: extract_code_blocks
-text = '''
-Here is code:
-\`\`\`python
-print('hello')
-\`\`\`
-'''
-blocks = extract_code_blocks(text)
-print('✅ Test 1 PASS' if len(blocks) == 1 else '❌ Test 1 FAIL')
+# 2. Run all tests
+pytest
 
-# Test 2: validate_task_description
-task = 'Write a hello world program'
-is_valid = validate_task_description(task)
-print('✅ Test 2 PASS' if is_valid else '❌ Test 2 FAIL')
-"
+# 3. Run specific test level
+pytest tests/unit              # Unit tests only
+pytest tests/integration       # Integration tests only
+pytest tests/e2e              # End-to-end tests only
 
-# Pytest (Phase 3 - Coming Soon)
-pytest tests/ -v --cov=mgx_agent --cov-report=html
+# 4. Generate coverage reports
+pytest --cov=mgx_agent --cov-report=html
+# Open: htmlcov/index.html
+
+# 5. Run with verbose output
+pytest -v
+
+# 6. Run specific test
+pytest tests/unit/test_helpers.py::TestMockLogger::test_logger_creation
+```
+
+### Test Structure
+```
+tests/
+├── conftest.py                    # Global fixtures & configuration
+├── unit/                          # Fast, isolated tests
+├── integration/                   # Component interaction tests
+├── e2e/                          # End-to-end workflow tests
+├── helpers/
+│   ├── metagpt_stubs.py         # MetaGPT component stubs
+│   └── factories.py             # Factory functions for test objects
+└── logs/                         # Test execution logs
+```
+
+### Key Features
+
+✅ **MetaGPT Stubs**: Lightweight mocks for testing without real MetaGPT  
+✅ **Test Factories**: Reusable factories for creating test objects  
+✅ **Async Support**: Full pytest-asyncio integration  
+✅ **Coverage Tracking**: Automatic HTML/XML/terminal reports  
+✅ **Isolated Tests**: Fresh event loop for each async test  
+✅ **Comprehensive Fixtures**: Pre-built fixtures for common test scenarios  
+
+### Documentation
+
+📖 **[docs/TESTING.md](docs/TESTING.md)** - Complete testing guide with:
+- Setup and installation
+- Running tests (all levels and subsets)
+- Fixture documentation
+- Test helper reference
+- Writing tests (unit, async, integration)
+- Coverage reporting
+- Troubleshooting
+
+### Development Tips
+
+```bash
+# Run tests in parallel (faster)
+pytest -n auto
+
+# Run only fast tests
+pytest -m "not slow"
+
+# Run with debugging
+pytest -s --log-cli-level=DEBUG
+
+# Collect tests without running
+pytest --collect-only
+
+# Run until first failure
+pytest -x
+
+# Run last failed
+pytest --lf
 ```
 
 ---
