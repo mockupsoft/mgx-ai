@@ -2,7 +2,7 @@ name: Test Suite
 
 on:
   push:
-    branches: [ main, test-cli-workflows-coverage-ci-docs ]
+    branches: [ main, test-cli-workflows-coverage-ci-docs, final-test-and-status-report-phase1-3-coverage-ci ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:

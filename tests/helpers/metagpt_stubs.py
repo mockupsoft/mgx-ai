@@ -132,8 +132,17 @@ class MockRole:
     constraints: str = "Follow test constraints"
     
     def __init__(self, **kwargs):
-        # Don't override name/profile/goal if subclass already set them as class attributes
-        # Just initialize other attributes
+        # Set instance attributes from kwargs if provided
+        if 'name' in kwargs:
+            self.name = kwargs['name']
+        if 'profile' in kwargs:
+            self.profile = kwargs['profile']
+        if 'goal' in kwargs:
+            self.goal = kwargs['goal']
+        if 'constraints' in kwargs:
+            self.constraints = kwargs['constraints']
+        
+        # Initialize other attributes
         if not hasattr(self, 'memory'):
             self.memory = MockMemory()
         if not hasattr(self, 'actions'):
@@ -264,11 +273,18 @@ class MockTeam:
         self.is_running = False
         self.run_count = 0
     
-    def hire(self, role: MockRole):
-        """Hire a role to the team."""
-        self.roles[role.name] = role
-        role.rc = self.rc
-        role.memory = self.memory
+    def hire(self, role):
+        """Hire a role or list of roles to the team."""
+        # Support both single role and list of roles (like MetaGPT)
+        if isinstance(role, list):
+            for r in role:
+                self.roles[r.name] = r
+                r.rc = self.rc
+                r.memory = self.memory
+        else:
+            self.roles[role.name] = role
+            role.rc = self.rc
+            role.memory = self.memory
     
     def fire(self, role_name: str):
         """Remove a role from the team."""
