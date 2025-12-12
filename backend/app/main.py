@@ -25,6 +25,8 @@ from backend.routers import (
     health_router,
     tasks_router,
     runs_router,
+    metrics_router,
+    ws_router,
 )
 
 # Configure logging
@@ -150,6 +152,12 @@ def create_app() -> FastAPI:
     
     app.include_router(runs_router)
     logger.info("✓ Registered: runs_router")
+    
+    app.include_router(metrics_router)
+    logger.info("✓ Registered: metrics_router")
+    
+    app.include_router(ws_router)
+    logger.info("✓ Registered: ws_router (WebSocket)")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])
