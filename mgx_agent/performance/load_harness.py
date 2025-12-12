@@ -170,7 +170,7 @@ async def run_load_test(
     from mgx_agent.team import MGXStyleTeam
 
     os.environ["MGX_GLOBAL_CACHE"] = "1"
-    MGXStyleTeam._GLOBAL_ANALYSIS_CACHE.clear()
+    MGXStyleTeam._GLOBAL_RESPONSE_CACHE = None
     # Prewarm cache once to enable stable cache hit-rate measurements under concurrency.
     await run_single_team(run_id=-1, scenario=scenario)
 

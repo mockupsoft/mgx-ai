@@ -13,6 +13,16 @@ from .config import (
     DEFAULT_CONFIG,
 )
 
+# Cache
+from .cache import (
+    CacheBackend,
+    ResponseCache,
+    InMemoryLRUTTLCache,
+    NullCache,
+    RedisCache,
+    make_cache_key,
+)
+
 # Metrics
 from .metrics import TaskMetrics
 
@@ -59,6 +69,14 @@ __all__ = [
     'TeamConfig',
     'DEFAULT_CONFIG',
     
+    # Cache
+    'CacheBackend',
+    'ResponseCache',
+    'InMemoryLRUTTLCache',
+    'NullCache',
+    'RedisCache',
+    'make_cache_key',
+
     # Metrics
     'TaskMetrics',
     

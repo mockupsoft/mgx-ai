@@ -11,6 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class TaskMetrics:
     """Görev metrikleri - izlenebilirlik için"""
+
     task_name: str
     start_time: float
     end_time: float = 0.0
@@ -19,6 +20,8 @@ class TaskMetrics:
     token_usage: int = 0  # Şimdilik dummy - ileride gerçek değer
     estimated_cost: float = 0.0  # Şimdilik dummy - ileride gerçek değer
     revision_rounds: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
     error_message: str = ""
     
     @property
@@ -47,5 +50,7 @@ class TaskMetrics:
             "token_usage": self.token_usage,
             "estimated_cost": f"${self.estimated_cost:.4f}",
             "revision_rounds": self.revision_rounds,
-            "error": self.error_message if self.error_message else None
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "error": self.error_message if self.error_message else None,
         }

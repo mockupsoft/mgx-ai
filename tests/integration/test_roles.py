@@ -196,8 +196,6 @@ class TestMikeRole:
         assert mike.name == "Mike"
         assert mike.profile == "TeamLeader"
         assert mike._is_planning_phase == True
-        assert hasattr(mike, '_analysis_cache')
-        assert isinstance(mike._analysis_cache, dict)
     
     def test_mike_complete_planning(self):
         """Test Mike's complete_planning() stops further _act."""
@@ -236,34 +234,46 @@ class TestMikeRole:
         
         assert result == 0
     
-    def test_mike_analyze_task_with_cache(self, event_loop, mock_team_ref):
-        """Test Mike.analyze_task() uses cache for repeated tasks."""
+    def test_mike_analyze_task_with_cache(self, event_loop):
+        """Test Mike.analyze_task() uses team cache for repeated tasks."""
         from mgx_agent.roles import Mike
-        import hashlib
-        
+        from mgx_agent.cache import InMemoryLRUTTLCache, make_cache_key
+        from mgx_agent.config import TeamConfig
+
+        class TeamRef:
+            def __init__(self):
+                self.config = TeamConfig(enable_caching=True)
+                self._cache = InMemoryLRUTTLCache(max_entries=10, ttl_seconds=3600)
+                self.set_task_spec = Mock()
+
+            async def cached_llm_call(self, *, role, action, payload, compute, bypass_cache=False, encode=None, decode=None):
+                key = make_cache_key(role=role, action=action, payload=payload)
+                cached = self._cache.get(key)
+                if cached is not None:
+                    return decode(cached) if decode else cached
+                result = await compute()
+                self._cache.set(key, encode(result) if encode else result)
+                return result
+
+            def _sync_task_spec_from_plan(self, plan_content: str, *, fallback_task: str):
+                return None
+
+        team_ref = TeamRef()
+
         mike = Mike()
-        mike._team_ref = mock_team_ref
+        mike._team_ref = team_ref
         mike.llm = AsyncMock()
-        
+
         task = "Write a calculator function"
-        task_hash = hashlib.md5(task.encode()).hexdigest()
-        
-        # Pre-populate cache
-        cached_msg = MockMessage(role="TeamLeader", content="Cached analysis")
-        mike._analysis_cache[task_hash] = {
-            'message': cached_msg,
-            'complexity': 'M',
-            'plan': 'Cached plan',
-            'timestamp': float('inf')  # Never expire
-        }
-        
-        # Analyze task
-        result = event_loop.run_until_complete(mike.analyze_task(task))
-        
-        # Should return cached message
-        assert result == cached_msg
-        # LLM should not be called
-        assert not mike.llm.called
+        cache_key = make_cache_key(role="TeamLeader", action="AnalyzeTask+DraftPlan", payload={"task": task})
+        team_ref._cache.set(cache_key, {"content": "Cached analysis", "role": "TeamLeader"})
+
+        with patch('mgx_agent.roles.AnalyzeTask') as MockAnalyze, patch('mgx_agent.roles.DraftPlan') as MockDraft:
+            result = event_loop.run_until_complete(mike.analyze_task(task))
+
+            assert result.content == "Cached analysis"
+            MockAnalyze.assert_not_called()
+            MockDraft.assert_not_called()
     
     def test_mike_analyze_task_json_format(self, event_loop, mock_team_ref):
         """Test Mike.analyze_task() returns JSON formatted response."""
