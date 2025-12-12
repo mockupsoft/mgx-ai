@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+  schedule:
+    # Nightly performance/regression run (UTC)
+    - cron: "0 3 * * *"
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -103,6 +107,66 @@ jobs:
         echo "✅ All requirements met:"
         echo "   - Tests: $TEST_COUNT >= 130"
         echo "   - Coverage: ${COVERAGE}% >= 80%"
+
+  performance:
+    name: Performance suite (marked tests)
+    runs-on: ubuntu-latest
+    # Run on a single Python version to keep results comparable.
+    if: |
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-performance'))
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-perf-${{ hashFiles('requirements-dev.txt', 'setup.py', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-perf-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-dev.txt
+        pip install -e .
+
+    - name: Run performance tests
+      run: |
+        pytest -o addopts='' -m performance tests/performance -v
+
+    - name: Publish performance summary
+      if: always()
+      run: |
+        echo "## Performance report (baseline vs latest)" >> $GITHUB_STEP_SUMMARY
+        if [ -f perf_reports/before_after.md ]; then
+          cat perf_reports/before_after.md >> $GITHUB_STEP_SUMMARY
+        elif [ -f perf_reports/latest.json ]; then
+          echo "(before_after.md not found; showing latest.json)" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          cat perf_reports/latest.json >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "No perf_reports were generated." >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Upload perf_reports artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: perf-reports
+        path: |
+          perf_reports/
+        retention-days: 14
 
   coverage-report:
     runs-on: ubuntu-latest

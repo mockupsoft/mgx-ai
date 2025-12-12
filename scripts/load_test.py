@@ -7,16 +7,81 @@ Examples:
 
 This script runs the mocked MGXStyleTeam async pipeline concurrently and writes
 performance artifacts into perf_reports/.
+
+By default the script registers lightweight MetaGPT stubs (the same ones used in
+pytest) so it can run without network/API keys.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
+import sys
 from pathlib import Path
 
-from mgx_agent.performance.load_harness import Scenario, run_load_test
-from mgx_agent.performance.reporting import write_json
+
+def _register_metagpt_stubs(repo_root: Path) -> None:
+    if os.getenv("MGX_LOAD_TEST_USE_STUBS", "1") not in {"1", "true", "True"}:
+        return
+
+    sys.path.insert(0, str(repo_root))
+
+    try:
+        from tests.helpers.metagpt_stubs import (
+            MockAction,
+            MockRole,
+            MockTeam,
+            MockMessage,
+            mock_logger,
+            MockContext,
+        )
+    except Exception:
+        return
+
+    class MetaGPTStub:
+        Action = MockAction
+        Role = MockRole
+        Team = MockTeam
+
+    class MetaGPTActionsStub:
+        Action = MockAction
+
+    class MetaGPTRolesStub:
+        Role = MockRole
+
+    class MetaGPTTeamStub:
+        Team = MockTeam
+
+    class MetaGPTLogsStub:
+        logger = mock_logger
+
+    class MetaGPTTypesStub:
+        Message = MockMessage
+
+    class MetaGPTSchemaStub:
+        Message = MockMessage
+
+    class MetaGPTContextStub:
+        Context = MockContext
+
+    class MetaGPTConfigStub:
+        class Config:
+            @staticmethod
+            def from_home(filename: str):
+                mock_config = MockContext()
+                mock_config.model = f"mock-model-{filename}"
+                return mock_config
+
+    sys.modules["metagpt"] = MetaGPTStub()
+    sys.modules["metagpt.actions"] = MetaGPTActionsStub()
+    sys.modules["metagpt.roles"] = MetaGPTRolesStub()
+    sys.modules["metagpt.team"] = MetaGPTTeamStub()
+    sys.modules["metagpt.logs"] = MetaGPTLogsStub()
+    sys.modules["metagpt.types"] = MetaGPTTypesStub()
+    sys.modules["metagpt.schema"] = MetaGPTSchemaStub()
+    sys.modules["metagpt.context"] = MetaGPTContextStub()
+    sys.modules["metagpt.config"] = MetaGPTConfigStub()
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,6 +107,11 @@ def main() -> None:
     args = parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
+    _register_metagpt_stubs(repo_root)
+
+    from mgx_agent.performance.load_harness import Scenario, run_load_test
+    from mgx_agent.performance.reporting import write_json
+
     reports_dir = (repo_root / args.reports_dir).resolve()
     baseline_path = reports_dir / "baseline.json"
 

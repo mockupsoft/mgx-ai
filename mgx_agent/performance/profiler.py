@@ -126,18 +126,29 @@ class PerformanceProfiler:
         self.phase_snapshots: List[PhaseSnapshot] = []
         self._current_phase: Optional[PhaseSnapshot] = None
 
-    async def __aenter__(self) -> "PerformanceProfiler":
+    def start(self) -> None:
+        """Start profiling.
+
+        This is intentionally synchronous so callers that are already inside an
+        event loop (e.g. the CLI/team integration) can enable profiling without
+        needing an async context manager.
+        """
+
+        if self._token is not None:
+            return
+
         self._token = _active_profiler.set(self)
         self._start_s = time.perf_counter()
+        self._end_s = None
 
         self._started_tracemalloc = False
         if self.enable_tracemalloc and not tracemalloc.is_tracing():
             tracemalloc.start()
             self._started_tracemalloc = True
 
-        return self
+    def stop(self) -> None:
+        """Stop profiling and capture end-of-run memory/timing metrics."""
 
-    async def __aexit__(self, exc_type, exc, tb) -> bool:
         self._end_s = time.perf_counter()
 
         if self.enable_tracemalloc and tracemalloc.is_tracing():
@@ -157,7 +168,14 @@ class PerformanceProfiler:
 
         if self._token is not None:
             _active_profiler.reset(self._token)
+            self._token = None
 
+    async def __aenter__(self) -> "PerformanceProfiler":
+        self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> bool:
+        self.stop()
         return False
 
     @property

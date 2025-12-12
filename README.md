@@ -17,7 +17,7 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 │  ├─ Phase 1 (Quick Fixes)      ✅ COMPLETE                 │
 │  ├─ Phase 2 (Modularization)   ✅ COMPLETE                 │
 │  ├─ Phase 3 (Test Coverage)    ✅ COMPLETE                 │
-│  └─ Phase 4 (Performance)      ⏳ PENDING                  │
+│  └─ Phase 4 (Performance)      ✅ COMPLETE                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -249,7 +249,16 @@ from mgx_agent import MGXStyleTeam, TeamConfig
 config = TeamConfig(
     max_rounds=5,                 # Maksimum execution turları
     max_revision_rounds=2,        # Maksimum revision turları
-    enable_caching=True,          # Task analiz cache'i
+
+    # Cache
+    enable_caching=True,
+    cache_backend="memory",      # none | memory | redis
+    cache_ttl_seconds=3600,
+
+    # Profiling (Phase 4)
+    enable_profiling=False,
+    enable_profiling_tracemalloc=False,
+
     human_reviewer=False,         # Human reviewer modu
     default_investment=3.0,       # Budget ($)
     budget_multiplier=1.0,        # Budget çarpanı
@@ -268,7 +277,16 @@ await team.run(task="Write a binary search implementation")
 # config.yaml
 max_rounds: 5
 max_revision_rounds: 2
+
+# Cache
 enable_caching: true
+cache_backend: memory
+cache_ttl_seconds: 3600
+
+# Profiling
+enable_profiling: false
+enable_profiling_tracemalloc: false
+
 default_investment: 3.0
 budget_multiplier: 1.0
 human_reviewer: false
@@ -345,6 +363,8 @@ pytest --cov=mgx_agent --cov-report=html
 
 Daha detaylı test kılavuzu için [docs/TESTING.md](docs/TESTING.md) dosyasına bakınız.
 
+Phase 4 performans testleri (varsayılan olarak dışlanır) için: [docs/PERFORMANCE.md](docs/PERFORMANCE.md)
+
 ### CI/CD
 
 Proje GitHub Actions ile entegre edilmiştir. Her push işleminde:
@@ -357,11 +377,13 @@ Proje GitHub Actions ile entegre edilmiştir. Her push işleminde:
 
 ## 🔮 Roadmap / Future
 
-### Phase 4: Performance Optimization
-- Asyncio optimizations
-- Response caching improvements
-- Memory usage profiling
-- Latency reduction
+### Phase 4: Performance Optimization (✅ Implemented)
+- Async utilities (`AsyncTimer`, `bounded_gather`, `with_timeout`, `run_in_thread`)
+- Pluggable response cache (memory/redis/none)
+- Profiling + report artifacts (`logs/performance/`, `perf_reports/`)
+- Deterministic CI load-test suite (pytest marker: `performance`)
+
+See: [docs/PERFORMANCE.md](docs/PERFORMANCE.md) and [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)
 
 ### Phase 5: Security Audit
 - Dependency vulnerability scanning
@@ -384,6 +406,8 @@ Proje GitHub Actions ile entegre edilmiştir. Her push işleminde:
 | Doküman | Açıklama |
 |---------|----------|
 | [docs/TESTING.md](docs/TESTING.md) | Detaylı test rehberi ve komutlar |
+| [docs/PERFORMANCE.md](docs/PERFORMANCE.md) | Phase 4 performance kılavuzu (async, cache, profiling, load tests) |
+| [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md) | Release için baseline vs latest performans raporu şablonu |
 | [CODE_REVIEW_REPORT.md](CODE_REVIEW_REPORT.md) | Detaylı kod inceleme raporu ve analiz |
 | [IMPROVEMENT_GUIDE.md](IMPROVEMENT_GUIDE.md) | Refactoring ve iyileştirme rehberi |
 | [QUICK_FIXES.md](QUICK_FIXES.md) | Hızlı düzeltme örnekleri |
