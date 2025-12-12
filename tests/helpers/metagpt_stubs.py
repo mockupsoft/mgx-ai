@@ -265,13 +265,18 @@ class MockMemory:
 class MockTeam:
     """Mock Team class mimicking MetaGPT Team."""
     
-    def __init__(self, name: str = "MockTeam"):
+    def __init__(self, name: str = "MockTeam", context: Optional[MockContext] = None):
         self.name = name
         self.roles: Dict[str, MockRole] = {}
-        self.rc = MockContext()
+        self.rc = context if context is not None else MockContext()
         self.memory = MockMemory()
         self.is_running = False
         self.run_count = 0
+        
+        # Setup mock environment
+        self.env = Mock()
+        self.env.roles = {}  # For role lookup
+        self.env.publish_message = Mock()  # Mock publish_message method
     
     def hire(self, role):
         """Hire a role or list of roles to the team."""
@@ -310,6 +315,14 @@ class MockTeam:
     def get_role(self, role_name: str) -> Optional[MockRole]:
         """Get role by name."""
         return self.roles.get(role_name)
+    
+    def invest(self, investment: float = 1.0):
+        """Set team investment (mock - no-op)."""
+        self.investment = investment
+    
+    def publish_message(self, message: MockMessage):
+        """Publish message to team environment (mock)."""
+        self.memory.add_message(message)
 
 
 # ============================================
