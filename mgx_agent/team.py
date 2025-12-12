@@ -101,6 +101,8 @@ class TeamConfig(BaseModel):
     enable_progress_bar: bool = Field(default=True, description="Progress bar göster")
     enable_metrics: bool = Field(default=True, description="Metrik toplama aktif mi")
     enable_memory_cleanup: bool = Field(default=True, description="Otomatik hafıza temizliği")
+    enable_profiling: bool = Field(default=False, description="Performance profiling aktif mi")
+    enable_profiling_tracemalloc: bool = Field(default=False, description="Tracemalloc ile detaylı hafıza profiling")
     
     # Takım ayarları
     human_reviewer: bool = Field(default=False, description="Charlie insan modu")
@@ -812,6 +814,7 @@ class MGXStyleTeam:
             enable_tracemalloc=self.config.enable_profiling_tracemalloc,
             enable_file_output=True,
         )
+        self._profiler.start()
         return self._profiler
     
     def _end_profiler(self) -> Optional[dict]:
@@ -820,6 +823,8 @@ class MGXStyleTeam:
             return None
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        self._profiler.stop()
         
         # Write detailed report
         detailed_file = self._profiler.write_detailed_report(timestamp)

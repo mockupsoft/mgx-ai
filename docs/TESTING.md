@@ -40,7 +40,7 @@ Phase 3: Testing Infrastructure ✅
 └─ Smoke tests                   ✅ Passing
 ```
 
-**Coverage Target**: 80%+ (current: 2%)
+**Coverage Target**: 80%+ (current: ~71%; see PROJECT_STATUS.md)
 
 ---
 
@@ -106,12 +106,22 @@ pytest -k "keyword"            # Run tests matching keyword
 pytest -m asyncio              # Async tests only
 pytest -m "not slow"           # Skip slow tests
 
+# Performance/load tests (excluded by default via pytest.ini addopts)
+pytest -o addopts='' -m performance tests/performance -v
+
 # Parallel execution (faster)
 pytest -n auto                 # Use all CPU cores
 
 # Run with specific log level
 pytest --log-cli-level=DEBUG   # Show debug logs
 ```
+
+Performance suite notes:
+
+- Generates artifacts in `perf_reports/` (`latest.json`, `before_after.md`)
+- Compares against the committed baseline `perf_reports/baseline.json`
+
+See [docs/PERFORMANCE.md](PERFORMANCE.md) for configuration flags, profiling usage, and the CI workflow.
 
 ### Coverage Reports
 
@@ -662,6 +672,15 @@ if [ "$COVERAGE" -lt 80 ]; then exit 1; fi
 - **XML Reports**: Generated as `coverage.xml` for CI/CD tools
 - **Codecov Integration**: Optional upload if token is configured
 - **PR Comments**: Automatic coverage reporting on pull requests
+
+#### Performance (Phase 4) Job
+
+The CI workflow also includes a dedicated `performance` job that runs the performance-marked suite (excluded from default runs).
+
+- **Command:** `pytest -o addopts='' -m performance tests/performance -v`
+- **Artifacts:** uploads `perf_reports/` (including `latest.json` and `before_after.md`)
+- **Job summary:** publishes the before/after table so regressions are visible without downloading artifacts
+- **Triggering:** can be configured to run on a schedule, workflow dispatch, or via a PR label (see `.github/workflows/tests.yml`)
 
 #### Manual Coverage Commands
 
