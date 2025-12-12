@@ -14,7 +14,7 @@ pydantic>=2.0.0
 tenacity>=8.2.0
 
 # Stubs and Type Hints
-types-freezegun>=1.4.4
+types-freezegun>=1.1.0
 
 # Additional Testing Tools
 pytest-xdist>=3.3.0  # Parallel test execution

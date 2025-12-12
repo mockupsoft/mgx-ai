@@ -33,7 +33,7 @@ def team_config():
 
 
 @pytest.fixture
-def mock_team_with_async():
+def mock_team_with_async(team_config):
     """Create a mock MGXStyleTeam with async tools."""
     from tests.helpers.metagpt_stubs import MockContext, MockTeam, MockRole, MockMessage
     
@@ -68,7 +68,7 @@ def mock_team_with_async():
         
         # Import and create team
         from mgx_agent.team import MGXStyleTeam
-        team = MGXStyleTeam(config=team_config())
+        team = MGXStyleTeam(config=team_config)
         
         yield team
 
