@@ -329,6 +329,10 @@ class MGXStyleTeam:
         self._cache_misses = 0
         self._analysis_cache: Dict[str, Tuple[float, Any]] = {}
         
+        # Profiling
+        self._profiler = None
+        self._profiling_enabled = config.enable_profiling
+        
         # Her role için farklı LLM config'leri yükle (veya test harness overrides)
         if roles_override is not None:
             roles_list = list(roles_override)
@@ -580,12 +584,51 @@ class MGXStyleTeam:
             result += f"   İçerik: {entry['content']}\n"
         return result
     
+    def _start_profiler(self, run_name: str = "mgx_team_run"):
+        """Initialize and start the profiler if enabled."""
+        if not self._profiling_enabled:
+            return None
+        
+        from mgx_agent.performance.profiler import PerformanceProfiler
+        
+        self._profiler = PerformanceProfiler(
+            run_name=run_name,
+            enable_tracemalloc=self.config.enable_profiling_tracemalloc,
+            enable_file_output=True,
+        )
+        return self._profiler
+    
+    def _end_profiler(self) -> Optional[dict]:
+        """End profiling and write reports."""
+        if self._profiler is None:
+            return None
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Write detailed report
+        detailed_file = self._profiler.write_detailed_report(timestamp)
+        if detailed_file:
+            logger.info(f"📊 Detailed performance report: {detailed_file}")
+        
+        # Write summary report
+        summary_file = self._profiler.write_summary_report()
+        if summary_file:
+            logger.info(f"📊 Summary performance report: {summary_file}")
+        
+        metrics = self._profiler.to_run_metrics()
+        self._profiler = None
+        return metrics
+
     async def analyze_and_plan(self, task: str) -> str:
         """Görevi analiz et ve plan oluştur"""
         self.current_task = task
 
         # Kullanıcıya görünen bilgi main() fonksiyonunda print ile basılıyor
         logger.debug(f"Yeni görev analiz ediliyor: {task}")
+        
+        # Start profiling phase if enabled
+        if self._profiler:
+            self._profiler.start_phase("analyze_and_plan")
 
         # Global cache (perf + load tests) - plan generation is one of the hottest paths.
         if self.config.enable_caching:
@@ -683,6 +726,10 @@ class MGXStyleTeam:
         if self.config.auto_approve_plan:
             self._log("🤖 Auto-approve aktif, plan otomatik onaylandı", "info")
             self.approve_plan()
+        
+        # End profiling phase
+        if self._profiler:
+            self._profiler.end_phase()
         
         return analysis.content
     
@@ -802,6 +849,10 @@ class MGXStyleTeam:
         print(f"📊 Karmaşıklık: {complexity} → Investment: ${budget['investment']}, Rounds: {n_round}")
         logger.debug(f"Görev yürütme başlıyor - Karmaşıklık: {complexity}, Investment: ${budget['investment']}, Rounds: {n_round}")
         
+        # Start profiling phase if enabled
+        if self._profiler:
+            self._profiler.start_phase("execute")
+        
         try:
             # Mike zaten analiz yaptı - complete_planning() çağır (tekrar çalışmasın)
             if hasattr(self.team.env, 'roles'):
@@ -871,6 +922,10 @@ class MGXStyleTeam:
                     if revision_count > max_revision_rounds:
                         logger.warning(f"⚠️ Maksimum düzeltme turu ({max_revision_rounds}) aşıldı - durduruluyor")
                         break
+                    
+                    # Start profiling revision phase
+                    if self._profiler:
+                        self._profiler.start_phase(f"revision_round_{revision_count}")
                     
                     print_phase_header(f"TUR {revision_count + 1}: Düzeltme Turu", "🔧")
                     print(f"⚠️ Charlie DEĞİŞİKLİK GEREKLİ dedi. Alex & Bob tekrar çalışıyor...")
@@ -969,6 +1024,10 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
                     
                     self.phase_timings.add_phase(f"revision_round_{revision_count}", rev_timer.duration)
                     
+                    # End profiling revision phase
+                    if self._profiler:
+                        self._profiler.end_phase()
+                    
                     # Her tur sonrası hafıza temizliği (offload to thread)
                     await run_in_thread(self.cleanup_memory)
                 else:
@@ -983,6 +1042,10 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             # Gerçek token kullanımını hesapla
             metric.token_usage = self._calculate_token_usage()
             metric.estimated_cost = budget["investment"]
+            
+            # Start profiling result persistence phase
+            if self._profiler:
+                self._profiler.start_phase("result_persistence")
             
             # Final operations: run results collection and cleanup concurrently
             async with AsyncTimer("final_operations", log_on_exit=True) as final_timer:
@@ -1012,6 +1075,14 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             self.phase_timings.cleanup_duration = final_timer.duration
             self.phase_timings.add_phase("final_operations", final_timer.duration)
             self.phase_timings.total_duration = time.time() - start_time
+            
+            # End profiling result persistence phase
+            if self._profiler:
+                self._profiler.end_phase()
+            
+            # End execute profiling phase
+            if self._profiler:
+                self._profiler.end_phase()
             
             # Kullanıcıya görünen bilgi _show_metrics_report ile basılıyor
             logger.debug(f"Görev tamamlandı - {revision_count} düzeltme turu yapıldı")
@@ -1052,10 +1123,21 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         print(f"{'='*60}\n")
     
     def get_all_metrics(self) -> List[dict]:
-        """Tüm görev metriklerini döndür"""
-        if not self.metrics:
-            return []
-        return [m.to_dict() for m in self.metrics]
+        """Tüm görev metriklerini döndür (profiling data dahil)"""
+        metrics_list = []
+        if self.metrics:
+            metrics_list = [m.to_dict() for m in self.metrics]
+        
+        # Add profiling data if available
+        if self._profiler:
+            profiling_data = self._profiler.to_run_metrics()
+            # Attach profiling to each metric or as a separate entry
+            return {
+                "task_metrics": metrics_list,
+                "profiling": profiling_data,
+            }
+        
+        return metrics_list
     
     def get_metrics_summary(self) -> str:
         """Tüm metriklerin özetini döndür"""

@@ -13,6 +13,7 @@ Design notes:
 - Uses a ContextVar so nested async calls can report timings without passing the
   profiler object around.
 - Uses tracemalloc for allocation/peak memory since RSS is often noisy in CI.
+- Supports per-phase profiling with file output to logs/performance/ and perf_reports/
 """
 
 from __future__ import annotations
@@ -21,7 +22,11 @@ import contextvars
 import time
 import tracemalloc
 import resource
-from dataclasses import dataclass
+import json
+import os
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, Optional, Any, List
 
 
@@ -59,6 +64,32 @@ class TimerStat:
         }
 
 
+@dataclass
+class PhaseSnapshot:
+    """Memory and timing snapshot for a specific phase."""
+    phase: str
+    start_time: float = field(default_factory=time.time)
+    end_time: Optional[float] = None
+    duration_s: float = 0.0
+    rss_kb_before: int = 0
+    rss_kb_after: int = 0
+    tracemalloc_current_kb: float = 0.0
+    tracemalloc_peak_kb: float = 0.0
+    
+    def to_dict(self) -> dict:
+        return {
+            "phase": self.phase,
+            "start_time": self.start_time,
+            "end_time": self.end_time,
+            "duration_s": self.duration_s,
+            "rss_kb_before": self.rss_kb_before,
+            "rss_kb_after": self.rss_kb_after,
+            "rss_kb_delta": self.rss_kb_after - self.rss_kb_before,
+            "tracemalloc_current_kb": self.tracemalloc_current_kb,
+            "tracemalloc_peak_kb": self.tracemalloc_peak_kb,
+        }
+
+
 class PerformanceProfiler:
     """Collect coarse-grained performance metrics for a single logical run."""
 
@@ -67,9 +98,13 @@ class PerformanceProfiler:
         run_name: str,
         *,
         enable_tracemalloc: bool = False,
+        enable_file_output: bool = False,
+        output_dir: Optional[str] = None,
     ):
         self.run_name = run_name
         self.enable_tracemalloc = enable_tracemalloc
+        self.enable_file_output = enable_file_output
+        self.output_dir = output_dir or "logs/performance"
 
         self._token: Optional[contextvars.Token] = None
         self._start_s: Optional[float] = None
@@ -86,6 +121,10 @@ class PerformanceProfiler:
         self.tracemalloc_peak_b: int = 0
 
         self.rss_max_kb: int = 0
+        
+        # Per-phase profiling
+        self.phase_snapshots: List[PhaseSnapshot] = []
+        self._current_phase: Optional[PhaseSnapshot] = None
 
     async def __aenter__(self) -> "PerformanceProfiler":
         self._token = _active_profiler.set(self)
@@ -146,6 +185,48 @@ class PerformanceProfiler:
         total = self.cache_hits + self.cache_misses
         return (self.cache_hits / total) if total else 0.0
 
+    def _get_rss_kb(self) -> int:
+        """Get current RSS in KB."""
+        try:
+            usage = resource.getrusage(resource.RUSAGE_SELF)
+            rss = int(usage.ru_maxrss)
+            # On Linux ru_maxrss is KB; on macOS it's bytes. Normalize to KB.
+            return rss if rss > 10_000 else int(rss / 1024)
+        except Exception:
+            return 0
+    
+    def start_phase(self, phase_name: str) -> None:
+        """Start profiling a specific phase."""
+        if self._current_phase is not None:
+            # End previous phase if it wasn't ended
+            self.end_phase()
+        
+        snapshot = PhaseSnapshot(
+            phase=phase_name,
+            start_time=time.time(),
+            rss_kb_before=self._get_rss_kb(),
+        )
+        self._current_phase = snapshot
+    
+    def end_phase(self) -> Optional[PhaseSnapshot]:
+        """End the current phase and capture metrics."""
+        if self._current_phase is None:
+            return None
+        
+        snapshot = self._current_phase
+        snapshot.end_time = time.time()
+        snapshot.duration_s = snapshot.end_time - snapshot.start_time
+        snapshot.rss_kb_after = self._get_rss_kb()
+        
+        if self.enable_tracemalloc and tracemalloc.is_tracing():
+            current_b, peak_b = tracemalloc.get_traced_memory()
+            snapshot.tracemalloc_current_kb = current_b / 1024.0
+            snapshot.tracemalloc_peak_kb = peak_b / 1024.0
+        
+        self.phase_snapshots.append(snapshot)
+        self._current_phase = None
+        return snapshot
+
     def to_run_metrics(self) -> dict:
         return {
             "run_name": self.run_name,
@@ -161,7 +242,76 @@ class PerformanceProfiler:
                 "rss_max_kb": self.rss_max_kb,
             },
             "timers": {name: stat.to_dict() for name, stat in self.timers.items()},
+            "phases": [snapshot.to_dict() for snapshot in self.phase_snapshots],
         }
+    
+    def write_detailed_report(self, timestamp: Optional[str] = None) -> Path:
+        """Write detailed performance report to logs/performance/<timestamp>.json"""
+        if not self.enable_file_output:
+            return None
+        
+        if timestamp is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        output_path = Path(self.output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        detailed_file = output_path / f"{timestamp}.json"
+        metrics = self.to_run_metrics()
+        metrics["timestamp"] = timestamp
+        
+        with open(detailed_file, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2, ensure_ascii=False)
+        
+        return detailed_file
+    
+    def write_summary_report(self) -> Path:
+        """Write summary report to perf_reports/latest.json"""
+        if not self.enable_file_output:
+            return None
+        
+        output_path = Path("perf_reports")
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        summary_file = output_path / "latest.json"
+        
+        # Create before/after snapshots
+        before_snapshot = {
+            "timestamp": self._start_s,
+            "rss_kb": self.phase_snapshots[0].rss_kb_before if self.phase_snapshots else 0,
+        }
+        
+        after_snapshot = {
+            "timestamp": self._end_s,
+            "rss_kb": self.phase_snapshots[-1].rss_kb_after if self.phase_snapshots else self.rss_max_kb,
+            "tracemalloc_peak_kb": self.tracemalloc_peak_b / 1024.0,
+        }
+        
+        summary = {
+            "run_name": self.run_name,
+            "before": before_snapshot,
+            "after": after_snapshot,
+            "total_duration_s": self.duration_s,
+            "phases": [
+                {
+                    "phase": snapshot.phase,
+                    "duration_s": snapshot.duration_s,
+                    "rss_kb_delta": snapshot.rss_kb_after - snapshot.rss_kb_before,
+                    "tracemalloc_peak_kb": snapshot.tracemalloc_peak_kb,
+                }
+                for snapshot in self.phase_snapshots
+            ],
+            "cache": {
+                "hits": self.cache_hits,
+                "misses": self.cache_misses,
+                "hit_rate": self.cache_hit_rate,
+            },
+        }
+        
+        with open(summary_file, 'w', encoding='utf-8') as f:
+            json.dump(summary, f, indent=2, ensure_ascii=False)
+        
+        return summary_file
 
 
 def merge_timer_stats(runs: List[PerformanceProfiler]) -> Dict[str, TimerStat]:

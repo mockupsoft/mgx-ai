@@ -11,13 +11,15 @@ import argparse
 from .team import MGXStyleTeam
 
 
-async def main(human_reviewer: bool = False, custom_task: str = None):
+async def main(human_reviewer: bool = False, custom_task: str = None, enable_profiling: bool = False, enable_tracemalloc: bool = False):
     """
     MGX tarzı takım örneği
     
     Args:
         human_reviewer: True ise Charlie (Reviewer) insan olarak çalışır
         custom_task: Özel görev tanımı (None ise varsayılan görev)
+        enable_profiling: Performance profiling aktif mi
+        enable_tracemalloc: Tracemalloc ile detaylı hafıza profiling
     """
     
     mode_text = "🧑 İNSAN MODU" if human_reviewer else "🤖 LLM MODU"
@@ -33,8 +35,18 @@ async def main(human_reviewer: bool = False, custom_task: str = None):
     ╚══════════════════════════════════════════════════════════╝
     """)
     
-    # Takımı oluştur (human_reviewer=True yaparak insan olarak katılabilirsin)
-    mgx_team = MGXStyleTeam(human_reviewer=human_reviewer)
+    # Takımı oluştur (profiling dahil)
+    from .config import TeamConfig
+    config = TeamConfig(
+        human_reviewer=human_reviewer,
+        enable_profiling=enable_profiling,
+        enable_profiling_tracemalloc=enable_tracemalloc,
+    )
+    mgx_team = MGXStyleTeam(config=config)
+    
+    # Start profiler if enabled
+    if enable_profiling:
+        mgx_team._start_profiler("cli_main_run")
     
     # Görev tanımla (varsayılan veya özel)
     task = custom_task or "Listedeki sayıların çarpımını hesaplayan bir Python fonksiyonu yaz"
@@ -69,6 +81,10 @@ async def main(human_reviewer: bool = False, custom_task: str = None):
     print("\n" + "=" * 50)
     print("🎊 MGX Style Takım çalışması tamamlandı!")
     print("=" * 50)
+    
+    # End profiler if enabled
+    if enable_profiling:
+        mgx_team._end_profiler()
 
 
 async def incremental_main(requirement: str, project_path: str = None, fix_bug: bool = False, ask_confirmation: bool = True):
@@ -165,6 +181,18 @@ def cli_main():
         help="Plan onayı bekleme (sessiz mod)"
     )
     
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Performance profiling aktif et"
+    )
+    
+    parser.add_argument(
+        "--profile-memory",
+        action="store_true",
+        help="Tracemalloc ile detaylı hafıza profiling aktif et"
+    )
+    
     args = parser.parse_args()
     
     # Incremental Development modları
@@ -185,7 +213,15 @@ def cli_main():
         if args.task:
             print(f"\n📝 ÖZEL GÖREV: {args.task}\n")
         
-        asyncio.run(main(human_reviewer=args.human, custom_task=args.task))
+        if args.profile:
+            print("\n📊 PERFORMANCE PROFILING AKTİF")
+        
+        asyncio.run(main(
+            human_reviewer=args.human, 
+            custom_task=args.task, 
+            enable_profiling=args.profile,
+            enable_tracemalloc=args.profile_memory
+        ))
 
 
 if __name__ == "__main__":
