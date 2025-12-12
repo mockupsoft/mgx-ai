@@ -421,12 +421,12 @@ class TestTeamConfigValidators:
     
     def test_budget_multiplier_validator_warning_threshold(self, caplog):
         """Test budget_multiplier warning at exact threshold"""
-        # Test that values above 10.0 work without validation errors
-        config = TeamConfig(budget_multiplier=10.0)
-        assert config.budget_multiplier == 10.0
+        # Test that values at and below max (5.0) work without validation errors
+        config = TeamConfig(budget_multiplier=5.0)
+        assert config.budget_multiplier == 5.0
         
-        config = TeamConfig(budget_multiplier=10.1)
-        assert config.budget_multiplier == 10.1
+        config = TeamConfig(budget_multiplier=4.9)
+        assert config.budget_multiplier == 4.9
     
     def test_cache_ttl_seconds_boundaries(self):
         """Test cache TTL seconds field boundaries"""

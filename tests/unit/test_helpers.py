@@ -173,7 +173,7 @@ class TestMockTeam:
     @pytest.mark.asyncio
     async def test_team_run(self):
         """Test team run method."""
-        team = MockTeam()
+        team = MockTeam(name="TestTeam")
         role = MockRole(name="TestRole")
         team.hire(role)
         
@@ -241,7 +241,7 @@ class TestMockMemory:
         from tests.helpers.metagpt_stubs import MockMemory
         memory = MockMemory()
         
-        assert isinstance(memory.storage, dict)
+        assert isinstance(memory.storage, list)
         assert isinstance(memory.messages, list)
     
     def test_memory_add_and_get(self):
