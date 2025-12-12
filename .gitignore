@@ -46,6 +46,10 @@ htmlcov/
 output/
 results/
 
+# Performance reports (generated artifacts)
+perf_reports/latest.json
+perf_reports/before_after.md
+
 # Temporary files
 *.tmp
 *.bak
