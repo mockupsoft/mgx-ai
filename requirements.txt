@@ -23,6 +23,11 @@ tenacity>=8.2.0
 
 # Async & Concurrency
 httpx>=0.24.0
+asyncio-contextmanager>=1.0.0
+
+# WebSocket & Events
+broadcaster>=0.2.0
+python-multipart>=0.0.6
 
 # Utilities
 pyyaml>=6.0
