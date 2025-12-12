@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mgx-agent-api
+    ports:
+      - "8000:8000"
+    environment:
+      # API Configuration
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_RELOAD: "false"
+      API_WORKERS: 2
+      
+      # MGX Agent Configuration
+      MGX_MAX_ROUNDS: 5
+      MGX_MAX_REVISION_ROUNDS: 2
+      MGX_CACHE_BACKEND: memory
+      
+      # Database Configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: mgx_agent
+      DB_POOL_SIZE: 10
+      DB_MAX_OVERFLOW: 20
+      
+      # Application Settings
+      LOG_LEVEL: INFO
+      DEBUG: "false"
+      
+      # MetaGPT
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy_key_for_testing}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mgx-network
+    volumes:
+      - ./backend:/app/backend
+      - ./mgx_agent:/app/mgx_agent
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: mgx-agent-postgres
+    environment:
+      POSTGRES_DB: mgx_agent
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - mgx-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (Optional, for caching)
+  redis:
+    image: redis:7-alpine
+    container_name: mgx-agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mgx-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  mgx-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
