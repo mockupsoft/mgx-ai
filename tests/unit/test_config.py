@@ -112,6 +112,11 @@ class TestTeamConfigDefaults:
         assert config.use_multi_llm is False
         assert config.log_level == LogLevel.INFO
         assert config.verbose is False
+        assert config.cache_backend == "memory"
+        assert config.cache_max_entries == 1024
+        assert config.redis_url is None
+        assert config.cache_log_hits is False
+        assert config.cache_log_misses is False
         assert config.cache_ttl_seconds == 3600
     
     def test_default_config_export(self):

@@ -7,6 +7,8 @@ Pydantic v2 ile doğrulama.
 """
 
 from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, Field, validator
 from metagpt.logs import logger
 
@@ -67,6 +69,22 @@ class TeamConfig(BaseModel):
     verbose: bool = Field(default=False, description="Detaylı çıktı")
     
     # Cache ayarları
+    cache_backend: str = Field(
+        default="memory",
+        description="Cache backend: none | memory | redis",
+    )
+    cache_max_entries: int = Field(
+        default=1024,
+        ge=1,
+        le=100_000,
+        description="In-memory cache için maksimum entry sayısı (LRU)",
+    )
+    redis_url: Optional[str] = Field(
+        default=None,
+        description="Redis URL (cache_backend=redis için)",
+    )
+    cache_log_hits: bool = Field(default=False, description="Cache hit logla")
+    cache_log_misses: bool = Field(default=False, description="Cache miss logla")
     cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400, description="Cache TTL (saniye)")
     
     @validator('max_rounds')

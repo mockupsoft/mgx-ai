@@ -15,11 +15,8 @@ Açık kaynak MetaGPT'yi MGX'e benzer şekilde çalıştıran örnek.
 
 # Lokal geliştirme: examples klasöründen çalışırken metagpt paketini bul
 
-import asyncio
-import hashlib
 import json
 import re
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List
@@ -99,6 +96,22 @@ class TeamConfig(BaseModel):
     verbose: bool = Field(default=False, description="Detaylı çıktı")
     
     # Cache ayarları
+    cache_backend: str = Field(
+        default="memory",
+        description="Cache backend: none | memory | redis",
+    )
+    cache_max_entries: int = Field(
+        default=1024,
+        ge=1,
+        le=100_000,
+        description="In-memory cache için maksimum entry sayısı (LRU)",
+    )
+    redis_url: str = Field(
+        default="",
+        description="Redis URL (cache_backend=redis için)",
+    )
+    cache_log_hits: bool = Field(default=False, description="Cache hit logla")
+    cache_log_misses: bool = Field(default=False, description="Cache miss logla")
     cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400, description="Cache TTL (saniye)")
     
     @validator('max_rounds')
@@ -328,7 +341,6 @@ class Mike(Role):
         super().__init__(**kwargs)
         self.set_actions([AnalyzeTask, DraftPlan])
         self._is_planning_phase = True  # Planning tamamlanınca False olacak
-        self._analysis_cache = {}  # Tekrar eden görevler için cache
     
     def complete_planning(self):
         """Planning'i sonlandırır - execute sırasında tekrar çalışmasını önler"""
@@ -352,83 +364,40 @@ class Mike(Role):
         return await super()._observe()
     
     async def analyze_task(self, task: str) -> Message:
-        """Doğrudan görev analizi yap (cache destekli)"""
-        
-        # Cache key oluştur
-        task_hash = hashlib.md5(task.encode()).hexdigest()
-        
-        # Cache'de var mı kontrol et (TTL ile)
-        if task_hash in self._analysis_cache:
-            cached = self._analysis_cache[task_hash]
-            
-            # TTL kontrolü
-            cache_age = time.time() - cached['timestamp']
-            cache_ttl = 3600  # Varsayılan 1 saat
-            
-            # Config'den TTL al (varsa - environment'tan veya role config'inden)
-            if hasattr(self, 'config') and hasattr(self.config, 'cache_ttl_seconds'):
-                cache_ttl = self.config.cache_ttl_seconds
-            elif hasattr(self, 'env') and hasattr(self.env, 'config'):
-                # Environment config'inden al
-                env_config = getattr(self.env, 'config', None)
-                if env_config and hasattr(env_config, 'cache_ttl_seconds'):
-                    cache_ttl = env_config.cache_ttl_seconds
-            
-            if cache_age < cache_ttl:
-                logger.info(f"⚡ {self.name}: Cache hit (age: {cache_age:.0f}s, TTL: {cache_ttl}s)")
-                print(f"\n{'─'*50}")
-                print(f"⚡ MIKE: Analiz CACHE'den yüklendi! (Hız kazancı)")
-                print(f"📊 Karmaşıklık: {cached['complexity']}")
-                print(f"{'─'*50}")
-                print(f"\n⚠️ Plan onayınızı bekliyorum. Onaylamak için 'ONAY' yazın.\n")
-                return cached['message']
-            else:
-                logger.info(f"⏰ {self.name}: Cache expired (age: {cache_age:.0f}s > TTL: {cache_ttl}s)")
-                del self._analysis_cache[task_hash]
-        
-        logger.info(f"🎯 {self.name} ({self.profile}): Görev analiz ediliyor...")
-        
-        # Görevi analiz et (stream=False ile tekrarı önle)
-        analyze_action = AnalyzeTask()
-        analyze_action.llm = self.llm
-        analysis = await analyze_action.run(task)
-        
-        # Plan taslağı oluştur
-        draft_action = DraftPlan()
-        draft_action.llm = self.llm
-        plan = await draft_action.run(task, analysis)
-        
-        # Karmaşıklık seviyesini regex ile çıkar
-        m = re.search(r"KARMAŞIKLIK:\s*(XS|S|M|L|XL)", analysis.upper())
-        complexity = m.group(1) if m else "XS"
-        
-        # Özet çıktı (plan zaten stream ile gösterildi)
-        print(f"\n{'─'*50}")
-        print(f"✅ MIKE: Analiz ve plan tamamlandı!")
-        print(f"📊 Karmaşıklık: {complexity}")
-        print(f"{'─'*50}")
-        print(f"\n⚠️ Plan onayınızı bekliyorum. Onaylamak için 'ONAY' yazın.\n")
-        
-        # JSON + düz metin formatı (Alex her iki formatta da okuyabilir)
-        payload = {
-            "task": task,
-            "complexity": complexity,
-            "plan": plan,
-        }
-        
-        # MGXStyleTeam'e task_spec'i set et (tek kaynak - hafıza taraması yerine)
-        if hasattr(self, "_team_ref") and self._team_ref:
-            self._team_ref.set_task_spec(
-                task=task,
-                complexity=complexity,
-                plan=plan,
-                is_revision=False,
-                review_notes=""
-            )
-            logger.debug(f"📋 Mike: Task spec MGXStyleTeam'e set edildi")
-        
-        # JSON'u metin içine göm - kolayca parse edilebilir
-        result = f"""---JSON_START---
+        """Doğrudan görev analizi yap (cache destekli)."""
+
+        team_ref = getattr(self, "_team_ref", None)
+
+        async def _compute() -> Message:
+            logger.info(f"🎯 {self.name} ({self.profile}): Görev analiz ediliyor...")
+
+            analyze_action = AnalyzeTask()
+            analyze_action.llm = self.llm
+            analysis = await analyze_action.run(task)
+
+            draft_action = DraftPlan()
+            draft_action.llm = self.llm
+            plan = await draft_action.run(task, analysis)
+
+            m = re.search(r"KARMAŞIKLIK:\s*(XS|S|M|L|XL)", str(analysis).upper())
+            complexity = m.group(1) if m else "XS"
+
+            payload = {
+                "task": task,
+                "complexity": complexity,
+                "plan": plan,
+            }
+
+            if team_ref is not None:
+                team_ref.set_task_spec(
+                    task=task,
+                    complexity=complexity,
+                    plan=plan,
+                    is_revision=False,
+                    review_notes="",
+                )
+
+            result = f"""---JSON_START---
 {json.dumps(payload, ensure_ascii=False, indent=2)}
 ---JSON_END---
 
@@ -437,19 +406,30 @@ KARMAŞIKLIK: {complexity}
 PLAN:
 {plan}
 """
-        
-        message = Message(content=result, role=self.profile, cause_by=AnalyzeTask)
-        
-        # Cache'e kaydet
-        self._analysis_cache[task_hash] = {
-            'message': message,
-            'complexity': complexity,
-            'plan': plan,
-            'timestamp': time.time()
-        }
-        logger.info(f"💾 {self.name}: Analiz cache'e kaydedildi (hash: {task_hash[:8]}...)")
-        
-        return message
+
+            return Message(content=result, role=self.profile, cause_by=AnalyzeTask)
+
+        if team_ref is not None and hasattr(team_ref, "cached_llm_call"):
+            message = await team_ref.cached_llm_call(
+                role=self.profile,
+                action="AnalyzeTask+DraftPlan",
+                payload={"task": task},
+                compute=_compute,
+                encode=lambda msg: {"content": msg.content, "role": msg.role},
+                decode=lambda data: Message(
+                    content=str(data.get("content", "")),
+                    role=str(data.get("role", self.profile)),
+                    cause_by=AnalyzeTask,
+                ),
+            )
+            # Ensure task spec is available for downstream roles on cache hits.
+            try:
+                team_ref._sync_task_spec_from_plan(message.content, fallback_task=task)
+            except Exception:
+                pass
+            return message
+
+        return await _compute()
 
 
 class Alex(RelevantMemoryMixin, Role):
@@ -564,13 +544,28 @@ class Alex(RelevantMemoryMixin, Role):
         # Progress göster
         print_step_progress(1, 3, "LLM'e istek gönderiliyor...", role=self)
         
-        # Kod yaz (instruction ve plan ayrı ayrı)
-        write_action = WriteCode()
-        write_action.llm = self.llm
-        
+        team_ref = getattr(self, "_team_ref", None)
+
+        async def _compute_code() -> str:
+            write_action = WriteCode()
+            write_action.llm = self.llm
+            return await write_action.run(instruction=instruction, plan=plan, review_notes=review_notes)
+
         print_step_progress(2, 3, "Kod üretiliyor...", role=self)
-        # Review notlarını da gönder (revision turunda - zaten yukarıda set edildi)
-        code = await write_action.run(instruction=instruction, plan=plan, review_notes=review_notes)
+
+        if team_ref is not None and hasattr(team_ref, "cached_llm_call"):
+            code = await team_ref.cached_llm_call(
+                role=self.profile,
+                action="WriteCode",
+                payload={
+                    "instruction": instruction,
+                    "plan": plan,
+                    "review_notes": review_notes,
+                },
+                compute=_compute_code,
+            )
+        else:
+            code = await _compute_code()
         
         print_step_progress(3, 3, "Kod hazır!", role=self)
         
@@ -620,13 +615,27 @@ class Bob(RelevantMemoryMixin, Role):
         # Progress göster
         print_step_progress(1, 3, "Kod analiz ediliyor...", role=self)
         
-        # Testleri yaz
-        test_action = WriteTest()
-        test_action.llm = self.llm
-        
+        team_ref = getattr(self, "_team_ref", None)
+
+        async def _compute_tests() -> str:
+            test_action = WriteTest()
+            test_action.llm = self.llm
+            return await test_action.run(code, k=3)
+
         print_step_progress(2, 3, "Testler üretiliyor...", role=self)
-        # Test sayısını sınırla (3-5 arası, çok fazla test yazılmasını önle)
-        tests = await test_action.run(code, k=3)
+
+        if team_ref is not None and hasattr(team_ref, "cached_llm_call"):
+            tests = await team_ref.cached_llm_call(
+                role=self.profile,
+                action="WriteTest",
+                payload={
+                    "code": code,
+                    "k": 3,
+                },
+                compute=_compute_tests,
+            )
+        else:
+            tests = await _compute_tests()
         
         print_step_progress(3, 3, "Testler hazır!", role=self)
         
@@ -727,12 +736,29 @@ class Charlie(RelevantMemoryMixin, Role):
             print_step_progress(1, 4, "Kod kalitesi kontrol ediliyor...", role=self)
             print_step_progress(2, 4, "Test coverage değerlendiriliyor...", role=self)
             
-            # Review yap
-            review_action = ReviewCode()
-            review_action.llm = self.llm
-            
+            team_ref = getattr(self, "_team_ref", None)
+            code_in = code if code else "No code found"
+            tests_in = tests if tests else "No tests found"
+
+            async def _compute_review() -> str:
+                review_action = ReviewCode()
+                review_action.llm = self.llm
+                return await review_action.run(code_in, tests_in)
+
             print_step_progress(3, 4, "Review raporu hazırlanıyor...", role=self)
-            review = await review_action.run(code if code else "No code found", tests if tests else "No tests found")
+
+            if team_ref is not None and hasattr(team_ref, "cached_llm_call"):
+                review = await team_ref.cached_llm_call(
+                    role=self.profile,
+                    action="ReviewCode",
+                    payload={
+                        "code": code_in,
+                        "tests": tests_in,
+                    },
+                    compute=_compute_review,
+                )
+            else:
+                review = await _compute_review()
             
             print_step_progress(4, 4, "Review tamamlandı!", role=self)
         

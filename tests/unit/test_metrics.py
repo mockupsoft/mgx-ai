@@ -44,6 +44,8 @@ class TestTaskMetricsBasic:
         assert metrics.token_usage == 0
         assert metrics.estimated_cost == 0.0
         assert metrics.revision_rounds == 0
+        assert metrics.cache_hits == 0
+        assert metrics.cache_misses == 0
         assert metrics.error_message == ""
     
     def test_complete_task_metrics(self):
@@ -465,7 +467,9 @@ class TestToDictFormatting:
             "token_usage",
             "estimated_cost",
             "revision_rounds",
-            "error"
+            "cache_hits",
+            "cache_misses",
+            "error",
         ]
         
         metrics_dict = metrics.to_dict()

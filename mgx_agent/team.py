@@ -47,6 +47,14 @@ from mgx_agent.actions import (
     ReviewCode,
 )
 from mgx_agent.roles import Mike, Alex, Bob, Charlie
+from mgx_agent.cache import (
+    CacheBackend,
+    ResponseCache,
+    InMemoryLRUTTLCache,
+    NullCache,
+    RedisCache,
+    make_cache_key,
+)
 from mgx_agent.performance.async_tools import (
     AsyncTimer,
     bounded_gather,
@@ -110,6 +118,22 @@ class TeamConfig(BaseModel):
     verbose: bool = Field(default=False, description="Detaylı çıktı")
     
     # Cache ayarları
+    cache_backend: str = Field(
+        default="memory",
+        description="Cache backend: none | memory | redis",
+    )
+    cache_max_entries: int = Field(
+        default=1024,
+        ge=1,
+        le=100_000,
+        description="In-memory cache için maksimum entry sayısı (LRU)",
+    )
+    redis_url: Optional[str] = Field(
+        default=None,
+        description="Redis URL (cache_backend=redis için)",
+    )
+    cache_log_hits: bool = Field(default=False, description="Cache hit logla")
+    cache_log_misses: bool = Field(default=False, description="Cache miss logla")
     cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400, description="Cache TTL (saniye)")
     
     @validator('max_rounds')
@@ -188,6 +212,8 @@ class TaskMetrics:
     token_usage: int = 0  # Şimdilik dummy - ileride gerçek değer
     estimated_cost: float = 0.0  # Şimdilik dummy - ileride gerçek değer
     revision_rounds: int = 0
+    cache_hits: int = 0
+    cache_misses: int = 0
     error_message: str = ""
     
     @property
@@ -216,7 +242,9 @@ class TaskMetrics:
             "token_usage": self.token_usage,
             "estimated_cost": f"${self.estimated_cost:.4f}",
             "revision_rounds": self.revision_rounds,
-            "error": self.error_message if self.error_message else None
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+            "error": self.error_message if self.error_message else None,
         }
 
 
@@ -279,7 +307,8 @@ def print_phase_header(phase: str, emoji: str = "🔄"):
 class MGXStyleTeam:
     """MGX tarzı takım yöneticisi"""
 
-    _GLOBAL_ANALYSIS_CACHE: Dict[str, Tuple[float, Any]] = {}
+    # Shared cache instance used when MGX_GLOBAL_CACHE=1 (perf/load tests).
+    _GLOBAL_RESPONSE_CACHE: Optional[ResponseCache] = None
 
     def __init__(
         self,
@@ -327,7 +356,7 @@ class MGXStyleTeam:
         # Cache stats (used by performance suite)
         self._cache_hits = 0
         self._cache_misses = 0
-        self._analysis_cache: Dict[str, Tuple[float, Any]] = {}
+        self._cache: ResponseCache = self._init_cache()
         
         # Profiling
         self._profiler = None
@@ -419,7 +448,194 @@ class MGXStyleTeam:
             logger.info(f"   enable_caching: {self.config.enable_caching}")
             logger.info(f"   enable_metrics: {self.config.enable_metrics}")
             logger.info(f"   default_investment: ${self.config.default_investment}")
-    
+            logger.info(f"   cache_backend: {getattr(self.config, 'cache_backend', 'memory')}")
+            logger.info(f"   cache_max_entries: {getattr(self.config, 'cache_max_entries', 1024)}")
+            logger.info(f"   cache_ttl_seconds: {self.config.cache_ttl_seconds}")
+
+    def _init_cache(self) -> ResponseCache:
+        """Initialize response cache based on config."""
+
+        if not getattr(self.config, "enable_caching", True):
+            return NullCache()
+
+        backend_raw = str(getattr(self.config, "cache_backend", CacheBackend.MEMORY.value)).lower()
+        if backend_raw in (CacheBackend.NONE.value, "off", "false", "0"):
+            return NullCache()
+
+        use_global = os.getenv("MGX_GLOBAL_CACHE") == "1"
+        max_entries = int(getattr(self.config, "cache_max_entries", 1024))
+        ttl_seconds = int(getattr(self.config, "cache_ttl_seconds", 3600))
+
+        if backend_raw == CacheBackend.REDIS.value:
+            redis_url = getattr(self.config, "redis_url", None)
+            if not redis_url:
+                logger.warning("⚠️ cache_backend=redis ama redis_url boş - cache devre dışı")
+                return NullCache()
+            try:
+                return RedisCache(redis_url=redis_url, ttl_seconds=ttl_seconds)
+            except Exception as e:
+                logger.warning(f"⚠️ Redis cache init başarısız ({e}) - in-memory cache kullanılacak")
+                return InMemoryLRUTTLCache(max_entries=max_entries, ttl_seconds=ttl_seconds)
+
+        if use_global:
+            if MGXStyleTeam._GLOBAL_RESPONSE_CACHE is None:
+                MGXStyleTeam._GLOBAL_RESPONSE_CACHE = InMemoryLRUTTLCache(
+                    max_entries=max_entries,
+                    ttl_seconds=ttl_seconds,
+                )
+            return MGXStyleTeam._GLOBAL_RESPONSE_CACHE
+
+        return InMemoryLRUTTLCache(max_entries=max_entries, ttl_seconds=ttl_seconds)
+
+    async def cached_llm_call(
+        self,
+        *,
+        role: str,
+        action: str,
+        payload: Dict[str, Any],
+        compute,
+        bypass_cache: bool = False,
+        encode=None,
+        decode=None,
+    ):
+        """Run an expensive computation with cache.
+
+        `payload` must be JSON serializable.
+
+        encode/decode can be used to cache a serialized representation while
+        returning richer python objects.
+        """
+
+        if bypass_cache or not getattr(self.config, "enable_caching", True):
+            return await compute()
+
+        # Human reviewer mode should never influence LLM review behavior.
+        if getattr(self.config, "human_reviewer", False) and role == "Reviewer":
+            return await compute()
+
+        key = make_cache_key(role=role, action=action, payload=payload)
+
+        cached = None
+        try:
+            cached = self._cache.get(key)
+        except Exception as e:
+            logger.debug(f"Cache get hatası: {e}")
+
+        if cached is not None:
+            self._cache_hits += 1
+            if getattr(self.config, "cache_log_hits", False):
+                logger.info(f"⚡ Cache hit: {role}/{action}")
+            try:
+                from mgx_agent.performance.profiler import get_active_profiler
+
+                prof = get_active_profiler()
+                if prof is not None:
+                    prof.record_cache(True)
+            except Exception:
+                pass
+            return decode(cached) if decode else cached
+
+        self._cache_misses += 1
+        if getattr(self.config, "cache_log_misses", False):
+            logger.info(f"🐢 Cache miss: {role}/{action}")
+        try:
+            from mgx_agent.performance.profiler import get_active_profiler
+
+            prof = get_active_profiler()
+            if prof is not None:
+                prof.record_cache(False)
+        except Exception:
+            pass
+
+        result = await compute()
+        to_store = encode(result) if encode else result
+        try:
+            self._cache.set(key, to_store)
+        except Exception as e:
+            logger.debug(f"Cache set hatası: {e}")
+        return result
+
+    def cache_clear(self) -> None:
+        """Clear the configured cache."""
+        try:
+            self._cache.clear()
+        except Exception:
+            pass
+
+    def clear_cache(self) -> None:
+        """Backward-compatible alias for cache_clear()."""
+        return self.cache_clear()
+
+    def cache_inspect(self) -> dict:
+        """Return cache stats + a sample of keys for debugging."""
+        try:
+            st = self._cache.stats()
+            keys = self._cache.keys()
+        except Exception:
+            st = None
+            keys = []
+
+        return {
+            "enabled": bool(getattr(self.config, "enable_caching", True)),
+            "backend": getattr(st, "backend", None),
+            "size": getattr(st, "size", 0),
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "keys_sample": keys[:10],
+        }
+
+    def inspect_cache(self) -> dict:
+        """Backward-compatible alias for cache_inspect()."""
+        return self.cache_inspect()
+
+    def cache_warm(self, *, role: str, action: str, payload: Dict[str, Any], value: Any) -> None:
+        """Prewarm cache with a known response."""
+        if not getattr(self.config, "enable_caching", True):
+            return
+        key = make_cache_key(role=role, action=action, payload=payload)
+        try:
+            self._cache.set(key, value)
+        except Exception:
+            pass
+
+    def warm_cache(self, *, role: str, action: str, payload: Dict[str, Any], value: Any) -> None:
+        """Backward-compatible alias for cache_warm()."""
+        return self.cache_warm(role=role, action=action, payload=payload, value=value)
+
+    def _sync_task_spec_from_plan(self, plan_content: str, *, fallback_task: str) -> None:
+        """Ensure self.current_task_spec is populated from Mike's plan message."""
+
+        task = fallback_task
+        complexity = "M"
+        plan = ""
+
+        if "---JSON_START---" in plan_content and "---JSON_END---" in plan_content:
+            try:
+                json_str = plan_content.split("---JSON_START---")[1].split("---JSON_END---")[0].strip()
+                data = json.loads(json_str)
+                if isinstance(data, dict):
+                    task = data.get("task") or task
+                    complexity = data.get("complexity") or complexity
+                    plan = data.get("plan") or plan
+            except Exception:
+                pass
+
+        if not plan:
+            # Try to extract a PLAN: section; otherwise keep entire message.
+            m = re.search(r"\bPLAN:\s*(.*)", plan_content, re.IGNORECASE | re.DOTALL)
+            if m:
+                plan = m.group(1).strip()
+            else:
+                plan = plan_content
+
+        self.set_task_spec(
+            task=task,
+            complexity=str(complexity),
+            plan=plan,
+            is_revision=False,
+            review_notes="",
+        )
+
     def _verify_multi_llm_setup(self, roles_list):
         """
         Multi-LLM modunda gerçekten farklı modeller kullanılıyor mu kontrol et (sanity check)
@@ -630,45 +846,49 @@ class MGXStyleTeam:
         if self._profiler:
             self._profiler.start_phase("analyze_and_plan")
 
-        # Global cache (perf + load tests) - plan generation is one of the hottest paths.
-        if self.config.enable_caching:
-            cache_key = hashlib.sha256(task.encode("utf-8")).hexdigest()
-            cache_store = self._GLOBAL_ANALYSIS_CACHE if os.getenv("MGX_GLOBAL_CACHE") == "1" else self._analysis_cache
-            cached = cache_store.get(cache_key)
+        # Cache (perf + interactive) - plan generation is one of the hottest paths.
+        if getattr(self.config, "enable_caching", True):
+            cache_key = make_cache_key(
+                role="TeamLeader",
+                action="AnalyzeTask+DraftPlan",
+                payload={"task": task},
+            )
+            cache_start = time.perf_counter()
+
+            cached = None
+            try:
+                cached = self._cache.get(cache_key)
+            except Exception:
+                cached = None
 
             if cached is not None:
-                cached_at, cached_plan = cached
-                if (time.time() - cached_at) < self.config.cache_ttl_seconds:
-                    cache_start = time.perf_counter()
-                    self._cache_hits += 1
-                    prof = None
-
-                    try:
-                        from mgx_agent.performance.profiler import get_active_profiler
-
-                        prof = get_active_profiler()
-                        if prof is not None:
-                            prof.record_cache(True)
-                    except Exception:
-                        prof = None
-
-                    self.last_plan = cached_plan
-                    self.add_to_memory("Mike", "AnalyzeTask + DraftPlan (cache)", cached_plan.content)
-
-                    if self.config.auto_approve_plan:
-                        self._log("🤖 Auto-approve aktif, plan otomatik onaylandı", "info")
-                        self.approve_plan()
-
-                    if prof is not None:
-                        prof.record_timer("analyze_and_plan_cache_hit", time.perf_counter() - cache_start)
-
-                    return cached_plan.content
-
-                # TTL expired
+                self._cache_hits += 1
                 try:
-                    del cache_store[cache_key]
-                except KeyError:
+                    from mgx_agent.performance.profiler import get_active_profiler
+
+                    prof = get_active_profiler()
+                    if prof is not None:
+                        prof.record_cache(True)
+                        prof.record_timer("analyze_and_plan_cache_hit", time.perf_counter() - cache_start)
+                except Exception:
                     pass
+
+                cached_content = cached.get("content") if isinstance(cached, dict) else cached
+                cached_role = cached.get("role", "TeamLeader") if isinstance(cached, dict) else "TeamLeader"
+
+                self.last_plan = Message(content=str(cached_content), role=cached_role, cause_by=AnalyzeTask)
+                self.add_to_memory(
+                    "Mike",
+                    "AnalyzeTask + DraftPlan (cache)",
+                    str(cached_content),
+                )
+                self._sync_task_spec_from_plan(str(cached_content), fallback_task=task)
+
+                if self.config.auto_approve_plan:
+                    self._log("🤖 Auto-approve aktif, plan otomatik onaylandı", "info")
+                    self.approve_plan()
+
+                return str(cached_content)
 
             self._cache_misses += 1
             try:
@@ -713,11 +933,26 @@ class MGXStyleTeam:
         # Bu sayede Alex (Engineer) plan mesajını alacak
         self.last_plan = analysis
 
-        # Cache the plan for repeated identical tasks (useful for perf/load tests)
-        if self.config.enable_caching:
-            cache_key = hashlib.sha256(task.encode("utf-8")).hexdigest()
-            cache_store = self._GLOBAL_ANALYSIS_CACHE if os.getenv("MGX_GLOBAL_CACHE") == "1" else self._analysis_cache
-            cache_store[cache_key] = (time.time(), analysis)
+        # Cache the plan for repeated identical tasks
+        if getattr(self.config, "enable_caching", True):
+            cache_key = make_cache_key(
+                role="TeamLeader",
+                action="AnalyzeTask+DraftPlan",
+                payload={"task": task},
+            )
+            try:
+                self._cache.set(
+                    cache_key,
+                    {
+                        "content": getattr(analysis, "content", str(analysis)),
+                        "role": getattr(analysis, "role", "TeamLeader"),
+                    },
+                )
+            except Exception:
+                pass
+
+        # Ensure task spec is set even when using mock roles.
+        self._sync_task_spec_from_plan(getattr(analysis, "content", str(analysis)), fallback_task=task)
 
         # Hafızaya ekle
         self.add_to_memory("Mike", "AnalyzeTask + DraftPlan", analysis.content)
@@ -1038,6 +1273,8 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             # Metrics güncelle - başarılı
             metric.revision_rounds = revision_count
             metric.success = True
+            metric.cache_hits = self._cache_hits
+            metric.cache_misses = self._cache_misses
             
             # Gerçek token kullanımını hesapla
             metric.token_usage = self._calculate_token_usage()
@@ -1118,6 +1355,7 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         print(f"🔄 Düzeltme Turları: {metric.revision_rounds}")
         print(f"🪙 Tahmini Token: ~{metric.token_usage}")
         print(f"💰 Tahmini Maliyet: ${metric.estimated_cost:.4f}")
+        print(f"⚡ Cache: hits={metric.cache_hits}, misses={metric.cache_misses}")
         if metric.error_message:
             print(f"⚠️  Hata: {metric.error_message}")
         print(f"{'='*60}\n")
