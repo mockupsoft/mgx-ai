@@ -1,0 +1,35 @@
+version: '3.8'
+
+# =============================================================================
+# Development Override - docker-compose.override.yml
+# =============================================================================
+# This file is automatically applied when running docker-compose commands.
+# It overrides the main docker-compose.yml for development convenience.
+#
+# It provides:
+# - Development environment settings (MGX_ENV=development, MGX_LOG_LEVEL=debug)
+# - Code volume mounts for hot reload
+# - Removed build constraints for faster iteration
+#
+# To skip this file:
+#   docker-compose -f docker-compose.yml up -d
+#
+# To use production settings:
+#   MGX_ENV=production docker-compose up -d
+#
+# =============================================================================
+
+services:
+  mgx-ai:
+    environment:
+      MGX_ENV: development
+      MGX_LOG_LEVEL: DEBUG
+      DEBUG: "true"
+    volumes:
+      # Mount code directories for hot reload
+      - ./backend:/app/backend
+      - ./mgx_agent:/app/mgx_agent
+    # Build cache is kept for faster development builds
+    build:
+      cache_from:
+        - mgx-agent:latest

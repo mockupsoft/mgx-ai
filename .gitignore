@@ -68,6 +68,18 @@ config_*.yaml
 *.key
 *.pem
 
+# Environment files (never commit .env with secrets)
+.env
+.env.local
+.env.*.local
+.env.*.secret
+!.env.example
+
+# Docker volumes and artifacts
+minio_data/
+kafka_data/
+zookeeper_data/
+
 # Project specific
 __pycache__/
 *.pyc
