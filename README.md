@@ -24,7 +24,8 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 │  ├─ Phase 4 (Performance)      ✅ COMPLETE                 │
 │  ├─ Phase 4.5 (Backend API)    ✅ COMPLETE                 │
 │  ├─ Phase 5 (Git Integration)  ✅ COMPLETE                 │
-│  └─ Phase 6 (Workspace/Project) ✅ COMPLETE                 │
+│  ├─ Phase 6 (Workspace/Project) ✅ COMPLETE                 │
+│  └─ Phase 7 (Web Stack Support) ✅ COMPLETE                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -141,6 +142,16 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - **Repository Linking**: Secure GitHub repository connections with authentication
 - **Tenant-Aware API**: All endpoints respect workspace boundaries
 
+### 🎨 Phase 7: Web Stack Support (StackSpec)
+- **10 Production-Ready Stacks**: 5 Backend (Express-TS, NestJS, Laravel, FastAPI, .NET), 3 Frontend (React-Vite, Next.js, Vue-Vite), 2 DevOps (Docker, GitHub Actions)
+- **Stack-Aware Intelligence**: Automatic stack inference from task descriptions with intelligent keyword detection
+- **JSON Input Contract**: Structured task format with target_stack, project_type, constraints, and output_mode
+- **FILE Manifest Format**: Clean output with multi-file structured generation and validation
+- **Stack-Specific Frameworks**: Jest/Vitest/Pytest/PHPUnit selection based on target stack
+- **Output Validation**: Constraint enforcement, project structure validation, and safe file operations
+- **Multi-Language Support**: Python, TypeScript/JavaScript, PHP, C# with proper toolchain awareness
+- **Backward Compatibility**: 100% compatible with existing mgx_style_team.py usage patterns
+
 ### 🎨 Modüler Mimari
 - **Single Responsibility**: Her modül tek sorumluluk
 - **Design Patterns**: Adapter, Factory, Mixin, Facade patterns
@@ -162,6 +173,7 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - **Real-time events**: 8+ event types with pub/sub architecture
 - **Database integration**: PostgreSQL + SQLAlchemy + Alembic migrations
 - **Plan approval flow**: User control over task execution
+- **Web Stack Support**: 10 production-ready stacks with stack-aware intelligence (Phase 7)
 - **GitHub Actions CI/CD**: Otomatik test, performance gates, ve dağıtım süreçleri
 
 ---
@@ -240,12 +252,14 @@ mgx_agent/
 ├── __init__.py
 ├── config.py             # Configuration with cache & profiling flags
 ├── metrics.py            # Metrics with performance tracking
-├── actions.py            # Team actions
+├── actions.py            # Team actions (stack-aware)
 ├── adapter.py            # MetaGPT integration
 ├── roles.py              # Role definitions
 ├── team.py               # Team orchestration (async optimized)
-├── cli.py                # CLI interface
+├── cli.py                # CLI interface with JSON input
 ├── cache.py              # Response caching (LRU + Redis) - Phase 4
+├── stack_specs.py        # Web stack specifications (Phase 7)
+├── file_utils.py         # FILE manifest parser & file operations (Phase 7)
 └── performance/          # Phase 4: Performance utilities
     ├── __init__.py
     ├── async_tools.py    # AsyncTimer, bounded_gather, with_timeout
@@ -386,6 +400,335 @@ CLI Input (Task Description)
                ↓
     Output: main.py, test_main.py, review.md
 ```
+
+---
+
+## 🎨 Web Stack Support (StackSpec)
+
+### Web Stack Support Overview
+
+MGX Agent includes comprehensive **Web Stack Support** that enables AI-powered development for modern web technologies. The system includes 10 production-ready stacks with stack-aware intelligence, automatic inference, and structured output generation.
+
+- **Backend Stacks**: Express TypeScript, NestJS, Laravel, FastAPI, .NET Web API
+- **Frontend Stacks**: React + Vite, Next.js, Vue + Vite  
+- **DevOps Stacks**: Docker + Docker Compose, GitHub Actions CI/CD
+- **StackSpec Definition**: Complete technical specifications in `mgx_agent/stack_specs.py`
+
+### Supported Stacks Table
+
+| Stack ID | Name | Category | Language | Test Framework | Package Manager | Docker/CI Support |
+|----------|------|----------|----------|---------------|-----------------|-------------------|
+| **express-ts** | Node.js + Express (TypeScript) | Backend | TypeScript | Jest | npm | ✅ |
+| **nestjs** | Node.js + NestJS (TypeScript) | Backend | TypeScript | Jest | npm | ✅ |
+| **laravel** | PHP + Laravel | Backend | PHP | PHPUnit | composer | ✅ |
+| **fastapi** | Python + FastAPI | Backend | Python | Pytest | pip | ✅ |
+| **dotnet-api** | .NET Web API (C#) | Backend | C# | xUnit | dotnet | ✅ |
+| **react-vite** | React + Vite (TypeScript) | Frontend | TypeScript | Vitest | npm | ✅ |
+| **nextjs** | Next.js (TypeScript) | Frontend | TypeScript | Jest | npm | ✅ |
+| **vue-vite** | Vue + Vite (TypeScript) | Frontend | TypeScript | Vitest | npm | ✅ |
+| **devops-docker** | Docker + Docker Compose | DevOps | YAML | none | none | ✅ |
+| **ci-github-actions** | GitHub Actions CI/CD | DevOps | YAML | none | none | ❌ |
+
+### Usage Examples Section
+
+#### Express TypeScript API Example
+
+```bash
+# Using JSON input
+python -m mgx_agent.cli --json examples/express_api_task.json
+
+# Manual task with auto-detection
+python -m mgx_agent.cli --task "Create Express TypeScript API with user authentication"
+```
+
+**Generated structure:**
+```
+src/
+├── server.ts              # Main Express app
+├── routes/
+│   └── users.ts          # User CRUD endpoints
+├── middleware/
+│   ├── auth.ts           # JWT authentication
+│   └── errorHandler.ts   # Error handling
+├── config/
+│   └── database.ts       # Database config
+├── models/
+│   └── User.ts           # TypeScript interfaces
+└── package.json          # Dependencies & scripts
+```
+
+#### FastAPI API Example
+
+```bash
+python -m mgx_agent.cli --json examples/fastapi_task.json
+```
+
+**Generated structure:**
+```
+app/
+├── main.py               # FastAPI application
+├── routers/
+│   └── users.py          # User endpoints with Pydantic
+├── models/
+│   └── schemas.py        # Pydantic models
+├── services/
+│   └── auth.py           # JWT & security
+└── requirements.txt      # Python dependencies
+```
+
+#### Laravel Module Example (Patch Mode)
+
+```bash
+# Update existing Laravel project
+python -m mgx_agent.cli --json examples/laravel_task.json
+```
+
+**Creates new Laravel modules:**
+```
+app/Http/Controllers/
+├── UserController.php    # RESTful controller
+└── AuthController.php    # Authentication
+
+app/Models/
+├── User.php             # Eloquent model with relations
+└── Profile.php          # Related model
+
+database/migrations/
+├── 2024_01_01_000001_create_users_table.php
+└── 2024_01_01_000002_create_profiles_table.php
+```
+
+#### Next.js Page + API Route Example
+
+```bash
+python -m mgx_agent.cli --json examples/nextjs_task.json
+```
+
+**Generated structure:**
+```
+app/                     # Next.js 13+ App Router
+├── dashboard/
+│   ├── page.tsx        # Server component
+│   ├── components/
+│   │   └── Chart.tsx   # Client component
+│   └── api/
+│       └── stats/      # API routes
+├── lib/
+│   ├── auth.ts         # Authentication utils
+│   └── db.ts           # Database connection
+└── package.json
+```
+
+#### Docker + GitHub Actions Template Example
+
+```bash
+python -m mgx_agent.cli --json examples/docker_task.json
+```
+
+**Generated structure:**
+```
+.dockerignore            # Docker build exclusions
+Dockerfile              # Multi-stage build
+docker-compose.yml      # Multi-container setup
+nginx.conf              # Reverse proxy config
+.github/workflows/
+├── ci.yml              # CI/CD pipeline
+└── deploy.yml          # Deployment workflow
+.env.example            # Environment variables template
+```
+
+### CLI Usage
+
+#### Basic Usage
+
+```bash
+# JSON input mode (StackSpec)
+python -m mgx_agent.cli --json task.json
+
+# Plain text with auto-stack detection
+python -m mgx_agent.cli --task "Build a FastAPI dashboard"
+
+# Traditional usage (backward compatible)
+python examples/mgx_style_team.py
+```
+
+#### JSON Task Format
+
+```bash
+# Express API with constraints
+python -m mgx_agent.cli --json express_api_task.json
+
+# FastAPI with strict requirements
+python -m mgx_agent.cli --json fastapi_task.json
+
+# Next.js web application
+python -m mgx_agent.cli --json nextjs_task.json
+```
+
+### Input Contract Documentation
+
+#### JSON Task Input Format
+
+```json
+{
+  "task": "Create a user management system",
+  "target_stack": "fastapi",
+  "project_type": "api",
+  "output_mode": "generate_new",
+  "strict_requirements": true,
+  "constraints": [
+    "Use Pydantic for validation",
+    "Add JWT authentication",
+    "Include .env.example file"
+  ],
+  "existing_project_path": "./my-existing-project"
+}
+```
+
+#### Plain Text Inference Rules
+
+The system automatically detects appropriate stack based on keywords:
+
+| Keyword Pattern | Detected Stack | Category |
+|----------------|----------------|----------|
+| "API", "backend", "server" + "Python" | `fastapi` | Backend |
+| "API", "backend" + "Node.js" | `express-ts` | Backend |
+| "NestJS" | `nestjs` | Backend |
+| "Laravel", "PHP" | `laravel` | Backend |
+| "C#", ".NET" | `dotnet-api` | Backend |
+| "React" | `react-vite` | Frontend |
+| "Next.js" | `nextjs` | Frontend |
+| "Vue" | `vue-vite` | Frontend |
+| "Docker", "container" | `devops-docker` | DevOps |
+| "CI", "GitHub Actions" | `ci-github-actions` | DevOps |
+
+#### Output Mode Options
+
+- **`generate_new`**: Create complete project structure
+- **`patch_existing`**: Add features to existing project with diff patches
+
+### Key Features
+
+#### Stack-Aware Analysis with File Manifest Expectations
+
+Each stack defines expected file structure and the AI agents analyze tasks with stack context:
+
+```python
+# FastAPI expectations
+expected_files = [
+    "app/main.py",        # FastAPI app entry
+    "app/routers/",       # API route modules  
+    "requirements.txt",   # Python dependencies
+    ".env.example"        # Environment template
+]
+```
+
+#### Stack-Specific Test Framework Selection
+
+| Stack | Test Framework | Example |
+|-------|----------------|---------|
+| FastAPI, Python | `pytest` | `pytest tests/test_api.py` |
+| Express-TS, NestJS, Next.js | `jest` | `npm test` |
+| React-Vite, Vue-Vite | `vitest` | `npm test` |
+| Laravel | `phpunit` | `php artisan test` |
+| .NET | `xunit` | `dotnet test` |
+
+#### FILE Manifest Format for Clean Output
+
+Agents output structured file manifest instead of prose:
+
+```plaintext
+FILE: package.json
+{
+  "name": "my-api",
+  "scripts": {
+    "dev": "ts-node-dev src/server.ts"
+  }
+}
+
+FILE: src/server.ts
+import express from 'express';
+const app = express();
+app.get('/health', (req, res) => res.json({status: 'ok'}));
+```
+
+#### Backup and Patch Mode Safe Writing
+
+- **Automatic backups**: `src/controller.ts.20241213_120000.bak`
+- **Safe file writing**: Creates nested directories, handles conflicts
+- **Patch application**: Unified diff support for existing projects
+
+#### Output Validation and Constraint Enforcement
+
+```python
+# Constraint validation examples
+constraints = [
+    "Use pnpm",              # Validates package.json contains pnpm
+    "Include env vars",      # Requires .env.example file  
+    "Use TypeScript",        # Validates .ts/.tsx files exist
+    "Add authentication",    # Checks for auth-related code
+]
+```
+
+### Backward Compatibility Note
+
+**✅ 100% Compatible** with existing usage patterns:
+
+```python
+# Old usage (still works)
+python examples/mgx_style_team.py
+
+# New usage (enhanced features)
+python examples/mgx_style_team.py --task "Create FastAPI API with JWT"
+
+# JSON usage (new)
+python -m mgx_agent.cli --json task.json
+```
+
+All existing `TeamConfig` parameters work unchanged. New stack-related parameters have sensible defaults.
+
+### Limitations Section
+
+#### What's NOT Included
+
+- ❌ **No Multi-tenant SaaS Features**: Focus on single-project development
+- ❌ **No Kubernetes Support**: No K8s manifests, Helm charts, or cluster management
+- ❌ **Not All Programming Languages**: Limited to popular web stacks (Python, TypeScript, PHP, C#)
+- ❌ **No Mobile App Development**: React Native, Flutter not included
+- ❌ **No Desktop Applications**: Electron, Tauri not supported
+- ❌ **No Database Management**: No SQL schema generation, migrations, or ORM setup
+
+#### What's Included (Web Stacks Only)
+
+- ✅ **Modern Web Backends**: Express, NestJS, Laravel, FastAPI, .NET
+- ✅ **Popular Frontends**: React, Next.js, Vue with TypeScript
+- ✅ **DevOps Tools**: Docker, GitHub Actions CI/CD
+- ✅ **Web-Specific Testing**: Jest, Vitest, Pytest, PHPUnit
+- ✅ **Web Toolchains**: npm/pnpm, pip, composer, dotnet CLI
+
+### Testing
+
+#### Comprehensive Test Coverage
+
+- **28 Web Stack Tests**: Full StackSpec functionality testing
+- **15-30 Pytest Tests**: Covers manifest parser, constraint validation, safe writes, patch apply, CLI parsing
+
+#### Running Tests
+
+```bash
+# All web stack tests
+pytest tests/test_web_stack_support.py -v
+
+# Specific test categories  
+pytest tests/test_web_stack_support.py::TestStackSpecs -v
+pytest tests/test_web_stack_support.py::TestFileManifestParser -v
+pytest tests/test_web_stack_support.py::TestSafeFileWriter -v
+
+# Integration tests
+pytest tests/ -k "web_stack" -v
+```
+
+**Test Results**: 28/28 tests passing ✅
 
 ---
 
