@@ -116,6 +116,18 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - ✅ **Comprehensive Documentation**: Complete patch mode and diff format guides
 - ✅ **Safety Guarantees**: Non-destructive operations, no data loss risk
 
+#### Phase 8.3: Code Formatting & Pre-commit (✅ Complete)
+- ✅ **Stack-Aware Formatters**: Python (black, ruff, isort), JS/TS (prettier, eslint), PHP (pint), .NET (dotnet format)
+- ✅ **Auto-Format in WriteCode**: Automatic code formatting in FILE manifest mode based on target stack
+- ✅ **Pre-commit Hooks**: Configuration templates for Python, Node.js, and PHP projects
+- ✅ **Minified File Detection**: Detects suspicious code patterns (long lines, deep nesting, minified indicators)
+- ✅ **Best-Effort Formatting**: Non-fatal formatting errors, never fails task
+- ✅ **File Manifest Parsing**: Extract and format individual files from FILE manifest output
+- ✅ **Formatter Configuration**: Per-stack configurations with language-specific settings
+- ✅ **14+ Unit Tests**: Comprehensive test coverage for all formatters and detection logic
+- ✅ **3 Pre-commit Templates**: .pre-commit-config-python.yaml, .pre-commit-config-node.yaml, .pre-commit-config-php.yaml
+- ✅ **Comprehensive Documentation**: Complete CODE_FORMATTING.md guide with setup and troubleshooting
+
 ---
 
 ## 🚀 Özellikler
@@ -198,6 +210,18 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - **Dry-Run Mode**: Test patches without modifying files
 - **Safety Guarantees**: Non-destructive operations, no data loss risk
 - **Comprehensive Logging**: Detailed logs of what succeeded/failed with context
+
+### 📝 Phase 8.3: Code Formatting & Pre-commit
+- **Stack-Aware Formatters**: Automatic formatting based on target stack (Python/JS/TS/PHP/.NET)
+- **Python**: black (100 char lines), ruff (linting), isort (import sorting)
+- **JavaScript/TypeScript**: prettier (100 char, single quotes), eslint (linting)
+- **PHP**: pint (Laravel preset), phpstan (static analysis)
+- **.NET**: dotnet format (style rules)
+- **Auto-Format Output**: Formats code in FILE manifest mode automatically
+- **Pre-commit Hooks**: Ready-to-use .pre-commit-config.yaml templates per stack
+- **Minified Detection**: Warns about long lines, deep nesting, and minified patterns
+- **Best-Effort Approach**: Formatting errors never fail tasks
+- **Developer Experience**: Reduces manual code review friction and ensures consistency
 
 ### 🎨 Modüler Mimari
 - **Single Responsibility**: Her modül tek sorumluluk

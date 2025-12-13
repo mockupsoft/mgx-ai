@@ -11,6 +11,7 @@ LLM çağrıları yapan Action sınıfları:
 """
 
 import re
+from typing import List, Tuple
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from metagpt.actions import Action
 from metagpt.logs import logger
@@ -359,10 +360,132 @@ Orijinal görevi unutma: {instruction}
                     f"Task may require manual intervention (NEEDS_INFO)"
                 )
             
+            # Auto-format output if in FILE manifest mode
+            if final_output and "FILE:" in final_output:
+                final_output = self._format_output(final_output, target_stack, language)
+            
             return final_output
         except Exception as e:
             logger.error(f"❌ WriteCode hatası: {e}")
             raise
+    
+    @staticmethod
+    def _format_output(file_manifest: str, stack_id: str, language: str) -> str:
+        """
+        Format code in FILE manifest output.
+        
+        Parses FILE manifest, formats each file based on language, and returns
+        formatted manifest. Formatting is best-effort (never fails).
+        
+        Args:
+            file_manifest: FILE manifest output from LLM
+            stack_id: Stack identifier for language detection
+            language: Programming language
+            
+        Returns:
+            FILE manifest with formatted code
+        """
+        try:
+            from .formatters import CodeFormatter, Language, MinifyDetector
+            from .config import get_formatter_config
+            
+            # Parse FILE manifest
+            files = WriteCode._parse_file_manifest(file_manifest)
+            if not files:
+                return file_manifest  # Unable to parse, return as-is
+            
+            # Detect language
+            lang_map = {
+                'python': Language.PYTHON,
+                'typescript': Language.TYPESCRIPT,
+                'javascript': Language.JAVASCRIPT,
+                'php': Language.PHP,
+                'csharp': Language.CSHARP,
+            }
+            detected_lang = lang_map.get(language.lower(), Language.PYTHON)
+            
+            formatted_files = []
+            total_changes = 0
+            
+            for file_path, content in files:
+                # Detect minified files (warn but don't skip)
+                is_minified, issues = MinifyDetector.detect_minified_file(content)
+                if is_minified:
+                    logger.warning(f"⚠️ File {file_path} may be minified: {issues[0]}")
+                
+                # Format code
+                result = CodeFormatter.format_code(content, file_path, detected_lang)
+                
+                if result.success and result.formatters_applied:
+                    logger.debug(f"📝 {file_path}: {result.summary()}")
+                    formatted_content = result.formatted_content
+                    total_changes += result.diff_lines
+                elif result.warnings:
+                    logger.warning(f"⚠️ {file_path}: {'; '.join(result.warnings[:2])}")
+                    formatted_content = content
+                else:
+                    formatted_content = content
+                
+                formatted_files.append((file_path, formatted_content))
+            
+            # Rebuild FILE manifest with formatted content
+            result_lines = []
+            for file_path, content in formatted_files:
+                result_lines.append(f"FILE: {file_path}")
+                result_lines.append(content)
+                result_lines.append("")
+            
+            formatted_manifest = "\n".join(result_lines).rstrip() + "\n"
+            
+            if total_changes > 0:
+                logger.info(f"✅ Formatted {len(formatted_files)} files, {total_changes} lines changed")
+            
+            return formatted_manifest
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Format error (non-fatal): {e}")
+            return file_manifest  # Return original on error
+    
+    @staticmethod
+    def _parse_file_manifest(manifest: str) -> List[Tuple[str, str]]:
+        """
+        Parse FILE manifest format into list of (filepath, content) tuples.
+        
+        Format:
+        FILE: path/to/file1.ext
+        [content line 1]
+        [content line 2]
+        
+        FILE: path/to/file2.ext
+        [content]
+        
+        Returns:
+            List of (file_path, content) tuples
+        """
+        files = []
+        current_file = None
+        current_content = []
+        
+        for line in manifest.split('\n'):
+            if line.startswith('FILE: '):
+                # Save previous file if exists
+                if current_file and current_content:
+                    content = '\n'.join(current_content)
+                    files.append((current_file, content))
+                
+                # Start new file
+                current_file = line[6:].strip()  # Remove 'FILE: ' prefix
+                current_content = []
+            elif current_file:
+                # Add line to current file
+                current_content.append(line)
+        
+        # Save last file
+        if current_file and current_content:
+            content = '\n'.join(current_content).rstrip()
+            files.append((current_file, content))
+        
+        return files
     
     @staticmethod
     def _parse_code(rsp: str, language: str = "python") -> str:
@@ -382,7 +505,7 @@ Orijinal görevi unutma: {instruction}
             if match:
                 return match.group(1).strip()
         
-        # Hiçbir pattern match etmezse, olduğu gibi döndür
+        # Hiçbir pattern match etmezse, olduğu gibe döndür
         return rsp
 
 
