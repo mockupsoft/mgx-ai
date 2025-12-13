@@ -26,7 +26,8 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 │  ├─ Phase 5 (Git Integration)  ✅ COMPLETE                 │
 │  ├─ Phase 6 (Workspace/Project) ✅ COMPLETE                 │
 │  ├─ Phase 7 (Web Stack Support) ✅ COMPLETE                 │
-│  └─ Phase 8.1 (Output Validation) ✅ COMPLETE               │
+│  ├─ Phase 8.1 (Output Validation) ✅ COMPLETE               │
+│  └─ Phase 8.2 (Safe Patch/Diff) ✅ COMPLETE                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,6 +104,18 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - ✅ **Comprehensive Documentation**: Complete validation guide with examples and troubleshooting
 - ✅ **Backward Compatible**: Validation can be disabled, no breaking changes to existing code
 
+#### Phase 8.2: Safe Patch/Diff Writer (✅ Complete)
+- ✅ **Unified Diff Parser**: Parse and validate unified diff format (create/modify/delete operations)
+- ✅ **Safe Apply Logic**: Automatic backups with timestamps, atomic operations, rollback on failure
+- ✅ **Line Drift Detection**: Warns when diff line numbers don't match current file state
+- ✅ **Fallback Mechanism**: Creates .mgx_new files on failure for manual review
+- ✅ **Multi-File Patch Sets**: Transaction mode (all-or-nothing) or best-effort mode
+- ✅ **File Recovery**: Backup listing, restoration, cleanup utilities
+- ✅ **Dry-Run Support**: Test patches without modifying files
+- ✅ **20+ Unit Tests**: Comprehensive test coverage for all patching scenarios
+- ✅ **Comprehensive Documentation**: Complete patch mode and diff format guides
+- ✅ **Safety Guarantees**: Non-destructive operations, no data loss risk
+
 ---
 
 ## 🚀 Özellikler
@@ -174,6 +187,17 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - **Auto-Revision**: Automatic retry with detailed error feedback (max 2 retries)
 - **Clear Error Messages**: Actionable feedback helping users fix issues quickly
 - **Extensible Rules**: Easy addition of validation rules for new stacks
+
+### 🔧 Phase 8.2: Safe Patching (Diff Writer)
+- **Unified Diff Support**: Full unified diff format parsing (create/modify/delete)
+- **Automatic Backups**: Timestamped backups before every file modification (.mgx_bak.YYYYMMDD_HHMMSS)
+- **Line Drift Detection**: Warns when diff line numbers don't match current file (tolerance: 2 lines)
+- **Fallback Mechanism**: .mgx_new files for manual review when patch fails
+- **Transaction Support**: All-or-nothing (rollback on any failure) or best-effort modes
+- **File Recovery**: Backup listing, restoration, and cleanup utilities
+- **Dry-Run Mode**: Test patches without modifying files
+- **Safety Guarantees**: Non-destructive operations, no data loss risk
+- **Comprehensive Logging**: Detailed logs of what succeeded/failed with context
 
 ### 🎨 Modüler Mimari
 - **Single Responsibility**: Her modül tek sorumluluk
@@ -283,6 +307,9 @@ mgx_agent/
 ├── cache.py              # Response caching (LRU + Redis) - Phase 4
 ├── stack_specs.py        # Web stack specifications (Phase 7)
 ├── file_utils.py         # FILE manifest parser & file operations (Phase 7)
+├── guardrails.py         # Output validation (Phase 8.1)
+├── diff_writer.py        # Unified diff parser & safe patch applicator (Phase 8.2)
+├── file_recovery.py      # Backup management & recovery utilities (Phase 8.2)
 └── performance/          # Phase 4: Performance utilities
     ├── __init__.py
     ├── async_tools.py    # AsyncTimer, bounded_gather, with_timeout
