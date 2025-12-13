@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mgx-cli"
+version = "0.1.0"
+description = "MGX AI Command Line Interface"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+  { name = "MGX Team", email = "info@mgx.ai" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "click",
+    "pyyaml",
+    "requests",
+    "pydantic",
+    "metagpt", 
+]
+
+[project.scripts]
+mgx = "mgx_cli.main:cli"
+
+[tool.setuptools.packages.find]
+include = ["mgx_cli*", "mgx_agent*"]

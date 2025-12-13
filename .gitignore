@@ -78,3 +78,10 @@ coverage.xml
 dist/
 build/
 *.egg-info/
+
+# Node.js
+node_modules/
+npm-debug.log
+
+# CLI Config
+.mgx/
