@@ -27,9 +27,41 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 │  ├─ Phase 6 (Workspace/Project) ✅ COMPLETE                 │
 │  ├─ Phase 7 (Web Stack Support) ✅ COMPLETE                 │
 │  ├─ Phase 8.1 (Output Validation) ✅ COMPLETE               │
-│  └─ Phase 8.2 (Safe Patch/Diff) ✅ COMPLETE                 │
+│  ├─ Phase 8.2 (Safe Patch/Diff) ✅ COMPLETE                 │
+│  └─ Global CLI Package          ✅ COMPLETE                 │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## 🚀 Global CLI (New!)
+
+MGX Agent is now available as a standalone CLI tool via PyPI and npm.
+
+### Installation
+
+**Python:**
+```bash
+pip install mgx-cli
+```
+
+**Node.js:**
+```bash
+npm install -g @mgxai/cli
+```
+
+### Usage
+
+```bash
+# Initialize a project
+mgx init my-project
+
+# Run a task
+mgx task "Create a Snake game in Python"
+
+# Check status
+mgx status <task-id>
+```
+
+See [CLI Documentation](docs/CLI.md) for full details.
 
 ### ✅ Tamamlanan İyileştirmeler
 
@@ -319,6 +351,14 @@ python examples/mgx_style_team.py \
 ### Package Structure
 
 ```
+mgx_cli/                  # Standalone CLI package
+├── commands/             # CLI commands
+└── main.py              # CLI entry point
+
+npm-wrapper/             # Node.js wrapper
+├── bin/
+└── package.json
+
 mgx_agent/
 ├── __init__.py
 ├── config.py             # Configuration with cache & profiling flags
