@@ -30,7 +30,14 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from .base import Base, SerializationMixin, TimestampMixin
-from .enums import ArtifactType, MetricType, RunStatus, TaskStatus
+from .enums import (
+    ArtifactType,
+    MetricType,
+    RepositoryLinkStatus,
+    RepositoryProvider,
+    RunStatus,
+    TaskStatus,
+)
 
 
 class Workspace(Base, TimestampMixin, SerializationMixin):
@@ -64,6 +71,19 @@ class Project(Base, TimestampMixin, SerializationMixin):
     name = Column(String(255), nullable=False)
     slug = Column(String(255), nullable=False)
 
+    # Primary repository reference (optional)
+    repo_full_name = Column(
+        String(255),
+        index=True,
+        comment="Primary linked repository full name (e.g. owner/repo)",
+    )
+    default_branch = Column(String(255), comment="Reference/default branch for the primary repository")
+    primary_repository_link_id = Column(
+        String(36),
+        index=True,
+        comment="RepositoryLink id used as the project's primary repository (no FK constraint)",
+    )
+
     meta_data = Column("metadata", JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -75,8 +95,67 @@ class Project(Base, TimestampMixin, SerializationMixin):
     workspace = relationship("Workspace", back_populates="projects")
     tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
 
+    repository_links = relationship(
+        "RepositoryLink",
+        back_populates="project",
+        cascade="all, delete-orphan",
+        foreign_keys="RepositoryLink.project_id",
+    )
+
+
     def __repr__(self) -> str:
         return f"<Project(id={self.id}, workspace_id='{self.workspace_id}', slug='{self.slug}')>"
+
+
+class RepositoryLink(Base, TimestampMixin, SerializationMixin):
+    """Link between a Project and an external Git repository."""
+
+    __tablename__ = "repository_links"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    project_id = Column(
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    provider = Column(SQLEnum(RepositoryProvider), nullable=False, index=True)
+    repo_full_name = Column(
+        String(255),
+        nullable=False,
+        index=True,
+        comment="Normalized full repository name (e.g. owner/repo)",
+    )
+    default_branch = Column(String(255), comment="Remote default branch")
+
+    status = Column(
+        SQLEnum(RepositoryLinkStatus),
+        nullable=False,
+        default=RepositoryLinkStatus.CONNECTED,
+        index=True,
+    )
+
+    auth_payload = Column(JSON, nullable=False, default=dict, comment="Auth metadata (installation_id, etc.)")
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    last_validated_at = Column(DateTime(timezone=True), comment="Last time access was validated")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "provider",
+            "repo_full_name",
+            name="uq_repository_links_project_provider_repo",
+        ),
+        Index("idx_repository_links_project_provider", "project_id", "provider"),
+    )
+
+    project = relationship("Project", back_populates="repository_links", foreign_keys=[project_id])
+
+    def __repr__(self) -> str:
+        return f"<RepositoryLink(id={self.id}, provider='{self.provider}', repo='{self.repo_full_name}')>"
 
 
 class Task(Base, TimestampMixin, SerializationMixin):
@@ -273,6 +352,7 @@ class Artifact(Base, TimestampMixin, SerializationMixin):
 __all__ = [
     "Workspace",
     "Project",
+    "RepositoryLink",
     "Task",
     "TaskRun",
     "MetricSnapshot",
@@ -281,4 +361,6 @@ __all__ = [
     "RunStatus",
     "MetricType",
     "ArtifactType",
+    "RepositoryProvider",
+    "RepositoryLinkStatus",
 ]

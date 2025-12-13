@@ -167,6 +167,7 @@ class TestFastAPIAppInitialization:
         assert any('/health' in route for route in routes)
         assert any('/tasks' in route for route in routes)
         assert any('/runs' in route for route in routes)
+        assert any('/repositories' in route for route in routes)
 
 
 class TestHealthEndpoint:

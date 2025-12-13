@@ -1,16 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
+"""backend.config
+
 Backend Configuration Module
 
 Pydantic settings with .env support for:
 - API server configuration (host, port)
 - MGX agent defaults (team settings, cache)
 - PostgreSQL connection information
+- GitHub integration (repository linking)
+
+GitHub-related environment variables:
+- GITHUB_APP_ID: GitHub App ID (optional)
+- GITHUB_CLIENT_ID: GitHub OAuth App client ID (optional)
+- GITHUB_PRIVATE_KEY_PATH: Path to GitHub App private key PEM (optional)
+- GITHUB_PAT: Personal Access Token fallback (optional; required if app auth is not configured)
+- GITHUB_CLONE_CACHE_DIR: Local directory used for cached clones
 """
 
 from typing import Optional
+
 from pydantic import BaseSettings, Field
-import os
 
 
 class Settings(BaseSettings):
@@ -48,7 +57,20 @@ class Settings(BaseSettings):
     
     # Redis Settings (for distributed caching)
     redis_url: Optional[str] = Field(default=None, description="Redis URL (e.g., redis://localhost:6379)")
-    
+
+    # GitHub Integration Settings
+    github_app_id: Optional[int] = Field(default=None, description="GitHub App ID (optional)")
+    github_client_id: Optional[str] = Field(default=None, description="GitHub OAuth App client ID (optional)")
+    github_private_key_path: Optional[str] = Field(
+        default=None,
+        description="Path to GitHub App private key PEM (optional)",
+    )
+    github_pat: Optional[str] = Field(default=None, description="GitHub Personal Access Token fallback (optional)")
+    github_clone_cache_dir: str = Field(
+        default="/tmp/mgx-agent-repos",
+        description="Local directory used for cached git clones",
+    )
+
     # Application Settings
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
@@ -71,11 +93,19 @@ class Settings(BaseSettings):
     
     def __str__(self) -> str:
         """String representation of settings (hide sensitive data)."""
+
+        github_auth = (
+            "app"
+            if (self.github_app_id and self.github_private_key_path)
+            else ("pat" if self.github_pat else "none")
+        )
+
         return f"""Settings(
     API: {self.api_host}:{self.api_port} (workers={self.api_workers}, reload={self.api_reload})
     MGX: max_rounds={self.mgx_max_rounds}, cache={self.mgx_cache_backend}
     DB: {self.db_host}:{self.db_port}/{self.db_name}
     Redis: {self.redis_url or 'not configured'}
+    GitHub: auth={github_auth}, cache_dir={self.github_clone_cache_dir}
 )"""
 
 

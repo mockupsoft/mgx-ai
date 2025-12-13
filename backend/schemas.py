@@ -123,6 +123,10 @@ class ProjectSummary(BaseModel):
 
 
 class ProjectResponse(ProjectSummary):
+    repo_full_name: Optional[str] = Field(None, description="Primary linked repository full name (owner/repo)")
+    default_branch: Optional[str] = Field(None, description="Reference/default branch for the primary repository")
+    primary_repository_link_id: Optional[str] = Field(None, description="RepositoryLink id used as the project primary")
+
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
     created_at: datetime
     updated_at: datetime
@@ -134,6 +138,76 @@ class ProjectResponse(ProjectSummary):
 
 class ProjectListResponse(BaseModel):
     items: List[ProjectResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+# ============================================
+# Repository Link Schemas
+# ============================================
+
+class RepositoryProviderEnum(str, Enum):
+    GITHUB = "github"
+
+
+class RepositoryLinkStatusEnum(str, Enum):
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
+    ERROR = "error"
+
+
+class RepositoryLinkConnectRequest(BaseModel):
+    project_id: str = Field(..., description="Project ID")
+    repo_full_name: str = Field(..., description="GitHub repository full name (owner/repo or URL)")
+
+    installation_id: Optional[int] = Field(
+        None,
+        description="GitHub App installation id (optional; if omitted PAT fallback is used)",
+    )
+    reference_branch: Optional[str] = Field(
+        None,
+        description="Preferred/reference branch to use for the project (defaults to repo default)",
+    )
+    set_as_primary: bool = Field(True, description="Whether this link becomes the project's primary repository")
+
+
+class RepositoryLinkUpdateRequest(BaseModel):
+    reference_branch: Optional[str] = Field(None, description="Update preferred/reference branch")
+    set_as_primary: Optional[bool] = Field(None, description="Mark this link as the project's primary repository")
+
+
+class RepositoryLinkTestRequest(BaseModel):
+    repo_full_name: str = Field(..., description="GitHub repository full name (owner/repo or URL)")
+    installation_id: Optional[int] = Field(None, description="GitHub App installation id (optional)")
+
+
+class RepositoryLinkTestResponse(BaseModel):
+    ok: bool
+    repo_full_name: str
+    default_branch: str
+
+
+class RepositoryLinkResponse(BaseModel):
+    id: str
+    project_id: str
+    provider: RepositoryProviderEnum
+    repo_full_name: str
+    default_branch: Optional[str] = None
+    status: RepositoryLinkStatusEnum
+    last_validated_at: Optional[datetime] = None
+
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        allow_population_by_field_name = True
+        from_attributes = True
+
+
+class RepositoryLinkListResponse(BaseModel):
+    items: List[RepositoryLinkResponse]
     total: int
     skip: int
     limit: int
