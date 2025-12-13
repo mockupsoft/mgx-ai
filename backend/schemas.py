@@ -52,6 +52,14 @@ class EventTypeEnum(str, Enum):
     COMPLETION = "completion"
     FAILURE = "failure"
     CANCELLED = "cancelled"
+    
+    # Git operation events
+    GIT_BRANCH_CREATED = "git_branch_created"
+    GIT_COMMIT_CREATED = "git_commit_created"
+    GIT_PUSH_SUCCESS = "git_push_success"
+    GIT_PUSH_FAILED = "git_push_failed"
+    PULL_REQUEST_OPENED = "pull_request_opened"
+    GIT_OPERATION_FAILED = "git_operation_failed"
 
 
 # ============================================
@@ -126,6 +134,9 @@ class ProjectResponse(ProjectSummary):
     repo_full_name: Optional[str] = Field(None, description="Primary linked repository full name (owner/repo)")
     default_branch: Optional[str] = Field(None, description="Reference/default branch for the primary repository")
     primary_repository_link_id: Optional[str] = Field(None, description="RepositoryLink id used as the project primary")
+    
+    run_branch_prefix: Optional[str] = Field("mgx", description="Branch prefix for task runs (e.g., 'mgx' -> mgx/task-name/run-1)")
+    commit_template: Optional[str] = Field(None, description="Template for commit messages (supports {task_name}, {run_number} placeholders)")
 
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
     created_at: datetime
@@ -234,6 +245,9 @@ class TaskCreate(BaseModel):
     max_rounds: Optional[int] = Field(5, ge=1, le=100, description="Maximum execution rounds")
     max_revision_rounds: Optional[int] = Field(2, ge=0, le=50, description="Maximum revision rounds")
     memory_size: Optional[int] = Field(50, ge=1, le=1000, description="Team memory size")
+    
+    run_branch_prefix: Optional[str] = Field(None, description="Branch prefix for this task's runs (overrides project setting)")
+    commit_template: Optional[str] = Field(None, description="Commit message template for this task (overrides project setting)")
 
     class Config:
         json_schema_extra = {
@@ -255,6 +269,8 @@ class TaskUpdate(BaseModel):
     max_rounds: Optional[int] = Field(None, ge=1, le=100)
     max_revision_rounds: Optional[int] = Field(None, ge=0, le=50)
     memory_size: Optional[int] = Field(None, ge=1, le=1000)
+    run_branch_prefix: Optional[str] = None
+    commit_template: Optional[str] = None
 
 
 class TaskResponse(BaseModel):
@@ -275,6 +291,8 @@ class TaskResponse(BaseModel):
     max_rounds: int
     max_revision_rounds: int
     memory_size: int
+    run_branch_prefix: Optional[str] = None
+    commit_template: Optional[str] = None
     total_runs: int
     successful_runs: int
     failed_runs: int
@@ -350,6 +368,13 @@ class RunResponse(BaseModel):
     error_details: Optional[Dict[str, Any]] = None
     memory_used: Optional[int] = None
     round_count: Optional[int] = None
+    
+    # Git metadata
+    branch_name: Optional[str] = None
+    commit_sha: Optional[str] = None
+    pr_url: Optional[str] = None
+    git_status: Optional[str] = None
+    
     created_at: datetime
     updated_at: datetime
 
@@ -467,6 +492,36 @@ class FailureEvent(EventPayload):
 class CancelledEvent(EventPayload):
     """Event emitted when cancelled."""
     event_type: EventTypeEnum = EventTypeEnum.CANCELLED
+
+
+class GitBranchCreatedEvent(EventPayload):
+    """Event emitted when a git branch is created."""
+    event_type: EventTypeEnum = EventTypeEnum.GIT_BRANCH_CREATED
+
+
+class GitCommitCreatedEvent(EventPayload):
+    """Event emitted when a git commit is created."""
+    event_type: EventTypeEnum = EventTypeEnum.GIT_COMMIT_CREATED
+
+
+class GitPushSuccessEvent(EventPayload):
+    """Event emitted when git push succeeds."""
+    event_type: EventTypeEnum = EventTypeEnum.GIT_PUSH_SUCCESS
+
+
+class GitPushFailedEvent(EventPayload):
+    """Event emitted when git push fails."""
+    event_type: EventTypeEnum = EventTypeEnum.GIT_PUSH_FAILED
+
+
+class PullRequestOpenedEvent(EventPayload):
+    """Event emitted when a pull request is opened."""
+    event_type: EventTypeEnum = EventTypeEnum.PULL_REQUEST_OPENED
+
+
+class GitOperationFailedEvent(EventPayload):
+    """Event emitted when a git operation fails."""
+    event_type: EventTypeEnum = EventTypeEnum.GIT_OPERATION_FAILED
 
 
 # ============================================

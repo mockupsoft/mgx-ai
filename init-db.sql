@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS projects (
     workspace_id VARCHAR(36) NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL,
+    run_branch_prefix VARCHAR(255) DEFAULT 'mgx',
+    commit_template TEXT,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     CONSTRAINT uq_projects_workspace_slug UNIQUE (workspace_id, slug),
     CONSTRAINT uq_projects_workspace_id_id UNIQUE (workspace_id, id)
@@ -82,6 +84,9 @@ CREATE TABLE IF NOT EXISTS tasks (
     max_rounds INTEGER DEFAULT 5,
     max_revision_rounds INTEGER DEFAULT 2,
     memory_size INTEGER DEFAULT 50,
+
+    run_branch_prefix VARCHAR(255),
+    commit_template TEXT,
 
     total_runs INTEGER DEFAULT 0,
     successful_runs INTEGER DEFAULT 0,
@@ -125,7 +130,12 @@ CREATE TABLE IF NOT EXISTS task_runs (
     error_details JSONB,
 
     memory_used INTEGER,
-    round_count INTEGER
+    round_count INTEGER,
+
+    branch_name VARCHAR(255),
+    commit_sha VARCHAR(64),
+    pr_url VARCHAR(512),
+    git_status VARCHAR(50)
 );
 
 CREATE INDEX IF NOT EXISTS ix_task_runs_id ON task_runs(id);
@@ -135,6 +145,7 @@ CREATE INDEX IF NOT EXISTS ix_task_runs_started_at ON task_runs(started_at);
 CREATE INDEX IF NOT EXISTS ix_task_runs_workspace_id ON task_runs(workspace_id);
 CREATE INDEX IF NOT EXISTS ix_task_runs_project_id ON task_runs(project_id);
 CREATE INDEX IF NOT EXISTS ix_task_runs_workspace_status ON task_runs(workspace_id, status);
+CREATE INDEX IF NOT EXISTS ix_task_runs_branch_name ON task_runs(branch_name);
 
 CREATE TABLE IF NOT EXISTS metric_snapshots (
     id VARCHAR(36) PRIMARY KEY,

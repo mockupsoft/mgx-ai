@@ -63,6 +63,12 @@ class GitRepoManager(Protocol):
 
     def push_branch(self, repo_dir: Path, branch: str) -> None: ...
 
+    def stage_and_commit(self, repo_dir: Path, message: str, files: Optional[list[str]] = None) -> str: ...
+
+    def get_current_commit_sha(self, repo_dir: Path) -> str: ...
+
+    def cleanup_branch(self, repo_dir: Path, branch: str, delete_remote: bool = False) -> None: ...
+
 
 _REPO_FULL_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -171,6 +177,43 @@ class GitPythonRepoManager:
         except self._GitCommandError as e:
             raise GitOperationError("Failed to push branch") from e
 
+    def stage_and_commit(self, repo_dir: Path, message: str, files: Optional[list[str]] = None) -> str:
+        try:
+            repo = self._Repo(str(repo_dir))
+            if files:
+                repo.index.add(files)
+            else:
+                repo.git.add(A=True)
+            commit = repo.index.commit(message)
+            return commit.hexsha
+        except self._GitCommandError as e:
+            raise GitOperationError("Failed to stage and commit changes") from e
+
+    def get_current_commit_sha(self, repo_dir: Path) -> str:
+        try:
+            repo = self._Repo(str(repo_dir))
+            return repo.head.commit.hexsha
+        except self._GitCommandError as e:
+            raise GitOperationError("Failed to get current commit SHA") from e
+
+    def cleanup_branch(self, repo_dir: Path, branch: str, delete_remote: bool = False) -> None:
+        try:
+            repo = self._Repo(str(repo_dir))
+            if branch in repo.heads:
+                current_branch = repo.active_branch.name
+                if current_branch == branch:
+                    default_branch = repo.git.symbolic_ref("refs/remotes/origin/HEAD").split("/")[-1]
+                    repo.git.checkout(default_branch)
+                repo.git.branch("-D", branch)
+            
+            if delete_remote:
+                try:
+                    repo.remotes.origin.push(refspec=f":{branch}")
+                except self._GitCommandError:
+                    pass
+        except self._GitCommandError as e:
+            raise GitOperationError("Failed to cleanup branch") from e
+
 
 class GitService:
     def __init__(
@@ -248,6 +291,15 @@ class GitService:
 
     async def push_branch(self, repo_dir: Path, branch: str) -> None:
         await asyncio.to_thread(self._repo_manager.push_branch, repo_dir, branch)
+
+    async def stage_and_commit(self, repo_dir: Path, message: str, files: Optional[list[str]] = None) -> str:
+        return await asyncio.to_thread(self._repo_manager.stage_and_commit, repo_dir, message, files)
+
+    async def get_current_commit_sha(self, repo_dir: Path) -> str:
+        return await asyncio.to_thread(self._repo_manager.get_current_commit_sha, repo_dir)
+
+    async def cleanup_branch(self, repo_dir: Path, branch: str, delete_remote: bool = False) -> None:
+        await asyncio.to_thread(self._repo_manager.cleanup_branch, repo_dir, branch, delete_remote)
 
     async def create_pull_request(
         self,

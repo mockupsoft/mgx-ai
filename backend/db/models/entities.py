@@ -84,6 +84,10 @@ class Project(Base, TimestampMixin, SerializationMixin):
         comment="RepositoryLink id used as the project's primary repository (no FK constraint)",
     )
 
+    # Git preferences
+    run_branch_prefix = Column(String(255), default="mgx", comment="Branch prefix for task runs (e.g., 'mgx' -> mgx/task-name/run-1)")
+    commit_template = Column(Text, comment="Template for commit messages (supports {task_name}, {run_number} placeholders)")
+
     meta_data = Column("metadata", JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -179,6 +183,10 @@ class Task(Base, TimestampMixin, SerializationMixin):
     max_revision_rounds = Column(Integer, default=2, comment="Maximum revision rounds")
     memory_size = Column(Integer, default=50, comment="Team memory size")
 
+    # Git preferences (can override project defaults)
+    run_branch_prefix = Column(String(255), comment="Branch prefix for this task's runs (overrides project setting)")
+    commit_template = Column(Text, comment="Commit message template for this task (overrides project setting)")
+
     total_runs = Column(Integer, default=0, comment="Total number of runs")
     successful_runs = Column(Integer, default=0, comment="Successful runs count")
     failed_runs = Column(Integer, default=0, comment="Failed runs count")
@@ -241,6 +249,12 @@ class TaskRun(Base, TimestampMixin, SerializationMixin):
 
     memory_used = Column(Integer, comment="Memory used in MB")
     round_count = Column(Integer, comment="Number of rounds executed")
+
+    # Git metadata
+    branch_name = Column(String(255), index=True, comment="Git branch created for this run")
+    commit_sha = Column(String(64), comment="Latest commit SHA from this run")
+    pr_url = Column(String(512), comment="Pull request URL if created")
+    git_status = Column(String(50), comment="Git operation status (pending, branch_created, committed, pushed, pr_opened, failed)")
 
     __table_args__ = (
         ForeignKeyConstraint(
