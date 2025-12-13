@@ -1,21 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
-SQLAlchemy base models and mixins for the application.
+"""backend.db.models
+
+SQLAlchemy models package.
+
+Exports all ORM models and enums.
 """
 
-# Import everything needed for models package
 from .base import Base
-from .enums import TaskStatus, RunStatus, MetricType, ArtifactType
-from .entities import Task, TaskRun, MetricSnapshot, Artifact
+from .enums import ArtifactType, MetricType, RunStatus, TaskStatus
+from .entities import Artifact, MetricSnapshot, Project, Task, TaskRun, Workspace
 
 __all__ = [
-    'Base',
-    'Task',
-    'TaskRun',
-    'MetricSnapshot',
-    'Artifact',
-    'TaskStatus',
-    'RunStatus',
-    'MetricType',
-    'ArtifactType',
+    "Base",
+    "Workspace",
+    "Project",
+    "Task",
+    "TaskRun",
+    "MetricSnapshot",
+    "Artifact",
+    "TaskStatus",
+    "RunStatus",
+    "MetricType",
+    "ArtifactType",
 ]

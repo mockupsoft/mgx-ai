@@ -13,6 +13,7 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Add the project root to Python path
@@ -20,10 +21,27 @@ import sys
 sys.path.append(str(Path(__file__).parent.parent))
 
 from db.engine import get_session_factory
-from db.models import Task, TaskRun, MetricSnapshot, Artifact, TaskStatus, RunStatus, MetricType, ArtifactType
+from db.models import (
+    Workspace,
+    Project,
+    Task,
+    TaskRun,
+    MetricSnapshot,
+    Artifact,
+    TaskStatus,
+    RunStatus,
+    MetricType,
+    ArtifactType,
+)
 
 
-async def create_sample_task(session: AsyncSession, name: str, description: str = None) -> Task:
+async def create_sample_task(
+    session: AsyncSession,
+    workspace: Workspace,
+    project: Project,
+    name: str,
+    description: str = None,
+) -> Task:
     """Create a sample task with realistic configuration."""
     config = {
         "prompt": f"Generate a comprehensive report about {name}",
@@ -37,6 +55,8 @@ async def create_sample_task(session: AsyncSession, name: str, description: str 
     }
     
     task = Task(
+        workspace_id=workspace.id,
+        project_id=project.id,
         name=name,
         description=description or f"Automated analysis task for {name}",
         config=config,
@@ -48,7 +68,7 @@ async def create_sample_task(session: AsyncSession, name: str, description: str 
         successful_runs=random.randint(4, 12),
         failed_runs=random.randint(0, 3),
         last_run_at=datetime.utcnow() - timedelta(hours=random.randint(1, 72)),
-        last_run_duration=random.uniform(45.5, 180.2)
+        last_run_duration=random.uniform(45.5, 180.2),
     )
     
     session.add(task)
@@ -102,6 +122,8 @@ async def create_sample_runs(session: AsyncSession, task: Task, num_runs: int = 
         
         run = TaskRun(
             task_id=task.id,
+            workspace_id=task.workspace_id,
+            project_id=task.project_id,
             run_number=i + 1,
             status=status,
             plan=plan,
@@ -136,6 +158,8 @@ async def create_sample_metrics(session: AsyncSession, task: Task, runs: list[Ta
     
     for name, metric_type, value, unit in task_metrics:
         metric = MetricSnapshot(
+            workspace_id=task.workspace_id,
+            project_id=task.project_id,
             task_id=task.id,
             name=name,
             metric_type=metric_type,
@@ -162,6 +186,8 @@ async def create_sample_metrics(session: AsyncSession, task: Task, runs: list[Ta
             
             for name, metric_type, value, unit in run_metrics:
                 metric = MetricSnapshot(
+                    workspace_id=task.workspace_id,
+                    project_id=task.project_id,
                     task_id=task.id,
                     task_run_id=run.id,
                     name=name,
@@ -251,6 +277,28 @@ async def seed_database():
     
     async with session_factory() as session:
         try:
+            # Create or reuse a demo tenant
+            ws_result = await session.execute(select(Workspace).where(Workspace.slug == "demo"))
+            workspace = ws_result.scalar_one_or_none()
+            if workspace is None:
+                workspace = Workspace(name="Demo Workspace", slug="demo", meta_data={"source": "seed_data"})
+                session.add(workspace)
+                await session.flush()
+
+            proj_result = await session.execute(
+                select(Project).where(Project.workspace_id == workspace.id, Project.slug == "demo")
+            )
+            project = proj_result.scalar_one_or_none()
+            if project is None:
+                project = Project(
+                    workspace_id=workspace.id,
+                    name="Demo Project",
+                    slug="demo",
+                    meta_data={"source": "seed_data"},
+                )
+                session.add(project)
+                await session.flush()
+
             # Sample task configurations
             sample_tasks = [
                 ("Market Analysis", "Comprehensive market trend analysis for Q4 2024"),
@@ -262,34 +310,30 @@ async def seed_database():
                 ("User Research", "Analyze user feedback and behavior patterns"),
                 ("Trend Analysis", "Identify emerging technology trends"),
             ]
-            
-            print(f"Creating {len(sample_tasks)} sample tasks...")
-            
+
+            print(f"Creating {len(sample_tasks)} sample tasks in workspace '{workspace.slug}'...")
+
             created_tasks = []
+            all_runs = []
+            all_metrics = []
+            all_artifacts = []
+
             for name, description in sample_tasks:
-                task = await create_sample_task(session, name, description)
+                task = await create_sample_task(session, workspace, project, name, description)
                 created_tasks.append(task)
                 print(f"  ✅ Created task: {task.name}")
-            
-            print("Creating sample runs for each task...")
-            all_runs = []
-            for task in created_tasks:
+
                 runs = await create_sample_runs(session, task)
                 all_runs.extend(runs)
                 print(f"  ✅ Created {len(runs)} runs for task: {task.name}")
-            
-            print("Creating sample metrics...")
-            all_metrics = []
-            for task, runs in zip(created_tasks, [r for r in all_runs if r.task_id == task.id]):
+
                 metrics = await create_sample_metrics(session, task, runs)
                 all_metrics.extend(metrics)
-            print(f"  ✅ Created {len(all_metrics)} metrics")
-            
-            print("Creating sample artifacts...")
-            all_artifacts = []
-            for task, runs in zip(created_tasks, [r for r in all_runs if r.task_id == task.id]):
+
                 artifacts = await create_sample_artifacts(session, task, runs)
                 all_artifacts.extend(artifacts)
+
+            print(f"  ✅ Created {len(all_metrics)} metrics")
             print(f"  ✅ Created {len(all_artifacts)} artifacts")
             
             # Summary statistics

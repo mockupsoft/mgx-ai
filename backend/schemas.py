@@ -55,13 +55,107 @@ class EventTypeEnum(str, Enum):
 
 
 # ============================================
+# Workspace & Project Schemas
+# ============================================
+
+class WorkspaceCreate(BaseModel):
+    """Schema for creating a workspace."""
+
+    name: str = Field(..., min_length=1, max_length=255, description="Workspace name")
+    slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Workspace slug (unique)")
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata", description="Workspace metadata")
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class WorkspaceSummary(BaseModel):
+    """Small embedded representation of a workspace."""
+
+    id: str
+    name: str
+    slug: str
+
+    class Config:
+        from_attributes = True
+
+
+class WorkspaceResponse(WorkspaceSummary):
+    """Workspace response schema."""
+
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        allow_population_by_field_name = True
+        from_attributes = True
+
+
+class WorkspaceListResponse(BaseModel):
+    items: List[WorkspaceResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+class ProjectCreate(BaseModel):
+    """Schema for creating a project in the active workspace."""
+
+    name: str = Field(..., min_length=1, max_length=255, description="Project name")
+    slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Project slug (unique within workspace)")
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata", description="Project metadata")
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class ProjectSummary(BaseModel):
+    """Small embedded representation of a project."""
+
+    id: str
+    workspace_id: str
+    name: str
+    slug: str
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectResponse(ProjectSummary):
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        allow_population_by_field_name = True
+        from_attributes = True
+
+
+class ProjectListResponse(BaseModel):
+    items: List[ProjectResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+# ============================================
 # Task Schemas
 # ============================================
 
 class TaskCreate(BaseModel):
-    """Schema for creating a new task."""
+    """Schema for creating a new task in the active workspace."""
+
     name: str = Field(..., min_length=1, max_length=255, description="Task name")
     description: Optional[str] = Field(None, description="Task description")
+
+    project_id: Optional[str] = Field(
+        None,
+        description=(
+            "Project ID within the active workspace. If omitted, the workspace's default project is used."
+        ),
+    )
+
     config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Task configuration")
     max_rounds: Optional[int] = Field(5, ge=1, le=100, description="Maximum execution rounds")
     max_revision_rounds: Optional[int] = Field(2, ge=0, le=50, description="Maximum revision rounds")
@@ -91,11 +185,19 @@ class TaskUpdate(BaseModel):
 
 class TaskResponse(BaseModel):
     """Schema for task responses."""
+
     id: str
+    workspace_id: str
+    project_id: str
+
     name: str
     description: Optional[str]
     config: Dict[str, Any]
     status: TaskStatusEnum
+
+    # Optional embedded summaries (populated when relationships are eager-loaded)
+    workspace: Optional[WorkspaceSummary] = None
+    project: Optional[ProjectSummary] = None
     max_rounds: int
     max_revision_rounds: int
     memory_size: int
@@ -153,10 +255,18 @@ class RunApprovalRequest(BaseModel):
 
 class RunResponse(BaseModel):
     """Schema for run responses."""
+
     id: str
+    workspace_id: str
+    project_id: str
+
     task_id: str
     run_number: int
     status: RunStatusEnum
+
+    # Optional embedded summaries
+    workspace: Optional[WorkspaceSummary] = None
+    project: Optional[ProjectSummary] = None
     plan: Optional[Dict[str, Any]] = None
     results: Optional[Dict[str, Any]] = None
     started_at: Optional[datetime] = None
@@ -187,7 +297,11 @@ class RunListResponse(BaseModel):
 
 class MetricResponse(BaseModel):
     """Schema for metric responses."""
+
     id: str
+    workspace_id: str
+    project_id: str
+
     task_id: Optional[str] = None
     task_run_id: Optional[str] = None
     name: str
@@ -298,6 +412,15 @@ __all__ = [
     'TaskStatusEnum',
     'RunStatusEnum',
     'EventTypeEnum',
+    # Workspace/Project schemas
+    'WorkspaceCreate',
+    'WorkspaceSummary',
+    'WorkspaceResponse',
+    'WorkspaceListResponse',
+    'ProjectCreate',
+    'ProjectSummary',
+    'ProjectResponse',
+    'ProjectListResponse',
     # Task schemas
     'TaskCreate',
     'TaskUpdate',
