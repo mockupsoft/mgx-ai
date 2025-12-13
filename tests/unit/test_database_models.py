@@ -22,8 +22,17 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from backend.db.models import (
-    Task, TaskRun, MetricSnapshot, Artifact,
-    TaskStatus, RunStatus, MetricType, ArtifactType, Base
+    Workspace,
+    Project,
+    Task,
+    TaskRun,
+    MetricSnapshot,
+    Artifact,
+    TaskStatus,
+    RunStatus,
+    MetricType,
+    ArtifactType,
+    Base,
 )
 from backend.db.engine import create_test_engine
 from backend.db.models.entities import *  # Import all models for Base metadata
@@ -70,6 +79,27 @@ async def session(test_db) -> AsyncGenerator:
         await session.close()
 
 
+@pytest.fixture
+async def tenant(session: AsyncSession):
+    """Create a workspace/project for tests."""
+    from uuid import uuid4
+
+    workspace = Workspace(name="Test Workspace", slug=f"test-{uuid4()}", meta_data={})
+    session.add(workspace)
+    await session.flush()
+
+    project = Project(
+        workspace_id=workspace.id,
+        name="Test Project",
+        slug=f"proj-{uuid4()}",
+        meta_data={},
+    )
+    session.add(project)
+    await session.flush()
+
+    return workspace, project
+
+
 class TestDatabaseModels:
     """Test suite for database models."""
     
@@ -86,14 +116,18 @@ class TestDatabaseModels:
         assert MetricType.GAUGE == "gauge"
         assert ArtifactType.REPORT == "report"
     
-    async def test_task_model_creation(self, session):
+    async def test_task_model_creation(self, session, tenant):
         """Test Task model creation and basic properties."""
+        workspace, project = tenant
+
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Test Task",
             description="A test task",
             config={"key": "value"},
             max_rounds=5,
-            memory_size=50
+            memory_size=50,
         )
         
         session.add(task)
@@ -107,15 +141,19 @@ class TestDatabaseModels:
         assert task.successful_runs == 0
         assert task.failed_runs == 0
     
-    async def test_task_serialization(self, session):
+    async def test_task_serialization(self, session, tenant):
         """Test Task model serialization methods."""
+        workspace, project = tenant
+
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Serialization Test",
             description="Testing serialization",
             config={"test": "data"},
             status=TaskStatus.COMPLETED,
             total_runs=10,
-            successful_runs=8
+            successful_runs=8,
         )
         
         session.add(task)
@@ -136,27 +174,33 @@ class TestDatabaseModels:
         task.update_from_dict({"description": "Updated description"})
         assert task.description == "Updated description"
     
-    async def test_task_run_model_creation(self, session):
+    async def test_task_run_model_creation(self, session, tenant):
         """Test TaskRun model creation and relationships."""
+        workspace, project = tenant
+
         # Create parent task first
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Parent Task",
             description="Task with runs",
             config={},
-            status=TaskStatus.RUNNING
+            status=TaskStatus.RUNNING,
         )
         session.add(task)
         await session.flush()
-        
+
         # Create task run
         run = TaskRun(
             task_id=task.id,
+            workspace_id=workspace.id,
+            project_id=project.id,
             run_number=1,
             status=RunStatus.COMPLETED,
             plan={"step": "test"},
             results={"output": "success"},
             duration=120.5,
-            memory_used=512
+            memory_used=512,
         )
         
         session.add(run)
@@ -167,25 +211,31 @@ class TestDatabaseModels:
         assert run.is_success == True
         assert run.is_failed == False
     
-    async def test_metric_snapshot_model(self, session):
+    async def test_metric_snapshot_model(self, session, tenant):
         """Test MetricSnapshot model creation."""
+        workspace, project = tenant
+
         # Create parent task
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Metric Task",
             description="Task for metrics",
-            config={}
+            config={},
         )
         session.add(task)
         await session.flush()
-        
+
         # Create metric
         metric = MetricSnapshot(
+            workspace_id=workspace.id,
+            project_id=project.id,
             task_id=task.id,
             name="cpu_usage",
             metric_type=MetricType.GAUGE,
             value=75.5,
             unit="%",
-            labels={"host": "server1"}
+            labels={"host": "server1"},
         )
         
         session.add(metric)
@@ -196,17 +246,21 @@ class TestDatabaseModels:
         assert metric.unit == "%"
         assert metric.labels["host"] == "server1"
     
-    async def test_artifact_model(self, session):
+    async def test_artifact_model(self, session, tenant):
         """Test Artifact model creation."""
+        workspace, project = tenant
+
         # Create parent task
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Artifact Task",
             description="Task for artifacts",
-            config={}
+            config={},
         )
         session.add(task)
         await session.flush()
-        
+
         # Create artifact
         artifact = Artifact(
             task_id=task.id,
@@ -216,7 +270,7 @@ class TestDatabaseModels:
             file_size=1024,
             content_type="text/markdown",
             content="# Report\n\nGenerated content",
-            metadata={"version": "1.0"}
+            meta_data={"version": "1.0"},
         )
         
         session.add(artifact)
@@ -225,27 +279,33 @@ class TestDatabaseModels:
         assert artifact.id is not None
         assert artifact.file_size == 1024
         assert artifact.content_type == "text/markdown"
-        assert artifact.metadata["version"] == "1.0"
+        assert artifact.meta_data["version"] == "1.0"
     
-    async def test_model_relationships(self, session):
+    async def test_model_relationships(self, session, tenant):
         """Test model relationships and cascade operations."""
+        workspace, project = tenant
+
         # Create task with runs
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Relationship Test",
             description="Testing relationships",
-            config={}
+            config={},
         )
         session.add(task)
         await session.flush()
-        
+
         # Create runs
         runs = []
         for i in range(3):
             run = TaskRun(
                 task_id=task.id,
+                workspace_id=workspace.id,
+                project_id=project.id,
                 run_number=i + 1,
                 status=RunStatus.COMPLETED,
-                duration=60.0 + i * 10
+                duration=60.0 + i * 10,
             )
             runs.append(run)
             session.add(run)
@@ -260,11 +320,13 @@ class TestDatabaseModels:
         metrics = []
         for run in runs:
             metric = MetricSnapshot(
+                workspace_id=workspace.id,
+                project_id=project.id,
                 task_id=task.id,
                 task_run_id=run.id,
                 name=f"metric_{run.run_number}",
                 metric_type=MetricType.GAUGE,
-                value=run.run_number * 10
+                value=run.run_number * 10,
             )
             metrics.append(metric)
             session.add(metric)
@@ -284,71 +346,95 @@ class TestMigrationIntegrity:
     """Test suite for migration integrity and round-trip operations."""
     
     async def test_migration_upgrade_downgrade(self, test_db):
-        """Test that migrations can be applied and rolled back."""
-        # This test would normally use Alembic commands
-        # For now, we verify the schema is created correctly
-        async with test_db() as session_factory:
-            async with session_factory() as session:
-                # Try to create a task - should work if schema is correct
-                task = Task(
-                    name="Migration Test",
-                    description="Testing schema",
-                    config={}
-                )
-                session.add(task)
-                await session.flush()
-                
-                assert task.id is not None
-    
-    async def test_database_constraints(self, session):
-        """Test database constraints and validations."""
-        # Test required fields
-        with pytest.raises(Exception):  # Should fail on null name
+        """Test that basic writes work against a freshly created schema."""
+        from sqlalchemy.ext.asyncio import async_sessionmaker
+
+        session_factory = async_sessionmaker(bind=test_db, class_=AsyncSession, expire_on_commit=False)
+
+        async with session_factory() as session:
+            workspace = Workspace(name="Migration Workspace", slug="migration-ws", meta_data={})
+            session.add(workspace)
+            await session.flush()
+
+            project = Project(workspace_id=workspace.id, name="Migration Project", slug="migration-proj", meta_data={})
+            session.add(project)
+            await session.flush()
+
             task = Task(
-                name=None,  # This should cause a constraint error
-                description="Test",
-                config={}
+                workspace_id=workspace.id,
+                project_id=project.id,
+                name="Migration Test",
+                description="Testing schema",
+                config={},
             )
             session.add(task)
             await session.flush()
-        
+
+            assert task.id is not None
+    
+    async def test_database_constraints(self, session, tenant):
+        """Test database constraints and validations."""
+        workspace, project = tenant
+
+        # Test required fields
+        with pytest.raises(Exception):  # Should fail on null name
+            task = Task(
+                workspace_id=workspace.id,
+                project_id=project.id,
+                name=None,  # This should cause a constraint error
+                description="Test",
+                config={},
+            )
+            session.add(task)
+            await session.flush()
+
         # Test enum constraints
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="Valid Task",
             description="Test",
             config={},
-            status=TaskStatus.PENDING  # Valid enum value
+            status=TaskStatus.PENDING,  # Valid enum value
         )
         session.add(task)
         await session.flush()
         assert task.status == TaskStatus.PENDING
     
-    async def test_foreign_key_constraints(self, session):
+    async def test_foreign_key_constraints(self, session, tenant):
         """Test foreign key constraints."""
+        workspace, project = tenant
+
         # Create a task first
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="FK Test Task",
             description="Task for FK testing",
-            config={}
+            config={},
         )
         session.add(task)
         await session.flush()
-        
+
         # Create run with valid FK
         run = TaskRun(
             task_id=task.id,  # Valid FK
+            workspace_id=workspace.id,
+            project_id=project.id,
             run_number=1,
-            status=RunStatus.PENDING
+            status=RunStatus.PENDING,
         )
         session.add(run)
         await session.flush()
         assert run.id is not None
-        
+
         # Create run with invalid FK - should fail
         invalid_run = TaskRun(
             task_id="invalid-uuid",  # Invalid FK
+            workspace_id=workspace.id,
+            project_id=project.id,
             run_number=2,
-            status=RunStatus.PENDING
+            status=RunStatus.PENDING,
         )
         session.add(invalid_run)
         with pytest.raises(Exception):  # Should fail on invalid FK
@@ -358,13 +444,17 @@ class TestMigrationIntegrity:
 class TestDatabaseOperations:
     """Test suite for database CRUD operations."""
     
-    async def test_crud_operations(self, session):
+    async def test_crud_operations(self, session, tenant):
         """Test basic CRUD operations using model helpers."""
+        workspace, project = tenant
+
         # CREATE
         task = Task(
+            workspace_id=workspace.id,
+            project_id=project.id,
             name="CRUD Test Task",
             description="Testing CRUD operations",
-            config={"test": True}
+            config={"test": True},
         )
         await task.save(session)
         assert task.id is not None

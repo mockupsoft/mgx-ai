@@ -1,23 +1,22 @@
 # -*- coding: utf-8 -*-
-"""
-Tasks Router
+"""Tasks Router
 
 REST API endpoints for task management with database integration.
-Handles CRUD operations and task execution.
+
+All operations are scoped to the active workspace (see :func:`get_workspace_context`).
 """
 
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
-from backend.db.session import get_session
-from backend.db.models import Task
+from backend.db.models import Project, Task
 from backend.db.models.enums import TaskStatus
-from backend.schemas import TaskCreate, TaskUpdate, TaskResponse, TaskListResponse
-from backend.services import get_task_executor
+from backend.routers.deps import WorkspaceContext, get_workspace_context
+from backend.schemas import TaskCreate, TaskListResponse, TaskResponse, TaskUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -29,46 +28,42 @@ async def list_tasks(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     status: Optional[str] = Query(None),
-    session: AsyncSession = Depends(get_session),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> TaskListResponse:
-    """
-    List all tasks with pagination and filtering.
-    
-    Args:
-        skip: Number of tasks to skip
-        limit: Maximum number of tasks to return
-        status: Filter by task status
-        session: Database session
-    
-    Returns:
-        List of tasks with pagination info
-    """
-    logger.info(f"Listing tasks (skip={skip}, limit={limit}, status={status})")
-    
-    # Build query
-    query = select(Task)
-    
+    """List tasks in the active workspace with pagination and filtering."""
+
+    session = ctx.session
+
+    logger.info(
+        "Listing tasks (workspace_id=%s, skip=%s, limit=%s, status=%s)",
+        ctx.workspace.id,
+        skip,
+        limit,
+        status,
+    )
+
+    query = (
+        select(Task)
+        .where(Task.workspace_id == ctx.workspace.id)
+        .options(selectinload(Task.workspace), selectinload(Task.project))
+    )
+
     if status:
         try:
             status_enum = TaskStatus(status)
-            query = query.where(Task.status == status_enum)
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid status: {status}"
-            )
-    
-    # Get total count
-    count_query = select(func.count()).select_from(Task)
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+        query = query.where(Task.status == status_enum)
+
+    count_query = select(func.count()).select_from(Task).where(Task.workspace_id == ctx.workspace.id)
     if status:
         count_query = count_query.where(Task.status == status_enum)
+
     total = (await session.execute(count_query)).scalar_one()
-    
-    # Get paginated results
-    query = query.offset(skip).limit(limit)
-    result = await session.execute(query)
+
+    result = await session.execute(query.offset(skip).limit(limit))
     tasks = result.scalars().all()
-    
+
     return TaskListResponse(
         items=[TaskResponse.model_validate(task) for task in tasks],
         total=total,
@@ -80,21 +75,26 @@ async def list_tasks(
 @router.post("/", response_model=TaskResponse, status_code=201)
 async def create_task(
     task: TaskCreate,
-    session: AsyncSession = Depends(get_session),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> TaskResponse:
-    """
-    Create a new task.
-    
-    Args:
-        task: Task creation request
-        session: Database session
-    
-    Returns:
-        Created task object
-    """
-    logger.info(f"Creating task: {task.name}")
-    
+    """Create a new task in the active workspace."""
+
+    session = ctx.session
+
+    project_id = task.project_id or ctx.default_project.id
+
+    project_result = await session.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == ctx.workspace.id)
+    )
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=400, detail="Invalid project_id for active workspace")
+
+    logger.info("Creating task (workspace_id=%s): %s", ctx.workspace.id, task.name)
+
     db_task = Task(
+        workspace_id=ctx.workspace.id,
+        project_id=project.id,
         name=task.name,
         description=task.description,
         config=task.config or {},
@@ -106,39 +106,38 @@ async def create_task(
         successful_runs=0,
         failed_runs=0,
     )
-    
+
+    db_task.workspace = ctx.workspace
+    db_task.project = project
+
     session.add(db_task)
     await session.flush()
-    
-    logger.info(f"Task created: {db_task.id}")
+
+    logger.info("Task created: %s", db_task.id)
     return TaskResponse.model_validate(db_task)
 
 
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: str,
-    session: AsyncSession = Depends(get_session),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> TaskResponse:
-    """
-    Get a specific task.
-    
-    Args:
-        task_id: Task ID
-        session: Database session
-    
-    Returns:
-        Task object or 404 if not found
-    """
-    logger.info(f"Getting task: {task_id}")
-    
+    """Get a task by ID in the active workspace."""
+
+    session = ctx.session
+
+    logger.info("Getting task (workspace_id=%s): %s", ctx.workspace.id, task_id)
+
     result = await session.execute(
-        select(Task).where(Task.id == task_id)
+        select(Task)
+        .where(Task.id == task_id, Task.workspace_id == ctx.workspace.id)
+        .options(selectinload(Task.workspace), selectinload(Task.project))
     )
     db_task = result.scalar_one_or_none()
-    
+
     if db_task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     return TaskResponse.model_validate(db_task)
 
 
@@ -146,69 +145,55 @@ async def get_task(
 async def update_task(
     task_id: str,
     task_update: TaskUpdate,
-    session: AsyncSession = Depends(get_session),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> TaskResponse:
-    """
-    Update a task.
-    
-    Args:
-        task_id: Task ID
-        task_update: Task update request
-        session: Database session
-    
-    Returns:
-        Updated task object or 404 if not found
-    """
-    logger.info(f"Updating task: {task_id}")
-    
+    """Update a task in the active workspace."""
+
+    session = ctx.session
+
+    logger.info("Updating task (workspace_id=%s): %s", ctx.workspace.id, task_id)
+
     result = await session.execute(
-        select(Task).where(Task.id == task_id)
+        select(Task)
+        .where(Task.id == task_id, Task.workspace_id == ctx.workspace.id)
+        .options(selectinload(Task.workspace), selectinload(Task.project))
     )
     db_task = result.scalar_one_or_none()
-    
+
     if db_task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    # Update fields if provided
+
     update_data = task_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_task, field, value)
-    
+
     await session.flush()
-    
-    logger.info(f"Task updated: {task_id}")
+
+    logger.info("Task updated: %s", task_id)
     return TaskResponse.model_validate(db_task)
 
 
 @router.delete("/{task_id}")
 async def delete_task(
     task_id: str,
-    session: AsyncSession = Depends(get_session),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> dict:
-    """
-    Delete a task.
-    
-    Args:
-        task_id: Task ID
-        session: Database session
-    
-    Returns:
-        Deletion status or 404 if not found
-    """
-    logger.info(f"Deleting task: {task_id}")
-    
-    result = await session.execute(
-        select(Task).where(Task.id == task_id)
-    )
+    """Delete a task in the active workspace."""
+
+    session = ctx.session
+
+    logger.info("Deleting task (workspace_id=%s): %s", ctx.workspace.id, task_id)
+
+    result = await session.execute(select(Task).where(Task.id == task_id, Task.workspace_id == ctx.workspace.id))
     db_task = result.scalar_one_or_none()
-    
+
     if db_task is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     await session.delete(db_task)
-    
-    logger.info(f"Task deleted: {task_id}")
+
+    logger.info("Task deleted: %s", task_id)
     return {"status": "deleted", "task_id": task_id}
 
 
-__all__ = ['router']
+__all__ = ["router"]

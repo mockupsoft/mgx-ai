@@ -23,6 +23,8 @@ from backend.services import (
 )
 from backend.routers import (
     health_router,
+    workspaces_router,
+    projects_router,
     tasks_router,
     runs_router,
     metrics_router,
@@ -146,6 +148,12 @@ def create_app() -> FastAPI:
     # ========== Router Registration ==========
     app.include_router(health_router)
     logger.info("✓ Registered: health_router")
+
+    app.include_router(workspaces_router)
+    logger.info("✓ Registered: workspaces_router")
+
+    app.include_router(projects_router)
+    logger.info("✓ Registered: projects_router")
     
     app.include_router(tasks_router)
     logger.info("✓ Registered: tasks_router")
