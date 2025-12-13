@@ -80,3 +80,4 @@
 2025-12-13 16:13:41.485 | INFO     | metagpt.config:__init__:43 - Config loading done.
 2025-12-13 16:13:58.928 | INFO     | metagpt.config:__init__:43 - Config loading done.
 2025-12-13 16:14:24.964 | DEBUG    | __main__:parse_file_manifest:68 - 📄 Parse edildi: 2 dosya bulundu
+2025-12-13 16:48:06.461 | INFO     | metagpt.config:__init__:43 - Config loading done.
