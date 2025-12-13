@@ -1,0 +1,11 @@
+{
+  "task": "Create FastAPI hello-world API",
+  "target_stack": "fastapi",
+  "project_type": "api",
+  "output_mode": "generate_new",
+  "strict_requirements": true,
+  "constraints": [
+    "Use minimal dependencies",
+    "Do not use Django or Flask"
+  ]
+}

@@ -13,6 +13,38 @@ from pathlib import Path
 from .team import MGXStyleTeam
 
 
+def _print_available_stacks(as_json: bool = False) -> None:
+    """Print supported stacks and exit.
+
+    Kept lightweight (no MetaGPT/LLM initialization) so it can be used in CI.
+    """
+
+    from .stack_specs import STACK_SPECS
+
+    stacks = {
+        stack_id: {
+            "name": spec.name,
+            "category": getattr(spec.category, "value", str(spec.category)),
+            "language": spec.language,
+            "test_framework": spec.test_framework,
+            "package_manager": spec.package_manager,
+        }
+        for stack_id, spec in STACK_SPECS.items()
+    }
+
+    if as_json:
+        print(json.dumps(stacks, ensure_ascii=False, indent=2))
+        return
+
+    print("\nDesteklenen Stack'ler:\n")
+    for stack_id in sorted(stacks.keys()):
+        meta = stacks[stack_id]
+        print(
+            f"- {stack_id}: {meta['name']} "
+            f"({meta['category']}, {meta['language']}, test={meta['test_framework']})"
+        )
+
+
 async def main(human_reviewer: bool = False, custom_task: str = None, enable_profiling: bool = False, enable_tracemalloc: bool = False):
     """
     MGX tarzı takım örneği
@@ -280,8 +312,25 @@ def cli_main():
         default=None,
         help="JSON dosyasından görev yükle (Phase B - Web Stack Support)"
     )
+
+    parser.add_argument(
+        "--list-stacks",
+        action="store_true",
+        help="Desteklenen stack listesini yazdır ve çık"
+    )
+
+    parser.add_argument(
+        "--list-stacks-json",
+        action="store_true",
+        help="Desteklenen stack listesini JSON olarak yazdır ve çık"
+    )
     
     args = parser.parse_args()
+
+    # Stack listesi (Phase 7 validation helper)
+    if args.list_stacks or args.list_stacks_json:
+        _print_available_stacks(as_json=args.list_stacks_json)
+        return
     
     # JSON Input modu (Phase B)
     if args.json:
