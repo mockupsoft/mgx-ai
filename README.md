@@ -281,6 +281,113 @@ See [CLI Documentation](docs/CLI.md) for full details.
 
 ---
 
+## 🐳 Docker Deployment (Self-Hosted)
+
+MGX Agent can be deployed with Docker Compose including PostgreSQL 16, Redis 7, MinIO (S3-compatible storage), and optional Kafka for event streaming.
+
+### Quick Start
+
+```bash
+# Clone repository
+git clone https://github.com/your-org/mgx-agent.git
+cd mgx-agent
+
+# Copy environment template
+cp .env.example .env
+
+# Edit configuration (change secrets for production)
+nano .env
+
+# Start all services
+docker compose up -d --build
+
+# Verify health
+docker compose ps
+curl http://localhost:8000/health
+```
+
+### What's Included
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| **mgx-ai** | 8000 | FastAPI application with REST API & WebSockets |
+| **postgres** | 5432 | PostgreSQL 16 database (persistent) |
+| **redis** | 6379 | Redis 7 cache with AOF persistence |
+| **minio** | 9000/9001 | S3-compatible storage + web console |
+| **kafka** | 9092 | Optional event streaming (enable with `--profile kafka`) |
+
+### Features
+
+✅ **Production-Ready:**
+- All services with health checks
+- Proper startup ordering and dependencies
+- Data persistence with Docker volumes
+- Comprehensive logging and monitoring
+- Docker secrets support
+
+✅ **Secure:**
+- Environment variable management
+- Secret rotation guidance
+- TLS/HTTPS support (via reverse proxy)
+- Network isolation via bridge network
+
+✅ **Scalable:**
+- Redis for distributed caching
+- PostgreSQL connection pooling
+- Kafka optional for event streaming
+- Horizontal scaling ready
+
+✅ **Recoverable:**
+- Automated backup procedures
+- Volume management and recovery
+- Database migration tracking
+
+### Development Override
+
+The included `docker-compose.override.yml` automatically applies during development:
+- Sets `MGX_ENV=development` and `MGX_LOG_LEVEL=DEBUG`
+- Mounts code volumes for hot reload
+- Keeps build cache between iterations
+
+To use production settings:
+```bash
+MGX_ENV=production docker compose -f docker-compose.yml up -d
+```
+
+### Documentation
+
+See **[DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)** for:
+- Detailed configuration and tuning
+- Backup and recovery procedures
+- Database migrations (Alembic)
+- Monitoring, logging, and metrics
+- Troubleshooting common issues
+- Security best practices
+- Performance optimization
+- Scaling and high availability
+- External integrations (AWS S3, RDS, etc.)
+
+### With Kafka (Optional Event Streaming)
+
+```bash
+# Start services with Kafka profile
+docker compose --profile kafka up -d
+
+# Create topics
+docker compose exec kafka kafka-topics.sh \
+  --bootstrap-server kafka:29092 \
+  --create --topic mgx-events \
+  --if-not-exists
+
+# Monitor events
+docker compose exec kafka kafka-console-consumer.sh \
+  --bootstrap-server kafka:29092 \
+  --topic mgx-events \
+  --from-beginning
+```
+
+---
+
 ## 📦 Kurulum
 
 ### Gereksinimler
