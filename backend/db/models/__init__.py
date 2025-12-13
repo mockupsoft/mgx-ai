@@ -7,13 +7,21 @@ Exports all ORM models and enums.
 """
 
 from .base import Base
-from .enums import ArtifactType, MetricType, RunStatus, TaskStatus
-from .entities import Artifact, MetricSnapshot, Project, Task, TaskRun, Workspace
+from .enums import (
+    ArtifactType,
+    MetricType,
+    RepositoryLinkStatus,
+    RepositoryProvider,
+    RunStatus,
+    TaskStatus,
+)
+from .entities import Artifact, MetricSnapshot, Project, RepositoryLink, Task, TaskRun, Workspace
 
 __all__ = [
     "Base",
     "Workspace",
     "Project",
+    "RepositoryLink",
     "Task",
     "TaskRun",
     "MetricSnapshot",
@@ -22,4 +30,6 @@ __all__ = [
     "RunStatus",
     "MetricType",
     "ArtifactType",
+    "RepositoryProvider",
+    "RepositoryLinkStatus",
 ]

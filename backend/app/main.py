@@ -25,6 +25,7 @@ from backend.routers import (
     health_router,
     workspaces_router,
     projects_router,
+    repositories_router,
     tasks_router,
     runs_router,
     metrics_router,
@@ -154,6 +155,9 @@ def create_app() -> FastAPI:
 
     app.include_router(projects_router)
     logger.info("✓ Registered: projects_router")
+
+    app.include_router(repositories_router)
+    logger.info("✓ Registered: repositories_router")
     
     app.include_router(tasks_router)
     logger.info("✓ Registered: tasks_router")
