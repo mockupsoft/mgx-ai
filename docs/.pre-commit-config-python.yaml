@@ -1,0 +1,72 @@
+# Pre-commit hooks configuration for Python projects (FastAPI backend)
+#
+# Installation:
+#   pip install pre-commit
+#   pre-commit install
+#   pre-commit run --all-files  # Run on all files
+#
+# Run hooks on specific files:
+#   pre-commit run --files src/*.py
+#
+# Uninstall:
+#   pre-commit uninstall
+
+repos:
+  # Code formatting with black
+  - repo: https://github.com/psf/black
+    rev: '23.12.0'
+    hooks:
+      - id: black
+        language_version: python3.10
+        args: ['--line-length=100', '--target-version=py310']
+
+  # Import sorting with isort
+  - repo: https://github.com/PyCQA/isort
+    rev: '5.13.2'
+    hooks:
+      - id: isort
+        args: ['--profile=black']
+
+  # Linting with ruff
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.1.7'
+    hooks:
+      - id: ruff
+        args: ['--fix', '--show-fixes']
+
+  # Type checking with mypy (optional)
+  # Uncomment to enable:
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: 'v1.7.1'
+  #   hooks:
+  #     - id: mypy
+  #       args: ['--ignore-missing-imports', '--show-error-codes']
+  #       additional_dependencies:
+  #         - 'types-requests'
+  #         - 'types-PyYAML'
+
+  # General checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 'v4.5.0'
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+# Configuration files
+default_language_version:
+  python: python3.10
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+    \.venv/|
+    venv/|
+    build/|
+    dist/|
+    \.eggs/|
+    .*\.egg-info/
+  )

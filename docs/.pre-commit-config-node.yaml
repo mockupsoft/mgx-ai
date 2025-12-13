@@ -1,0 +1,71 @@
+# Pre-commit hooks configuration for Node.js/TypeScript projects
+# (Express, NestJS, Next.js, React+Vite, Vue+Vite)
+#
+# Installation:
+#   npm install -g pre-commit  # or use npx
+#   pre-commit install
+#   pre-commit run --all-files
+#
+# Or with Husky (alternative):
+#   npm install husky --save-dev
+#   npx husky install
+#   npx husky add .husky/pre-commit "npm run lint"
+
+repos:
+  # Code formatting with prettier
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: 'v3.1.0'
+    hooks:
+      - id: prettier
+        types_or:
+          - typescript
+          - javascript
+          - jsx
+          - tsx
+        args:
+          - '--write'
+          - '--print-width=100'
+          - '--semi=true'
+          - '--single-quote=true'
+          - '--trailing-comma=es5'
+
+  # Linting with ESLint
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: 'v8.55.0'
+    hooks:
+      - id: eslint
+        types: [javascript, typescript]
+        additional_dependencies:
+          - 'eslint'
+          - 'eslint-config-next'
+          - '@typescript-eslint/eslint-plugin'
+          - '@typescript-eslint/parser'
+        args: ['--fix']
+
+  # General checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 'v4.5.0'
+    hooks:
+      - id: trailing-whitespace
+        types: [javascript, typescript]
+      - id: end-of-file-fixer
+        types: [javascript, typescript]
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+    node_modules/|
+    dist/|
+    build/|
+    \.next/|
+    coverage/|
+    \.venv/
+  )
+
+# Language settings
+default_language_version:
+  node: system

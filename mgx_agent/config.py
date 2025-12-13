@@ -17,6 +17,8 @@ __all__ = [
     'LogLevel', 
     'TeamConfig',
     'DEFAULT_CONFIG',
+    'get_formatter_config',
+    'FORMATTER_CONFIGS',
 ]
 
 # Import stack specs conditionally to avoid circular imports
@@ -175,3 +177,93 @@ class TeamConfig(BaseModel):
 
 # Varsayılan config
 DEFAULT_CONFIG = TeamConfig()
+
+
+# Code Formatter Configurations per Stack
+FORMATTER_CONFIGS = {
+    # Python stacks
+    'fastapi': {
+        'language': 'python',
+        'formatters': ['isort', 'black', 'ruff'],
+        'formatter_commands': {
+            'isort': 'isort --profile=black',
+            'black': 'black --line-length=100 --target-version=py310',
+            'ruff': 'ruff check --fix',
+        },
+        'config_files': ['pyproject.toml', 'setup.cfg'],
+    },
+    
+    # JavaScript/TypeScript stacks
+    'express-ts': {
+        'language': 'typescript',
+        'formatters': ['prettier', 'eslint'],
+        'formatter_commands': {
+            'prettier': 'prettier --write --print-width=100 --semi=true --single-quote=true',
+            'eslint': 'eslint --fix',
+        },
+        'config_files': ['.prettierrc.json', '.eslintrc.json', 'tsconfig.json'],
+    },
+    'nestjs': {
+        'language': 'typescript',
+        'formatters': ['prettier', 'eslint'],
+        'formatter_commands': {
+            'prettier': 'prettier --write --print-width=100 --semi=true --single-quote=true',
+            'eslint': 'eslint --fix',
+        },
+        'config_files': ['.prettierrc.json', '.eslintrc.json', 'tsconfig.json'],
+    },
+    'nextjs': {
+        'language': 'typescript',
+        'formatters': ['prettier', 'eslint'],
+        'formatter_commands': {
+            'prettier': 'prettier --write --print-width=100 --semi=true --single-quote=true',
+            'eslint': 'eslint --fix',
+        },
+        'config_files': ['.prettierrc.json', '.eslintrc.json', 'tsconfig.json'],
+    },
+    'react-vite': {
+        'language': 'typescript',
+        'formatters': ['prettier', 'eslint'],
+        'formatter_commands': {
+            'prettier': 'prettier --write --print-width=100 --semi=true --single-quote=true',
+            'eslint': 'eslint --fix',
+        },
+        'config_files': ['.prettierrc.json', '.eslintrc.json', 'tsconfig.json'],
+    },
+    'vue-vite': {
+        'language': 'typescript',
+        'formatters': ['prettier', 'eslint'],
+        'formatter_commands': {
+            'prettier': 'prettier --write --print-width=100 --semi=true --single-quote=true',
+            'eslint': 'eslint --fix',
+        },
+        'config_files': ['.prettierrc.json', '.eslintrc.json', 'tsconfig.json'],
+    },
+    
+    # PHP stacks
+    'laravel': {
+        'language': 'php',
+        'formatters': ['pint', 'phpstan'],
+        'formatter_commands': {
+            'pint': 'pint --preset=laravel',
+            'phpstan': 'phpstan analyse --level=8',
+        },
+        'config_files': ['pint.json', 'phpstan.neon'],
+    },
+    
+    # .NET stacks
+    'dotnet-api': {
+        'language': 'csharp',
+        'formatters': ['dotnet format'],
+        'formatter_commands': {
+            'dotnet format': 'dotnet format --include',
+        },
+        'config_files': ['.editorconfig'],
+    },
+}
+
+
+def get_formatter_config(stack_id: str) -> Optional[dict]:
+    """Get formatter configuration for a stack"""
+    return FORMATTER_CONFIGS.get(stack_id)
+
