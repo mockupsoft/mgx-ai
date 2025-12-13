@@ -231,11 +231,14 @@ SEÇENEK 2 - Code Block (tek dosya için):
         review_notes: str = "",
         target_stack: str = None,
         constraints: list = None,
-        strict_mode: bool = False
+        strict_mode: bool = False,
+        enable_validation: bool = True,
+        max_validation_retries: int = 2
     ) -> str:
         try:
             # Stack bilgisi
             from .stack_specs import get_stack_spec, infer_stack_from_task
+            from .guardrails import validate_output_constraints, build_revision_prompt
             
             if not target_stack:
                 target_stack = infer_stack_from_task(instruction)
@@ -285,25 +288,78 @@ Orijinal görevi unutma: {instruction}
                     expected_structure=expected_structure
                 )
             
-            prompt = self.PROMPT_TEMPLATE.format(
-                instruction=instruction,
-                plan=plan,
-                stack_name=stack_name,
-                language=language,
-                constraints_section=constraints_section,
-                review_section=review_section,
-                strict_mode_instructions=strict_mode_instructions,
-                file_format_instructions=file_format_instructions,
-                revision_instructions=revision_instructions
-            )
-            rsp = await self._aask(prompt)
+            # Main generation loop with validation retry
+            validation_retry_count = 0
+            final_output = None
+            validation_result = None
             
-            # Strict mode ise FILE manifest olarak parse et
-            if strict_mode:
-                return rsp  # FILE manifest formatında döndür (parse edilecek)
-            else:
-                # Normal mod: code block parse et (backward compatibility)
-                return self._parse_code(rsp, language)
+            while validation_retry_count <= max_validation_retries:
+                prompt = self.PROMPT_TEMPLATE.format(
+                    instruction=instruction,
+                    plan=plan,
+                    stack_name=stack_name,
+                    language=language,
+                    constraints_section=constraints_section,
+                    review_section=review_section,
+                    strict_mode_instructions=strict_mode_instructions,
+                    file_format_instructions=file_format_instructions,
+                    revision_instructions=revision_instructions
+                )
+                rsp = await self._aask(prompt)
+                
+                # Parse output based on mode
+                if strict_mode:
+                    output = rsp  # FILE manifest formatında
+                else:
+                    output = self._parse_code(rsp, language)
+                
+                # Run validation if enabled
+                if enable_validation:
+                    validation_result = validate_output_constraints(
+                        generated_output=output,
+                        stack_spec=spec,
+                        constraints=constraints,
+                        strict_mode=strict_mode
+                    )
+                    
+                    if validation_result.is_valid:
+                        logger.info(f"✅ Output validation passed: {validation_result.summary()}")
+                        final_output = output
+                        break
+                    else:
+                        # Validation failed
+                        logger.warning(f"❌ Output validation failed (attempt {validation_retry_count + 1}/{max_validation_retries + 1})")
+                        logger.warning(f"Errors: {len(validation_result.errors)}, Warnings: {len(validation_result.warnings)}")
+                        
+                        for i, error in enumerate(validation_result.errors[:5], 1):
+                            logger.warning(f"  {i}. {error}")
+                        
+                        if validation_retry_count < max_validation_retries:
+                            # Build revision prompt with validation errors
+                            revision_prompt = build_revision_prompt(validation_result, instruction)
+                            review_notes = revision_prompt
+                            validation_retry_count += 1
+                            logger.info(f"🔄 Retrying with validation error feedback...")
+                        else:
+                            # Max retries reached
+                            logger.error(f"❌ Validation failed after {max_validation_retries + 1} attempts")
+                            logger.error("Returning output with validation errors (marked as NEEDS_INFO)")
+                            final_output = output
+                            break
+                else:
+                    # Validation disabled
+                    final_output = output
+                    break
+            
+            # Log final validation status
+            if enable_validation and validation_result and not validation_result.is_valid:
+                error_summary = "\n".join(f"  - {e}" for e in validation_result.errors)
+                logger.error(
+                    f"⚠️ WriteCode returning output with validation errors:\n{error_summary}\n"
+                    f"Task may require manual intervention (NEEDS_INFO)"
+                )
+            
+            return final_output
         except Exception as e:
             logger.error(f"❌ WriteCode hatası: {e}")
             raise

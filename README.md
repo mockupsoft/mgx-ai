@@ -25,7 +25,8 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 │  ├─ Phase 4.5 (Backend API)    ✅ COMPLETE                 │
 │  ├─ Phase 5 (Git Integration)  ✅ COMPLETE                 │
 │  ├─ Phase 6 (Workspace/Project) ✅ COMPLETE                 │
-│  └─ Phase 7 (Web Stack Support) ✅ COMPLETE                 │
+│  ├─ Phase 7 (Web Stack Support) ✅ COMPLETE                 │
+│  └─ Phase 8.1 (Output Validation) ✅ COMPLETE               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -91,6 +92,17 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - ✅ **API Endpoints**: New workspace and project management endpoints
 - ✅ **Security Model**: Complete tenant isolation with proper foreign key constraints
 
+#### Phase 8.1: Output Validation Guardrails (✅ Complete)
+- ✅ **Stack-Specific Validation**: Required files, forbidden files, and directory structure enforcement per stack
+- ✅ **Forbidden Library Scanner**: Context-aware detection of incompatible imports (ignores comments/strings)
+- ✅ **FILE Manifest Compliance**: Strict format validation, duplicate detection, path security checks
+- ✅ **Constraint Enforcement**: User-defined rules validation (e.g., "no extra libraries")
+- ✅ **Auto-Revision Flow**: Automatic retry with detailed error feedback (max 2 retries)
+- ✅ **Path Security**: Prevention of path traversal attacks and dangerous file system access
+- ✅ **20+ Unit Tests**: Comprehensive test coverage for all validation rules and scenarios
+- ✅ **Comprehensive Documentation**: Complete validation guide with examples and troubleshooting
+- ✅ **Backward Compatible**: Validation can be disabled, no breaking changes to existing code
+
 ---
 
 ## 🚀 Özellikler
@@ -151,6 +163,17 @@ TEM Agent (Task Execution Manager Agent), yazılım geliştirme sürecini 4 uzma
 - **Output Validation**: Constraint enforcement, project structure validation, and safe file operations
 - **Multi-Language Support**: Python, TypeScript/JavaScript, PHP, C# with proper toolchain awareness
 - **Backward Compatibility**: 100% compatible with existing mgx_style_team.py usage patterns
+
+### 🛡️ Phase 8.1: Quality Guardrails (Output Validation)
+- **Production-Stable Validation**: Comprehensive validation for generated code output
+- **Stack-Specific Checks**: Required files, forbidden files, and command validation per stack
+- **Forbidden Library Scanner**: Context-aware detection of incompatible technology mixing
+- **FILE Manifest Compliance**: Strict format enforcement with duplicate detection
+- **Path Security**: Prevention of path traversal attacks and dangerous file system operations
+- **Constraint Enforcement**: User-defined rules (e.g., "no extra libraries") validation
+- **Auto-Revision**: Automatic retry with detailed error feedback (max 2 retries)
+- **Clear Error Messages**: Actionable feedback helping users fix issues quickly
+- **Extensible Rules**: Easy addition of validation rules for new stacks
 
 ### 🎨 Modüler Mimari
 - **Single Responsibility**: Her modül tek sorumluluk
