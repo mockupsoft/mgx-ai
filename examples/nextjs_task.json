@@ -1,0 +1,13 @@
+{
+  "task": "Create a Next.js admin dashboard with user list page and API routes",
+  "target_stack": "nextjs",
+  "project_type": "webapp",
+  "output_mode": "generate_new",
+  "constraints": [
+    "Use App Router (Next.js 13+)",
+    "TypeScript for type safety",
+    "Server-side rendering for user list",
+    "API route for data fetching"
+  ],
+  "strict_requirements": false
+}
