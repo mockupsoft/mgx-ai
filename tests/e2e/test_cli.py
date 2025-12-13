@@ -40,6 +40,18 @@ class TestCLIEntryPoints:
         
         # Verify asyncio.run was called (indicates routing worked)
         mock_asyncio_run.assert_called_once()
+
+    @patch('mgx_agent.cli.asyncio.run')
+    @patch('mgx_agent.cli.print')
+    def test_cli_main_list_stacks_flag(self, mock_print, mock_asyncio_run):
+        """Test that --list-stacks prints stacks and exits without running async entrypoints."""
+        sys.argv = ['mgx_agent.cli', '--list-stacks']
+
+        cli_main()
+
+        mock_asyncio_run.assert_not_called()
+        # Should print a header line about stacks
+        assert any("Desteklenen Stack" in str(call.args[0]) for call in mock_print.call_args_list if call.args)
     
     @patch('mgx_agent.cli.asyncio.run')
     @patch('mgx_agent.cli.print')
@@ -124,19 +136,22 @@ class TestCLIEntryPoints:
     @patch('mgx_agent.cli.MGXStyleTeam')
     @patch('mgx_agent.cli.print')
     async def test_main_human_mode_messaging(self, mock_print, mock_team_class):
-        """Test that main() propagates human_reviewer flag to MGXStyleTeam"""
+        """Test that main() propagates human_reviewer flag to MGXStyleTeam via TeamConfig."""
         # Setup mock team
         mock_team = AsyncMock()
         mock_team_class.return_value = mock_team
         mock_team.get_progress.return_value = "Progress summary"
         mock_team.show_memory_log.return_value = "Memory log"
-        
+
         # Execute main with human mode
         await main(human_reviewer=True, custom_task="Custom task")
-        
-        # Verify MGXStyleTeam was created with human_reviewer=True
-        mock_team_class.assert_called_once_with(human_reviewer=True)
-        
+
+        # Verify MGXStyleTeam was created with a config that has human_reviewer=True
+        assert mock_team_class.call_count == 1
+        _, kwargs = mock_team_class.call_args
+        assert "config" in kwargs
+        assert kwargs["config"].human_reviewer is True
+
         # Verify team methods were called
         await mock_team.analyze_and_plan.assert_awaited_once_with("Custom task")
         mock_team.approve_plan.assert_called_once()
@@ -145,18 +160,18 @@ class TestCLIEntryPoints:
     @patch('mgx_agent.cli.MGXStyleTeam')
     @patch('mgx_agent.cli.print')
     async def test_main_custom_task_propagation(self, mock_print, mock_team_class):
-        """Test that main() propagates custom task to team analyze method"""
+        """Test that main() propagates custom task to team analyze method."""
         # Setup mock team
         mock_team = AsyncMock()
         mock_team_class.return_value = mock_team
         mock_team.get_progress.return_value = "Progress summary"
         mock_team.show_memory_log.return_value = "Memory log"
-        
+
         custom_task = "Calculate fibonacci numbers"
-        
+
         # Execute main with custom task
         await main(human_reviewer=False, custom_task=custom_task)
-        
+
         # Verify analyze_and_plan was called with custom task
         await mock_team.analyze_and_plan.assert_awaited_once_with(custom_task)
     
