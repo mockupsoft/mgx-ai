@@ -19,6 +19,12 @@ __all__ = [
     'DEFAULT_CONFIG',
 ]
 
+# Import stack specs conditionally to avoid circular imports
+def _get_stack_specs():
+    """Lazy import to avoid circular dependency"""
+    from .stack_specs import ProjectType, OutputMode
+    return ProjectType, OutputMode
+
 class TaskComplexity:
     """Görev karmaşıklık seviyeleri"""
     XS = "XS"  # Çok basit - tek dosya, tek fonksiyon
@@ -56,6 +62,32 @@ class TeamConfig(BaseModel):
     # Takım ayarları
     human_reviewer: bool = Field(default=False, description="Charlie insan modu")
     auto_approve_plan: bool = Field(default=False, description="Plan otomatik onayla")
+    
+    # Web Stack ayarları (Phase A)
+    target_stack: Optional[str] = Field(
+        default=None,
+        description="Hedef stack (express-ts, nestjs, laravel, fastapi, react-vite, nextjs, vue-vite, devops-docker, ci-github-actions)"
+    )
+    project_type: Optional[str] = Field(
+        default=None,
+        description="Proje tipi: api | webapp | fullstack | devops"
+    )
+    output_mode: str = Field(
+        default="generate_new",
+        description="Çıktı modu: generate_new | patch_existing"
+    )
+    strict_requirements: bool = Field(
+        default=False,
+        description="Katı gereksinim modu (FILE manifest formatı zorunlu, açıklama yok)"
+    )
+    existing_project_path: Optional[str] = Field(
+        default=None,
+        description="Mevcut proje yolu (patch_existing modu için)"
+    )
+    constraints: list = Field(
+        default_factory=list,
+        description="Ek kısıtlamalar (örn: 'Use pnpm', 'No extra libraries')"
+    )
     
     # Budget ayarları
     default_investment: float = Field(default=3.0, ge=0.5, le=20.0, description="Varsayılan investment ($)")

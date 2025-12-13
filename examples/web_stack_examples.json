@@ -1,0 +1,29 @@
+{
+  "examples": [
+    {
+      "name": "Express TypeScript API",
+      "description": "Basit bir Express-TS REST API oluştur",
+      "task_file": "express_api_task.json"
+    },
+    {
+      "name": "FastAPI Backend",
+      "description": "FastAPI ile kullanıcı yönetim API'si",
+      "task_file": "fastapi_task.json"
+    },
+    {
+      "name": "Next.js Dashboard",
+      "description": "Next.js ile admin dashboard",
+      "task_file": "nextjs_task.json"
+    },
+    {
+      "name": "Docker Setup",
+      "description": "Multi-container Docker orchestration",
+      "task_file": "docker_task.json"
+    },
+    {
+      "name": "Laravel Module",
+      "description": "Laravel projesine modül ekle",
+      "task_file": "laravel_task.json"
+    }
+  ]
+}

@@ -7,6 +7,8 @@ Command-line interface for MGX Style Multi-Agent Team.
 
 import asyncio
 import argparse
+import json
+from pathlib import Path
 
 from .team import MGXStyleTeam
 
@@ -117,6 +119,85 @@ async def incremental_main(requirement: str, project_path: str = None, fix_bug: 
     print(result)
 
 
+async def json_input_main(json_path: str):
+    """
+    JSON dosyasından görev yükle ve çalıştır (Phase B)
+    
+    Args:
+        json_path: JSON dosya yolu
+    """
+    print(f"""
+    ╔══════════════════════════════════════════════════════════╗
+    ║        MGX STYLE - JSON INPUT MODE                       ║
+    ║                                                          ║
+    ║  📄 Yapılandırılmış görev girişi                         ║
+    ╚══════════════════════════════════════════════════════════╝
+    """)
+    
+    # JSON dosyasını oku
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            task_input = json.load(f)
+    except FileNotFoundError:
+        print(f"❌ Hata: JSON dosyası bulunamadı: {json_path}")
+        return
+    except json.JSONDecodeError as e:
+        print(f"❌ Hata: Geçersiz JSON formatı: {e}")
+        return
+    
+    # JSON yapısını doğrula ve parse et
+    from .config import TeamConfig
+    
+    task = task_input.get("task")
+    if not task:
+        print("❌ Hata: 'task' alanı zorunludur")
+        return
+    
+    # TeamConfig oluştur
+    config = TeamConfig(
+        target_stack=task_input.get("target_stack"),
+        project_type=task_input.get("project_type"),
+        output_mode=task_input.get("output_mode", "generate_new"),
+        strict_requirements=task_input.get("strict_requirements", False),
+        existing_project_path=task_input.get("existing_project_path"),
+        constraints=task_input.get("constraints", []),
+    )
+    
+    print(f"\n📋 Görev: {task}")
+    print(f"🎯 Stack: {config.target_stack or 'otomatik'}")
+    print(f"📁 Proje Tipi: {config.project_type or 'otomatik'}")
+    print(f"📝 Mod: {config.output_mode}")
+    if config.constraints:
+        print(f"⚠️ Kısıtlamalar: {', '.join(config.constraints)}")
+    
+    # Takımı oluştur ve çalıştır
+    mgx_team = MGXStyleTeam(config=config)
+    
+    # 1. Analiz ve Plan
+    print("\n📋 ADIM 1: Görev Analizi ve Plan Oluşturma")
+    print("-" * 50)
+    await mgx_team.analyze_and_plan(task)
+    
+    # 2. Plan Onayı
+    print("\n✅ ADIM 2: Plan Onayı")
+    print("-" * 50)
+    mgx_team.approve_plan()
+    
+    # 3. Görev Yürütme
+    print("\n🚀 ADIM 3: Görev Yürütme")
+    print("-" * 50)
+    await mgx_team.execute()
+    
+    # 4. Sonuç
+    print("\n📊 ADIM 4: Sonuç")
+    print("-" * 50)
+    print(mgx_team.get_progress())
+    
+    print("\n" + "=" * 50)
+    print("🎊 JSON görev tamamlandı!")
+    print("=" * 50)
+
+
 def cli_main():
     """CLI entry point"""
     parser = argparse.ArgumentParser(
@@ -193,7 +274,20 @@ def cli_main():
         help="Tracemalloc ile detaylı hafıza profiling aktif et"
     )
     
+    parser.add_argument(
+        "--json",
+        type=str,
+        default=None,
+        help="JSON dosyasından görev yükle (Phase B - Web Stack Support)"
+    )
+    
     args = parser.parse_args()
+    
+    # JSON Input modu (Phase B)
+    if args.json:
+        print("\n📄 JSON INPUT MODU")
+        asyncio.run(json_input_main(args.json))
+        return
     
     # Incremental Development modları
     if args.add_feature:

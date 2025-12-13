@@ -1,0 +1,14 @@
+{
+  "task": "Add a blog module to existing Laravel project with CRUD operations",
+  "target_stack": "laravel",
+  "project_type": "api",
+  "output_mode": "patch_existing",
+  "existing_project_path": "./my-laravel-project",
+  "constraints": [
+    "Use Eloquent ORM",
+    "Create migration files",
+    "Add form validation",
+    "Include API routes"
+  ],
+  "strict_requirements": false
+}
