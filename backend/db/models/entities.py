@@ -32,6 +32,7 @@ from sqlalchemy.orm import relationship
 
 from .base import Base, SerializationMixin, TimestampMixin
 from .enums import (
+    AgentMessageDirection,
     AgentStatus,
     ArtifactType,
     ContextRollbackState,
@@ -432,6 +433,7 @@ class AgentInstance(Base, TimestampMixin, SerializationMixin):
     workspace = relationship("Workspace")
     project = relationship("Project")
     contexts = relationship("AgentContext", back_populates="instance", cascade="all, delete-orphan")
+    messages = relationship("AgentMessage", back_populates="instance", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<AgentInstance(id={self.id}, name='{self.name}', status='{self.status}')>"
@@ -503,6 +505,51 @@ class AgentContextVersion(Base, TimestampMixin, SerializationMixin):
         return f"<AgentContextVersion(context_id={self.context_id}, version={self.version})>"
 
 
+class AgentMessage(Base, TimestampMixin, SerializationMixin):
+    """Persistent agent message log entry."""
+
+    __tablename__ = "agent_messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    agent_instance_id = Column(
+        String(36),
+        ForeignKey("agent_instances.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    direction = Column(SQLEnum(AgentMessageDirection), nullable=False, index=True)
+    payload = Column(JSON, nullable=False, default=dict)
+
+    correlation_id = Column(String(255), index=True)
+
+    task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), index=True)
+    run_id = Column(String(36), ForeignKey("task_runs.id", ondelete="SET NULL"), index=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_agent_messages_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_agent_messages_instance_created_at", "agent_instance_id", "created_at"),
+    )
+
+    instance = relationship("AgentInstance", back_populates="messages")
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+
+    def __repr__(self) -> str:
+        return (
+            f"<AgentMessage(id={self.id}, agent_instance_id={self.agent_instance_id}, direction={self.direction})>"
+        )
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -515,6 +562,7 @@ __all__ = [
     "AgentInstance",
     "AgentContext",
     "AgentContextVersion",
+    "AgentMessage",
     "TaskStatus",
     "RunStatus",
     "MetricType",

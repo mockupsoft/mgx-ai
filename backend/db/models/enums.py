@@ -88,6 +88,14 @@ class AgentStatus(str, Enum):
     OFFLINE = "offline"  # Agent is offline or disconnected
 
 
+class AgentMessageDirection(str, Enum):
+    """Direction of an agent message in the message log."""
+
+    INBOUND = "inbound"  # Client/user -> agent
+    OUTBOUND = "outbound"  # Agent -> client/user
+    SYSTEM = "system"  # System-generated lifecycle/event log
+
+
 class ContextRollbackState(str, Enum):
     """State of context rollback operation."""
 

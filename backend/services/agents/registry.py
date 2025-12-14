@@ -15,8 +15,12 @@ from typing import Any, Dict, List, Optional, Type
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from backend.db.models import AgentDefinition, AgentInstance, AgentStatus
+from backend.db.models import AgentDefinition, AgentInstance, AgentMessageDirection, AgentStatus
+from backend.schemas import EventPayload, EventTypeEnum
+from backend.services.events import get_event_broadcaster
+
 from .base import BaseAgent
+from .messages import get_agent_message_bus
 
 logger = logging.getLogger(__name__)
 
@@ -193,19 +197,58 @@ class AgentRegistry:
         Returns:
             True if updated, False if not found
         """
-        result = await session.execute(
-            select(AgentInstance).where(AgentInstance.id == instance_id)
-        )
+        result = await session.execute(select(AgentInstance).where(AgentInstance.id == instance_id))
         instance = result.scalar_one_or_none()
 
         if instance is None:
             return False
+
+        previous_status = instance.status
 
         instance.status = status
         if error:
             instance.last_error = error
 
         await session.flush()
+
+        try:
+            broadcaster = get_event_broadcaster()
+            await broadcaster.publish(
+                EventPayload(
+                    event_type=EventTypeEnum.AGENT_STATUS_CHANGED,
+                    workspace_id=instance.workspace_id,
+                    agent_id=instance.id,
+                    task_id=None,
+                    run_id=None,
+                    data={
+                        "previous_status": getattr(previous_status, "value", str(previous_status)),
+                        "status": getattr(status, "value", str(status)),
+                        "error": error,
+                    },
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast agent status change for {instance_id}: {e}")
+
+        try:
+            bus = get_agent_message_bus()
+            await bus.append(
+                session,
+                workspace_id=instance.workspace_id,
+                project_id=instance.project_id,
+                agent_instance_id=instance.id,
+                direction=AgentMessageDirection.SYSTEM,
+                payload={
+                    "type": "agent_status_changed",
+                    "previous_status": getattr(previous_status, "value", str(previous_status)),
+                    "status": getattr(status, "value", str(status)),
+                    "error": error,
+                },
+                broadcast=False,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to append status change to agent message log for {instance_id}: {e}")
+
         logger.info(f"Updated instance {instance_id} status to {status}")
         return True
 

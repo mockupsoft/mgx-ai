@@ -89,6 +89,20 @@ class Settings(BaseSettings):
         le=1000,
         description="Maximum number of context versions to retain per agent context",
     )
+
+    agent_message_retention_limit: int = Field(
+        default=1000,
+        ge=10,
+        le=100_000,
+        description="Maximum number of agent messages to retain per agent instance",
+    )
+
+    agent_message_ack_window_seconds: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+        description="Best-effort ACK retention window for WebSocket subscribers",
+    )
     
     # Application Settings
     debug: bool = Field(default=False, description="Debug mode")

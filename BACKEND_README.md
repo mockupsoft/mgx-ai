@@ -96,6 +96,59 @@ DEBUG=false
 - `DELETE /runs/{run_id}` - Delete run
 - `GET /runs/{run_id}/logs` - Get run logs
 
+### Agents
+
+All agent endpoints are workspace-scoped via the standard workspace selector:
+
+- Headers: `X-Workspace-Id` or `X-Workspace-Slug`
+- Query: `workspace_id` or `workspace_slug`
+
+**REST**
+
+- `GET /api/agents/definitions`
+  - Lists globally enabled agent definitions.
+- `GET /api/agents`
+  - Lists agent instances in the active workspace.
+- `POST /api/agents`
+  - Creates an agent instance from a definition (optionally activates it).
+- `PATCH /api/agents/{agent_id}`
+  - Updates instance name/config and supports status transitions.
+- `POST /api/agents/{agent_id}/activate|deactivate|shutdown`
+  - Performs lifecycle transitions.
+- `GET /api/agents/{agent_id}/context`
+  - Reads (and lazily creates) a named context (`?context_name=default`).
+- `POST /api/agents/{agent_id}/context`
+  - Writes a new context version.
+- `POST /api/agents/{agent_id}/context/rollback`
+  - Rolls context back to a previous version.
+- `GET /api/agents/{agent_id}/messages`
+  - Retrieves message history (pagination via `skip`/`limit`).
+- `POST /api/agents/{agent_id}/messages`
+  - Persists a message and broadcasts an `agent_message` event.
+
+**WebSocket**
+
+- `GET ws://{host}/ws/agents/{agent_id}`
+  - Subscribes to events for a specific agent.
+- `GET ws://{host}/ws/agents/stream?workspace_id=...&agent_id=a1,a2`
+  - Subscribes to the agent event stream (optionally filtered).
+
+**Event names** (sent via WebSocket)
+
+- `agent_status_changed`
+- `agent_activity`
+- `agent_message`
+- `agent_context_updated`
+
+**Event routing channels**
+
+Events are published to:
+
+- `agent:{agent_id}` (agent-scoped)
+- `agents` (wildcard for all agent events)
+- `workspace:{workspace_id}` (workspace-scoped; best-effort)
+- `all` (global wildcard)
+
 ## Services
 
 ### MGXTeamProvider
@@ -141,6 +194,8 @@ Multi-agent system for managing distributed agent instances with persistent cont
 AGENTS_ENABLED=true
 AGENT_MAX_CONCURRENCY=10
 AGENT_CONTEXT_HISTORY_LIMIT=100
+AGENT_MESSAGE_RETENTION_LIMIT=1000
+AGENT_MESSAGE_ACK_WINDOW_SECONDS=3600
 AGENT_REGISTRY_MODULES=myapp.agents  # Auto-load agent definitions
 ```
 
