@@ -20,6 +20,8 @@ from backend.config import settings
 from backend.services import (
     MGXTeamProvider,
     get_task_runner,
+    AgentRegistry,
+    SharedContextService,
 )
 from backend.routers import (
     health_router,
@@ -77,6 +79,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     await task_runner.start(num_workers=2)
     app.state.task_runner = task_runner
     logger.info("✓ BackgroundTaskRunner started")
+    
+    # Initialize agent services (if enabled)
+    if settings.agents_enabled:
+        agent_registry = AgentRegistry()
+        app.state.agent_registry = agent_registry
+        logger.info("✓ AgentRegistry initialized")
+        
+        context_service = SharedContextService()
+        app.state.context_service = context_service
+        logger.info("✓ SharedContextService initialized")
+        
+        # Auto-load agent modules if specified
+        if settings.agent_registry_modules:
+            modules = [m.strip() for m in settings.agent_registry_modules.split(",")]
+            for module_name in modules:
+                try:
+                    __import__(module_name)
+                    logger.info(f"✓ Loaded agent module: {module_name}")
+                except ImportError as e:
+                    logger.warning(f"Failed to load agent module {module_name}: {str(e)}")
+    else:
+        logger.info("Agent system disabled (set AGENTS_ENABLED=true to enable)")
     
     logger.info("FastAPI Application Ready")
     logger.info("=" * 60)

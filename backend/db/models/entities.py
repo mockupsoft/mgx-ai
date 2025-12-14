@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     Column,
     DateTime,
     Enum as SQLEnum,
@@ -31,7 +32,9 @@ from sqlalchemy.orm import relationship
 
 from .base import Base, SerializationMixin, TimestampMixin
 from .enums import (
+    AgentStatus,
     ArtifactType,
+    ContextRollbackState,
     MetricType,
     RepositoryLinkStatus,
     RepositoryProvider,
@@ -363,6 +366,143 @@ class Artifact(Base, TimestampMixin, SerializationMixin):
         return f"<Artifact(id={self.id}, name='{self.name}', type='{self.artifact_type}')>"
 
 
+class AgentDefinition(Base, TimestampMixin, SerializationMixin):
+    """Global agent definition with metadata and capabilities."""
+
+    __tablename__ = "agent_definitions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    name = Column(String(255), nullable=False, index=True, comment="Agent name")
+    slug = Column(String(255), nullable=False, unique=True, index=True, comment="Unique slug identifier")
+    agent_type = Column(String(100), nullable=False, index=True, comment="Agent type/class name")
+    description = Column(Text, comment="Agent description")
+
+    capabilities = Column(JSON, nullable=False, default=list, comment="List of agent capabilities")
+    config_schema = Column(JSON, comment="JSON schema for agent configuration")
+    meta_data = Column(JSON, nullable=False, default=dict, comment="Agent metadata")
+
+    is_enabled = Column(Boolean, default=True, nullable=False, index=True, comment="Whether the agent is enabled globally")
+
+    __table_args__ = (
+        Index("idx_agent_definitions_slug", "slug"),
+        Index("idx_agent_definitions_type", "agent_type"),
+    )
+
+    instances = relationship("AgentInstance", back_populates="definition", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<AgentDefinition(id={self.id}, slug='{self.slug}', type='{self.agent_type}')>"
+
+
+class AgentInstance(Base, TimestampMixin, SerializationMixin):
+    """Workspace-/project-scoped agent instantiation."""
+
+    __tablename__ = "agent_instances"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    definition_id = Column(String(36), ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, comment="Instance name (can differ from definition)")
+    status = Column(SQLEnum(AgentStatus), nullable=False, default=AgentStatus.IDLE, index=True)
+
+    config = Column(JSON, nullable=False, default=dict, comment="Instance-specific configuration")
+    state = Column(JSON, comment="Current runtime state")
+
+    last_heartbeat = Column(DateTime(timezone=True), comment="Last heartbeat timestamp")
+    last_error = Column(Text, comment="Last error message")
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_agent_instances_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_agent_instances_definition", "definition_id"),
+        Index("idx_agent_instances_workspace_project", "workspace_id", "project_id"),
+        Index("idx_agent_instances_status", "status"),
+    )
+
+    definition = relationship("AgentDefinition", back_populates="instances")
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    contexts = relationship("AgentContext", back_populates="instance", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<AgentInstance(id={self.id}, name='{self.name}', status='{self.status}')>"
+
+
+class AgentContext(Base, TimestampMixin, SerializationMixin):
+    """Persistent shared context for agents with versioning."""
+
+    __tablename__ = "agent_contexts"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    instance_id = Column(String(36), ForeignKey("agent_instances.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, comment="Context name/identifier")
+    current_version = Column(Integer, default=0, nullable=False, comment="Current version number")
+
+    rollback_pointer = Column(Integer, comment="Version to rollback to (if any)")
+    rollback_state = Column(SQLEnum(ContextRollbackState), comment="State of rollback operation")
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_agent_contexts_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_agent_contexts_instance", "instance_id"),
+        Index("idx_agent_contexts_workspace_project", "workspace_id", "project_id"),
+        UniqueConstraint("instance_id", "name", name="uq_agent_contexts_instance_name"),
+    )
+
+    instance = relationship("AgentInstance", back_populates="contexts")
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    versions = relationship("AgentContextVersion", back_populates="context", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<AgentContext(id={self.id}, name='{self.name}', version={self.current_version})>"
+
+
+class AgentContextVersion(Base, TimestampMixin, SerializationMixin):
+    """Versioned snapshot of agent context state."""
+
+    __tablename__ = "agent_context_versions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    context_id = Column(String(36), ForeignKey("agent_contexts.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    version = Column(Integer, nullable=False, comment="Version number (sequence)")
+    data = Column(JSON, nullable=False, default=dict, comment="Context data snapshot")
+
+    change_description = Column(Text, comment="Description of changes in this version")
+    created_by = Column(String(255), comment="User/agent who created this version")
+
+    __table_args__ = (
+        Index("idx_agent_context_versions_context", "context_id"),
+        Index("idx_agent_context_versions_version", "context_id", "version"),
+        UniqueConstraint("context_id", "version", name="uq_agent_context_versions_context_version"),
+    )
+
+    context = relationship("AgentContext", back_populates="versions")
+
+    def __repr__(self) -> str:
+        return f"<AgentContextVersion(context_id={self.context_id}, version={self.version})>"
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -371,10 +511,16 @@ __all__ = [
     "TaskRun",
     "MetricSnapshot",
     "Artifact",
+    "AgentDefinition",
+    "AgentInstance",
+    "AgentContext",
+    "AgentContextVersion",
     "TaskStatus",
     "RunStatus",
     "MetricType",
     "ArtifactType",
     "RepositoryProvider",
     "RepositoryLinkStatus",
+    "AgentStatus",
+    "ContextRollbackState",
 ]

@@ -87,3 +87,8 @@
 2025-12-13 18:47:37.333 | INFO     | metagpt.config:__init__:43 - Config loading done.
 2025-12-13 18:47:37.333 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues
 2025-12-13 18:47:53.885 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-14 11:50:20.127 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-14 11:50:34.352 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-14 11:50:45.959 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-14 11:50:58.528 | INFO     | metagpt.config:__init__:43 - Config loading done.
+2025-12-14 11:50:58.529 | INFO     | metagpt.config:__init__:49 - Set OPENAI_API_BASE in case of network issues

@@ -132,6 +132,68 @@ async def get_task_status(task_id: str):
     return status
 ```
 
+### Agent Registry & Services (Optional)
+
+Multi-agent system for managing distributed agent instances with persistent context.
+
+**Enable in `.env`:**
+```bash
+AGENTS_ENABLED=true
+AGENT_MAX_CONCURRENCY=10
+AGENT_CONTEXT_HISTORY_LIMIT=100
+AGENT_REGISTRY_MODULES=myapp.agents  # Auto-load agent definitions
+```
+
+**Define Custom Agents:**
+
+```python
+from backend.services import BaseAgent
+
+class MyCustomAgent(BaseAgent):
+    async def initialize(self):
+        await super().initialize()
+        # Setup resources
+    
+    async def activate(self):
+        await super().activate()
+        # Start processing
+    
+    async def deactivate(self):
+        await super().deactivate()
+        # Pause processing
+    
+    async def shutdown(self):
+        await super().shutdown()
+        # Cleanup
+
+# Register in your module (loaded via AGENT_REGISTRY_MODULES)
+def load_agents(registry: AgentRegistry):
+    registry.register(MyCustomAgent, "my_agent", "My custom agent")
+```
+
+**Use in Routers:**
+
+```python
+from fastapi import Request
+
+@app.post("/agents/{instance_id}/context")
+async def write_context(instance_id: str, data: dict, request: Request):
+    service = request.app.state.context_service
+    context = await service.get_or_create_context(
+        session, instance_id, "shared", workspace_id, project_id
+    )
+    version = await service.write_context(
+        session, context.id, data, "Updated by API"
+    )
+    return {"version": version}
+```
+
+**Agent Lifecycle:**
+- `AgentDefinition`: Global metadata and capabilities
+- `AgentInstance`: Workspace/project-scoped instantiation
+- `AgentContext`: Persistent shared state with version history
+- `AgentContextVersion`: Immutable snapshots for rollback support
+
 ## Docker Deployment
 
 ### Build Image
@@ -210,19 +272,44 @@ pytest tests/unit/test_backend_bootstrap.py --cov=backend --cov-report=html
 ```
 backend/
 ├── __init__.py                    # Package initialization
-├── config.py                      # Settings with .env support
+├── config.py                      # Settings with .env support (includes agent config)
 ├── app/
 │   ├── __init__.py
-│   └── main.py                   # FastAPI app, lifespan, entry point
+│   └── main.py                   # FastAPI app, lifespan, agent service initialization
+├── db/
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── base.py               # SQLAlchemy base and mixins
+│   │   ├── enums.py              # Status enums (TaskStatus, AgentStatus, etc.)
+│   │   └── entities.py           # ORM models (Agent*, Task*, Workspace, etc.)
+│   ├── engine.py                 # Database engine setup
+│   └── session.py                # AsyncSession factory
+├── migrations/
+│   ├── versions/
+│   │   ├── 001_initial_schema.py
+│   │   ├── 002_workspace_project.py
+│   │   └── 004_agent_core.py     # Agent tables: definitions, instances, contexts
+│   ├── env.py
+│   └── script.py.mako
 ├── services/
 │   ├── __init__.py
 │   ├── team_provider.py          # MGXStyleTeam wrapper
-│   └── background.py             # Background task runner
-└── routers/
-    ├── __init__.py
-    ├── health.py                 # Health & status endpoints
-    ├── tasks.py                  # Task management (stub)
-    └── runs.py                   # Run management (stub)
+│   ├── background.py             # Background task runner
+│   └── agents/
+│       ├── __init__.py
+│       ├── base.py               # BaseAgent abstract class
+│       ├── registry.py           # AgentRegistry for managing definitions/instances
+│       └── context.py            # SharedContextService for versioned context
+├── routers/
+│   ├── __init__.py
+│   ├── health.py                 # Health & status endpoints
+│   ├── tasks.py                  # Task management endpoints
+│   ├── runs.py                   # Run management endpoints
+│   └── ...
+├── tests/
+│   ├── __init__.py
+│   └── test_agent_registry.py    # Unit tests for agents
+└── schemas.py                    # Pydantic schemas for API requests/responses
 ```
 
 ## Key Features
@@ -236,11 +323,28 @@ backend/
 - Pydantic BaseSettings
 - .env file support
 - Environment variable overrides
+- Agent system configuration (optional)
 
 ✅ **Services**
 - MGXTeamProvider for team management
 - BackgroundTaskRunner for async operations
+- **AgentRegistry** for multi-agent management (new)
+- **SharedContextService** for persistent context with versioning (new)
 - Singleton pattern for global access
+
+✅ **Multi-Agent System (Optional)**
+- `BaseAgent` abstract class with lifecycle hooks
+- `AgentRegistry` for defining and instantiating agents
+- `AgentDefinition` for global agent metadata
+- `AgentInstance` for workspace/project-scoped agents
+- `AgentContext` with versioned history and rollback support
+- Workspace/project isolation enforcement
+
+✅ **Database**
+- SQLAlchemy 1.x async ORM
+- Alembic migrations
+- Multi-tenancy support (Workspace > Project hierarchy)
+- Agent core schema with FK integrity
 
 ✅ **Health Checks**
 - Multiple health endpoints
@@ -343,13 +447,19 @@ uvicorn backend.app.main:app --reload
 
 ## Next Steps
 
-- [ ] Implement task execution endpoints
-- [ ] Add database models (SQLAlchemy)
-- [ ] Create database migrations (Alembic)
-- [ ] Implement WebSocket support for real-time updates
-- [ ] Add authentication/authorization
-- [ ] Create comprehensive API tests
-- [ ] Add monitoring and metrics
+- [x] Add database models (SQLAlchemy) - Agent core schemas complete
+- [x] Create database migrations (Alembic) - Agent core migration added
+- [x] Multi-agent system foundation - BaseAgent, AgentRegistry, SharedContextService
+- [ ] Implement agent REST endpoints (CRUD for agents/instances/contexts)
+- [ ] Add agent lifecycle management endpoints
+- [ ] Implement context versioning API
+- [ ] Add context rollback REST endpoints
+- [ ] Implement WebSocket support for real-time agent updates
+- [ ] Add authentication/authorization for agent operations
+- [ ] Create comprehensive API tests for agent endpoints
+- [ ] Add monitoring and metrics for agents
+- [ ] Implement agent scheduler/orchestrator
+- [ ] Add built-in agents (e.g., ReviewerAgent, BuilderAgent)
 - [ ] Deploy to production environment
 
 ## References

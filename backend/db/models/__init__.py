@@ -8,14 +8,28 @@ Exports all ORM models and enums.
 
 from .base import Base
 from .enums import (
+    AgentStatus,
     ArtifactType,
+    ContextRollbackState,
     MetricType,
     RepositoryLinkStatus,
     RepositoryProvider,
     RunStatus,
     TaskStatus,
 )
-from .entities import Artifact, MetricSnapshot, Project, RepositoryLink, Task, TaskRun, Workspace
+from .entities import (
+    Artifact,
+    AgentContext,
+    AgentContextVersion,
+    AgentDefinition,
+    AgentInstance,
+    MetricSnapshot,
+    Project,
+    RepositoryLink,
+    Task,
+    TaskRun,
+    Workspace,
+)
 
 __all__ = [
     "Base",
@@ -26,10 +40,16 @@ __all__ = [
     "TaskRun",
     "MetricSnapshot",
     "Artifact",
+    "AgentDefinition",
+    "AgentInstance",
+    "AgentContext",
+    "AgentContextVersion",
     "TaskStatus",
     "RunStatus",
     "MetricType",
     "ArtifactType",
     "RepositoryProvider",
     "RepositoryLinkStatus",
+    "AgentStatus",
+    "ContextRollbackState",
 ]

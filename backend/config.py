@@ -71,6 +71,25 @@ class Settings(BaseSettings):
         description="Local directory used for cached git clones",
     )
 
+    # Agent Configuration
+    agents_enabled: bool = Field(default=False, description="Enable multi-agent system")
+    agent_registry_modules: str = Field(
+        default="",
+        description="Comma-separated list of Python modules containing agent definitions to auto-load",
+    )
+    agent_max_concurrency: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum concurrent agent instances per workspace",
+    )
+    agent_context_history_limit: int = Field(
+        default=100,
+        ge=10,
+        le=1000,
+        description="Maximum number of context versions to retain per agent context",
+    )
+    
     # Application Settings
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
@@ -106,6 +125,7 @@ class Settings(BaseSettings):
     DB: {self.db_host}:{self.db_port}/{self.db_name}
     Redis: {self.redis_url or 'not configured'}
     GitHub: auth={github_auth}, cache_dir={self.github_clone_cache_dir}
+    Agents: enabled={self.agents_enabled}, max_concurrency={self.agent_max_concurrency}
 )"""
 
 
