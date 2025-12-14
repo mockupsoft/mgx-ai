@@ -1,99 +1,362 @@
 version: '3.8'
 
-services:
-  # FastAPI Application
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: mgx-agent-api
-    ports:
-      - "8000:8000"
-    environment:
-      # API Configuration
-      API_HOST: 0.0.0.0
-      API_PORT: 8000
-      API_RELOAD: "false"
-      API_WORKERS: 2
-      
-      # MGX Agent Configuration
-      MGX_MAX_ROUNDS: 5
-      MGX_MAX_REVISION_ROUNDS: 2
-      MGX_CACHE_BACKEND: memory
-      
-      # Database Configuration
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: mgx_agent
-      DB_POOL_SIZE: 10
-      DB_MAX_OVERFLOW: 20
-      
-      # Application Settings
-      LOG_LEVEL: INFO
-      DEBUG: "false"
-      
-      # MetaGPT
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy_key_for_testing}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - mgx-network
-    volumes:
-      - ./backend:/app/backend
-      - ./mgx_agent:/app/mgx_agent
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+# =============================================================================
+# MGX Agent Self-Hosted Deployment
+# =============================================================================
+# Production-ready Docker Compose configuration for deploying MGX Agent
+# with PostgreSQL, Redis, and MinIO (S3-compatible storage).
+#
+# Quick Start:
+#   cp .env.example .env
+#   docker compose up -d --build
+#   docker compose ps
+#   curl http://localhost:8000/health
+#
+# With Kafka (optional):
+#   docker compose --profile kafka up -d
+#
+# See DOCKER_DEPLOYMENT.md for detailed configuration and troubleshooting.
+# =============================================================================
 
-  # PostgreSQL Database
+# YAML Anchors for DRY environment variables
+x-common-env: &common-env
+  MGX_ENV: ${MGX_ENV:-production}
+  MGX_LOG_LEVEL: ${MGX_LOG_LEVEL:-INFO}
+  MGX_MAX_ROUNDS: ${MGX_MAX_ROUNDS:-5}
+  MGX_MAX_REVISION_ROUNDS: ${MGX_MAX_REVISION_ROUNDS:-2}
+  MGX_MAX_MEMORY_SIZE: ${MGX_MAX_MEMORY_SIZE:-50}
+  MGX_ENABLE_CACHING: ${MGX_ENABLE_CACHING:-true}
+  MGX_CACHE_BACKEND: ${MGX_CACHE_BACKEND:-redis}
+  MGX_CACHE_MAX_ENTRIES: ${MGX_CACHE_MAX_ENTRIES:-10000}
+  MGX_CACHE_TTL_SECONDS: ${MGX_CACHE_TTL_SECONDS:-3600}
+
+  # Security
+  JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+  API_KEY: ${API_KEY:-change-me-in-production}
+
+  # Database (async SQLAlchemy)
+  DB_HOST: postgres
+  DB_PORT: 5432
+  DB_USER: ${DB_USER:-mgx}
+  DB_PASSWORD: ${DB_PASSWORD:-mgx}
+  DB_NAME: ${DB_NAME:-mgx}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+  DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+  DATABASE_URL: postgresql+asyncpg://${DB_USER:-mgx}:${DB_PASSWORD:-mgx}@postgres:5432/${DB_NAME:-mgx}
+
+  # Redis
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_URL: redis://redis:6379/0
+  REDIS_CACHE_TTL: ${REDIS_CACHE_TTL:-3600}
+
+  # S3/MinIO (internal)
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_BUCKET: ${S3_BUCKET:-mgx-artifacts}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+  S3_SECURE: ${S3_SECURE:-false}
+
+  # Application defaults
+  DEFAULT_WORKSPACE_NAME: ${DEFAULT_WORKSPACE_NAME:-default}
+  DEFAULT_PROJECT_NAME: ${DEFAULT_PROJECT_NAME:-default}
+
+  # Optional integrations
+  KAFKA_ENABLED: ${KAFKA_ENABLED:-false}
+  OTEL_ENABLED: ${OTEL_ENABLED:-false}
+
+services:
+  # =============================================================================
+  # PostgreSQL 16 - Primary database
+  # =============================================================================
   postgres:
-    image: postgres:15-alpine
-    container_name: mgx-agent-postgres
+    image: postgres:16-alpine
+    container_name: mgx-postgres
     environment:
-      POSTGRES_DB: mgx_agent
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-mgx}
+      POSTGRES_USER: ${DB_USER:-mgx}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mgx}
+      # PostgreSQL configuration for performance
+      POSTGRES_INITDB_ARGS: |
+        -c shared_buffers=256MB
+        -c effective_cache_size=1GB
+        -c work_mem=16MB
+        -c max_connections=200
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+      # Data persistence
+      - pg_data:/var/lib/postgresql/data
+      # Initialize database schema on first run
+      - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
     networks:
-      - mgx-network
+      - mgx-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mgx} -d ${DB_NAME:-mgx}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    labels:
+      - "mgx.service=database"
+      - "mgx.description=PostgreSQL 16 primary database"
 
-  # Redis (Optional, for caching)
+  # =============================================================================
+  # Redis 7 - Caching and session store
+  # =============================================================================
   redis:
     image: redis:7-alpine
-    container_name: mgx-agent-redis
+    container_name: mgx-redis
+    command: redis-server --appendonly yes --appendfsync everysec
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     networks:
-      - mgx-network
+      - mgx-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    labels:
+      - "mgx.service=cache"
+      - "mgx.description=Redis 7 in-memory cache with AOF persistence"
 
+  # =============================================================================
+  # MinIO - S3-compatible object storage
+  # =============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: mgx-minio
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    ports:
+      # API port
+      - "9000:9000"
+      # Console port (web UI)
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - mgx-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    labels:
+      - "mgx.service=storage"
+      - "mgx.description=MinIO S3-compatible object storage with web console"
+
+  # =============================================================================
+  # MinIO Bucket Init - One-time bucket creation (idempotent)
+  # =============================================================================
+  minio-init:
+    image: minio/mc:latest
+    container_name: mgx-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_HOST: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: ${S3_ACCESS_KEY_ID:-minioadmin}
+      MINIO_SECRET_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-mgx-artifacts}
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY &&
+      /usr/bin/mc mb --ignore-existing myminio/$S3_BUCKET &&
+      /usr/bin/mc version enable myminio/$S3_BUCKET &&
+      /usr/bin/mc ilm import myminio/$S3_BUCKET < /dev/null || true &&
+      echo 'MinIO bucket initialized successfully'
+      "
+    networks:
+      - mgx-net
+    restart: on-failure
+    labels:
+      - "mgx.service=init"
+      - "mgx.description=One-time MinIO bucket initialization"
+
+  # =============================================================================
+  # Database Migrations - Alembic migrations before API starts
+  # =============================================================================
+  mgx-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: mgx-agent:latest
+    container_name: mgx-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *common-env
+    command: bash -c "alembic upgrade head && echo 'Migrations completed successfully'"
+    networks:
+      - mgx-net
+    restart: on-failure
+    labels:
+      - "mgx.service=migrate"
+      - "mgx.description=Database migration service (alembic)"
+
+  # =============================================================================
+  # FastAPI Application - MGX Agent API
+  # =============================================================================
+  mgx-ai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    image: mgx-agent:latest
+    container_name: mgx-ai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      mgx-migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *common-env
+      # API Settings
+      MGX_PORT: 8000
+      MGX_BASE_URL: ${MGX_BASE_URL:-http://localhost:8000}
+      MGX_WORKERS: ${MGX_WORKERS:-4}
+    ports:
+      - "8000:8000"
+    # volumes:
+    #   # Optional: mount code for hot reload in development
+    #   # - ./backend:/app/backend
+    #   # - ./mgx_agent:/app/mgx_agent
+    networks:
+      - mgx-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    labels:
+      - "mgx.service=api"
+      - "mgx.description=MGX Agent FastAPI application"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  # =============================================================================
+  # Apache Kafka - Optional event streaming (enable with --profile kafka)
+  # =============================================================================
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: mgx-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - mgx-net
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions.sh", "--bootstrap-server", "kafka:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - kafka
+    restart: unless-stopped
+    labels:
+      - "mgx.service=kafka"
+      - "mgx.description=Apache Kafka event streaming (optional)"
+
+  # =============================================================================
+  # Zookeeper - Kafka dependency (enable with --profile kafka)
+  # =============================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: mgx-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_logs:/var/lib/zookeeper/log
+    networks:
+      - mgx-net
+    healthcheck:
+      test: ["CMD", "echo", "ruok", "|", "nc", "localhost", "2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - kafka
+    restart: unless-stopped
+    labels:
+      - "mgx.service=zookeeper"
+      - "mgx.description=Zookeeper for Kafka coordination (optional)"
+
+# =============================================================================
+# Networks
+# =============================================================================
 networks:
-  mgx-network:
+  mgx-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
+# =============================================================================
+# Volumes
+# =============================================================================
 volumes:
-  postgres_data:
+  # PostgreSQL data persistence
+  pg_data:
     driver: local
+
+  # Redis AOF persistence
   redis_data:
+    driver: local
+
+  # MinIO object storage
+  minio_data:
+    driver: local
+
+  # Kafka data (optional)
+  kafka_data:
+    driver: local
+
+  # Zookeeper data (optional)
+  zookeeper_data:
+    driver: local
+
+  zookeeper_logs:
     driver: local
