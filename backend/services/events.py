@@ -105,15 +105,24 @@ class EventBroadcaster:
                     If None, derives from event (task:{task_id}, run:{run_id})
         """
         # Determine channels for this event
-        channels = set()
+        channels: Set[str] = set()
+
         if channel:
             channels.add(channel)
-        else:
-            if event.task_id:
-                channels.add(f"task:{event.task_id}")
-            if event.run_id:
-                channels.add(f"run:{event.run_id}")
-        
+
+        # Derive channels from common identifiers
+        if event.task_id:
+            channels.add(f"task:{event.task_id}")
+        if event.run_id:
+            channels.add(f"run:{event.run_id}")
+
+        if getattr(event, "agent_id", None):
+            channels.add(f"agent:{event.agent_id}")
+            channels.add("agents")
+
+        if getattr(event, "workspace_id", None):
+            channels.add(f"workspace:{event.workspace_id}")
+
         channels.add("all")  # Always publish to "all"
         
         event_dict = event.model_dump(mode='json')

@@ -12,7 +12,16 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
-from backend.db.models import AgentContext, AgentContextVersion, ContextRollbackState
+from backend.db.models import (
+    AgentContext,
+    AgentContextVersion,
+    AgentMessageDirection,
+    ContextRollbackState,
+)
+from backend.schemas import EventPayload, EventTypeEnum
+from backend.services.events import get_event_broadcaster
+
+from .messages import get_agent_message_bus
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +178,49 @@ class SharedContextService:
         context.rollback_state = None
 
         await session.flush()
+
+        try:
+            broadcaster = get_event_broadcaster()
+            await broadcaster.publish(
+                EventPayload(
+                    event_type=EventTypeEnum.AGENT_CONTEXT_UPDATED,
+                    workspace_id=context.workspace_id,
+                    agent_id=context.instance_id,
+                    task_id=None,
+                    run_id=None,
+                    data={
+                        "context_id": context.id,
+                        "context_name": context.name,
+                        "version": new_version,
+                        "change_description": change_description,
+                        "created_by": created_by,
+                    },
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Failed to broadcast context update for {context_id}: {e}")
+
+        try:
+            bus = get_agent_message_bus()
+            await bus.append(
+                session,
+                workspace_id=context.workspace_id,
+                project_id=context.project_id,
+                agent_instance_id=context.instance_id,
+                direction=AgentMessageDirection.SYSTEM,
+                payload={
+                    "type": "agent_context_updated",
+                    "context_id": context.id,
+                    "context_name": context.name,
+                    "version": new_version,
+                    "change_description": change_description,
+                    "created_by": created_by,
+                },
+                broadcast=False,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to append context update to agent message log for {context_id}: {e}")
+
         logger.info(f"Wrote context {context_id} version {new_version}")
         return new_version
 
@@ -251,6 +303,46 @@ class SharedContextService:
             context.rollback_state = ContextRollbackState.SUCCESS
 
             await session.flush()
+
+            try:
+                broadcaster = get_event_broadcaster()
+                await broadcaster.publish(
+                    EventPayload(
+                        event_type=EventTypeEnum.AGENT_CONTEXT_UPDATED,
+                        workspace_id=context.workspace_id,
+                        agent_id=context.instance_id,
+                        task_id=None,
+                        run_id=None,
+                        data={
+                            "context_id": context.id,
+                            "context_name": context.name,
+                            "version": target_version,
+                            "rollback": True,
+                        },
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Failed to broadcast context rollback for {context_id}: {e}")
+
+            try:
+                bus = get_agent_message_bus()
+                await bus.append(
+                    session,
+                    workspace_id=context.workspace_id,
+                    project_id=context.project_id,
+                    agent_instance_id=context.instance_id,
+                    direction=AgentMessageDirection.SYSTEM,
+                    payload={
+                        "type": "agent_context_rollback",
+                        "context_id": context.id,
+                        "context_name": context.name,
+                        "version": target_version,
+                    },
+                    broadcast=False,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to append context rollback to agent message log for {context_id}: {e}")
+
             logger.info(f"Rollback successful: {context_id} to v{target_version}")
             return True
 

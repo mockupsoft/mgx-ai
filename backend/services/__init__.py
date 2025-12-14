@@ -13,7 +13,13 @@ from .background import BackgroundTaskRunner, BackgroundTask, TaskStatus, get_ta
 from .events import EventBroadcaster, EventSubscriber, get_event_broadcaster
 from .executor import TaskExecutor, ExecutionPhase, get_task_executor
 from .git import GitService, get_git_service, set_git_service
-from .agents import BaseAgent, AgentRegistry, SharedContextService
+from .agents import (
+    BaseAgent,
+    AgentRegistry,
+    SharedContextService,
+    AgentMessageBus,
+    get_agent_message_bus,
+)
 
 __all__ = [
     'MGXTeamProvider', 
@@ -35,4 +41,6 @@ __all__ = [
     'BaseAgent',
     'AgentRegistry',
     'SharedContextService',
+    'AgentMessageBus',
+    'get_agent_message_bus',
 ]

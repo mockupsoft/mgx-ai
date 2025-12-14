@@ -61,6 +61,12 @@ class EventTypeEnum(str, Enum):
     PULL_REQUEST_OPENED = "pull_request_opened"
     GIT_OPERATION_FAILED = "git_operation_failed"
 
+    # Agent events
+    AGENT_STATUS_CHANGED = "agent_status_changed"
+    AGENT_ACTIVITY = "agent_activity"
+    AGENT_MESSAGE = "agent_message"
+    AGENT_CONTEXT_UPDATED = "agent_context_updated"
+
 
 # ============================================
 # Workspace & Project Schemas
@@ -391,6 +397,159 @@ class RunListResponse(BaseModel):
 
 
 # ============================================
+# Agent Schemas
+# ============================================
+
+class AgentStatusEnum(str, Enum):
+    """Agent status for responses."""
+
+    IDLE = "idle"
+    INITIALIZING = "initializing"
+    ACTIVE = "active"
+    BUSY = "busy"
+    ERROR = "error"
+    OFFLINE = "offline"
+
+
+class AgentMessageDirectionEnum(str, Enum):
+    INBOUND = "inbound"
+    OUTBOUND = "outbound"
+    SYSTEM = "system"
+
+
+class AgentDefinitionResponse(BaseModel):
+    id: str
+    name: str
+    slug: str
+    agent_type: str
+    description: Optional[str] = None
+
+    capabilities: List[str] = Field(default_factory=list)
+    config_schema: Optional[Dict[str, Any]] = None
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+    is_enabled: bool
+
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        allow_population_by_field_name = True
+        from_attributes = True
+
+
+class AgentInstanceResponse(BaseModel):
+    id: str
+
+    workspace_id: str
+    project_id: str
+    definition_id: str
+
+    name: str
+    status: AgentStatusEnum
+
+    config: Dict[str, Any] = Field(default_factory=dict)
+    state: Optional[Dict[str, Any]] = None
+
+    last_heartbeat: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+    definition: Optional[AgentDefinitionResponse] = None
+
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AgentContextResponse(BaseModel):
+    id: str
+    workspace_id: str
+    project_id: str
+    instance_id: str
+    name: str
+
+    current_version: int
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+    rollback_pointer: Optional[int] = None
+    rollback_state: Optional[str] = None
+
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AgentMessageResponse(BaseModel):
+    id: str
+    workspace_id: str
+    project_id: str
+    agent_instance_id: str
+
+    direction: AgentMessageDirectionEnum
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+    correlation_id: Optional[str] = None
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
+
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AgentDefinitionListResponse(BaseModel):
+    items: List[AgentDefinitionResponse]
+
+
+class AgentInstanceListResponse(BaseModel):
+    items: List[AgentInstanceResponse]
+
+
+class AgentCreateRequest(BaseModel):
+    definition_id: Optional[str] = None
+    definition_slug: Optional[str] = None
+
+    name: Optional[str] = None
+    project_id: Optional[str] = None
+
+    config: Dict[str, Any] = Field(default_factory=dict)
+    activate: bool = True
+
+
+class AgentUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    status: Optional[AgentStatusEnum] = None
+    config: Optional[Dict[str, Any]] = None
+
+
+class AgentContextUpdateRequest(BaseModel):
+    context_name: str = Field("default")
+    data: Dict[str, Any] = Field(default_factory=dict)
+    change_description: Optional[str] = None
+    created_by: Optional[str] = None
+
+
+class AgentContextRollbackRequest(BaseModel):
+    context_name: str = Field("default")
+    target_version: int = Field(..., ge=0)
+
+
+class AgentSendMessageRequest(BaseModel):
+    direction: AgentMessageDirectionEnum = Field(AgentMessageDirectionEnum.INBOUND)
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+    correlation_id: Optional[str] = None
+    task_id: Optional[str] = None
+    run_id: Optional[str] = None
+
+
+# ============================================
 # Metrics Schemas
 # ============================================
 
@@ -429,10 +588,18 @@ class MetricListResponse(BaseModel):
 
 class EventPayload(BaseModel):
     """Base schema for all event payloads."""
+
     event_type: EventTypeEnum = Field(..., description="Type of event")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Event timestamp")
-    task_id: str = Field(..., description="Associated task ID")
+
+    # Optional routing metadata (used for pub/sub channel selection)
+    workspace_id: Optional[str] = Field(None, description="Workspace scope (optional)")
+    agent_id: Optional[str] = Field(None, description="Agent instance id (optional)")
+
+    # Task/run scope (optional for non-task events)
+    task_id: Optional[str] = Field(None, description="Associated task ID")
     run_id: Optional[str] = Field(None, description="Associated run ID")
+
     data: Dict[str, Any] = Field(default_factory=dict, description="Event-specific data")
     message: Optional[str] = Field(None, description="Human-readable message")
 
@@ -560,6 +727,20 @@ __all__ = [
     'RunApprovalRequest',
     'RunResponse',
     'RunListResponse',
+    # Agent schemas
+    'AgentStatusEnum',
+    'AgentMessageDirectionEnum',
+    'AgentDefinitionResponse',
+    'AgentInstanceResponse',
+    'AgentContextResponse',
+    'AgentMessageResponse',
+    'AgentDefinitionListResponse',
+    'AgentInstanceListResponse',
+    'AgentCreateRequest',
+    'AgentUpdateRequest',
+    'AgentContextUpdateRequest',
+    'AgentContextRollbackRequest',
+    'AgentSendMessageRequest',
     # Metric schemas
     'MetricResponse',
     'MetricListResponse',

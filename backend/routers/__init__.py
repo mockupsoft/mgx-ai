@@ -10,6 +10,7 @@ from .projects import router as projects_router
 from .repositories import router as repositories_router
 from .runs import router as runs_router
 from .tasks import router as tasks_router
+from .agents import router as agents_router
 from .workspaces import router as workspaces_router
 from .ws import router as ws_router
 
@@ -21,5 +22,6 @@ __all__ = [
     "tasks_router",
     "runs_router",
     "metrics_router",
+    "agents_router",
     "ws_router",
 ]
