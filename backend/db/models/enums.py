@@ -75,3 +75,22 @@ class RepositoryLinkStatus(str, Enum):
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
     ERROR = "error"
+
+
+class AgentStatus(str, Enum):
+    """Agent lifecycle status."""
+
+    IDLE = "idle"  # Agent is idle, ready to accept work
+    INITIALIZING = "initializing"  # Agent is initializing
+    ACTIVE = "active"  # Agent is active and running
+    BUSY = "busy"  # Agent is busy processing
+    ERROR = "error"  # Agent encountered an error
+    OFFLINE = "offline"  # Agent is offline or disconnected
+
+
+class ContextRollbackState(str, Enum):
+    """State of context rollback operation."""
+
+    PENDING = "pending"  # Rollback is pending
+    SUCCESS = "success"  # Rollback succeeded
+    FAILED = "failed"  # Rollback failed
