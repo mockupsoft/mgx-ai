@@ -66,6 +66,16 @@ class EventTypeEnum(str, Enum):
     AGENT_ACTIVITY = "agent_activity"
     AGENT_MESSAGE = "agent_message"
     AGENT_CONTEXT_UPDATED = "agent_context_updated"
+    
+    # Workflow events
+    WORKFLOW_STARTED = "workflow_started"
+    WORKFLOW_COMPLETED = "workflow_completed"
+    WORKFLOW_FAILED = "workflow_failed"
+    WORKFLOW_CANCELLED = "workflow_cancelled"
+    STEP_STARTED = "step_started"
+    STEP_COMPLETED = "step_completed"
+    STEP_FAILED = "step_failed"
+    STEP_SKIPPED = "step_skipped"
 
 
 # ============================================
@@ -636,6 +646,11 @@ class EventPayload(BaseModel):
     task_id: Optional[str] = Field(None, description="Associated task ID")
     run_id: Optional[str] = Field(None, description="Associated run ID")
 
+    # Workflow scope (optional for non-workflow events)
+    workflow_id: Optional[str] = Field(None, description="Associated workflow definition ID")
+    workflow_execution_id: Optional[str] = Field(None, description="Associated workflow execution ID")
+    workflow_step_id: Optional[str] = Field(None, description="Associated workflow step ID")
+
     data: Dict[str, Any] = Field(default_factory=dict, description="Event-specific data")
     message: Optional[str] = Field(None, description="Human-readable message")
 
@@ -725,6 +740,47 @@ class PullRequestOpenedEvent(EventPayload):
 class GitOperationFailedEvent(EventPayload):
     """Event emitted when a git operation fails."""
     event_type: EventTypeEnum = EventTypeEnum.GIT_OPERATION_FAILED
+
+
+# Workflow Events
+class WorkflowStartedEvent(EventPayload):
+    """Event emitted when a workflow execution starts."""
+    event_type: EventTypeEnum = EventTypeEnum.WORKFLOW_STARTED
+
+
+class WorkflowCompletedEvent(EventPayload):
+    """Event emitted when a workflow execution completes successfully."""
+    event_type: EventTypeEnum = EventTypeEnum.WORKFLOW_COMPLETED
+
+
+class WorkflowFailedEvent(EventPayload):
+    """Event emitted when a workflow execution fails."""
+    event_type: EventTypeEnum = EventTypeEnum.WORKFLOW_FAILED
+
+
+class WorkflowCancelledEvent(EventPayload):
+    """Event emitted when a workflow execution is cancelled."""
+    event_type: EventTypeEnum = EventTypeEnum.WORKFLOW_CANCELLED
+
+
+class StepStartedEvent(EventPayload):
+    """Event emitted when a workflow step starts execution."""
+    event_type: EventTypeEnum = EventTypeEnum.STEP_STARTED
+
+
+class StepCompletedEvent(EventPayload):
+    """Event emitted when a workflow step completes successfully."""
+    event_type: EventTypeEnum = EventTypeEnum.STEP_COMPLETED
+
+
+class StepFailedEvent(EventPayload):
+    """Event emitted when a workflow step fails."""
+    event_type: EventTypeEnum = EventTypeEnum.STEP_FAILED
+
+
+class StepSkippedEvent(EventPayload):
+    """Event emitted when a workflow step is skipped."""
+    event_type: EventTypeEnum = EventTypeEnum.STEP_SKIPPED
 
 
 # ============================================
