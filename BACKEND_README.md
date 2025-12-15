@@ -149,6 +149,108 @@ Events are published to:
 - `workspace:{workspace_id}` (workspace-scoped; best-effort)
 - `all` (global wildcard)
 
+### Workflows (Phase 10)
+
+Workflow management API for defining, executing, and monitoring multi-step workflows.
+
+All endpoints are workspace-scoped via the standard workspace selector (headers/query):
+- Headers: `X-Workspace-Id` or `X-Workspace-Slug`
+- Query: `workspace_id` or `workspace_slug`
+
+**Workflow Management**
+
+- `GET /api/workflows/` - List workflows with pagination/filtering
+  - Query params: `skip` (default 0), `limit` (default 10, max 100), `project_id`, `is_active`
+- `POST /api/workflows/` - Create new workflow
+  - Request body: `WorkflowCreate` schema (see below)
+- `GET /api/workflows/{workflow_id}` - Get workflow details
+  - Query param: `include_steps` (default true)
+- `PATCH /api/workflows/{workflow_id}` - Update workflow metadata
+- `DELETE /api/workflows/{workflow_id}` - Delete workflow
+- `POST /api/workflows/validate` - Validate workflow definition without saving
+
+**Workflow Execution**
+
+- `POST /api/workflows/{workflow_id}/execute` - Start workflow execution
+  - Request body: `WorkflowExecutionCreate` (input variables)
+  - Returns: `{"status": "submitted", "execution_id": "..."}`
+- `GET /api/workflows/{workflow_id}/executions` - List executions for a workflow
+  - Query params: `skip`, `limit`, `status` (pending/running/completed/failed/cancelled/timeout)
+- `GET /api/workflows/executions/{execution_id}` - Get execution details
+- `POST /api/workflows/executions/{execution_id}/cancel` - Cancel running execution
+
+**Workflow Telemetry (Phase 10)**
+
+- `GET /api/workflows/executions/{execution_id}/timeline` - Get detailed execution timeline with step metrics
+  - Returns: `WorkflowExecutionTimeline` with per-step timeline entries including:
+    - Step execution status, duration, retry count
+    - Start/completion timestamps
+    - Input/output summaries and error messages
+    - Aggregated counts (completed/failed/skipped steps)
+- `GET /api/workflows/{workflow_id}/metrics` - Get aggregated workflow metrics
+  - Returns: `WorkflowMetricsSummary` including:
+    - Total/successful/failed execution counts
+    - Success rate percentage
+    - Duration statistics (total, average, min, max)
+- `GET /api/workflows/executions/stats` - Get workspace-wide execution statistics
+
+**Workflow Templates**
+
+- `GET /api/workflows/templates` - List available workflow templates
+  - Returns example templates for basic sequences, parallel processing, etc.
+
+**WebSocket Events**
+
+- `ws://{host}/ws/workflows/{workflow_id}` - Subscribe to workflow execution events
+  - Events: `workflow_started`, `workflow_completed`, `workflow_failed`, `workflow_cancelled`
+  - Event payload includes: execution_id, status, timestamp, metrics
+- `ws://{host}/ws/workflows/{workflow_id}/step/{step_id}` - Subscribe to step execution events
+  - Events: `step_started`, `step_completed`, `step_failed`, `step_skipped`
+  - Event payload includes: step_id, step_name, status, duration, error details
+
+**Request/Response Schemas**
+
+See `backend/schemas.py` for complete Pydantic models:
+
+- `WorkflowCreate`: Define new workflow with steps and variables
+- `WorkflowResponse`: Workflow details with metadata
+- `WorkflowExecutionCreate`: Trigger execution with input variables
+- `WorkflowExecutionResponse`: Execution snapshot with status/duration
+- `WorkflowExecutionTimeline`: Detailed timeline with step-level metrics (telemetry)
+- `WorkflowMetricsSummary`: Aggregated metrics across executions
+- `WorkflowValidationResult`: Validation errors/warnings
+
+**Dependency Resolver Rules**
+
+Workflows use a graph-based dependency resolver that enforces:
+
+1. **Circular Dependency Detection** - Prevents cycles in step dependencies
+2. **Missing Dependency Detection** - Ensures all referenced steps exist
+3. **Duplicate Name/Order Detection** - Ensures unique step names and sequential ordering
+4. **Self-Dependency Prevention** - Steps cannot depend on themselves
+5. **IO Contract Validation** - Optional validation of input/output compatibility
+
+See `backend/services/workflows/dependency_resolver.py` for implementation.
+
+**Example Workflows**
+
+Pre-built example workflows are available in `examples/workflows/`:
+- `basic_sequence.json` - Simple sequential 3-step workflow
+- `parallel_processing.json` - Parallel branch processing with merge
+- `conditional_workflow.json` - Conditional branching based on input
+- `data_pipeline.json` - Full ETL pipeline with 7 steps
+
+To seed example workflows into a workspace:
+
+```bash
+python -m backend.scripts.seed_workflows \
+  --workspace-id <workspace_id> \
+  --project-id <project_id> \
+  --skip-existing
+```
+
+If `--project-id` is not specified, uses the first project in the workspace.
+
 ## Services
 
 ### MGXTeamProvider

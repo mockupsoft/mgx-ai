@@ -1,0 +1,63 @@
+{
+  "name": "Basic Sequence Workflow",
+  "description": "A simple sequential workflow demonstrating three steps in order",
+  "config": {},
+  "timeout_seconds": 3600,
+  "max_retries": 3,
+  "variables": [
+    {
+      "name": "input_data",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input data for the workflow"
+    },
+    {
+      "name": "processing_mode",
+      "data_type": "string",
+      "is_required": false,
+      "default_value": "standard",
+      "description": "Processing mode: standard, fast, or thorough"
+    }
+  ],
+  "steps": [
+    {
+      "name": "initialize",
+      "step_type": "task",
+      "step_order": 1,
+      "config": {
+        "description": "Initialize the workflow and validate inputs",
+        "timeout": 300
+      },
+      "depends_on_steps": [],
+      "meta_data": {
+        "category": "setup"
+      }
+    },
+    {
+      "name": "process",
+      "step_type": "task",
+      "step_order": 2,
+      "config": {
+        "description": "Main processing step",
+        "timeout": 1800
+      },
+      "depends_on_steps": ["initialize"],
+      "meta_data": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "finalize",
+      "step_type": "task",
+      "step_order": 3,
+      "config": {
+        "description": "Finalize and output results",
+        "timeout": 300
+      },
+      "depends_on_steps": ["process"],
+      "meta_data": {
+        "category": "cleanup"
+      }
+    }
+  ]
+}
