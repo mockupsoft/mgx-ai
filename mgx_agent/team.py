@@ -33,9 +33,12 @@ from metagpt.actions import Action
 from metagpt.logs import logger
 from metagpt.roles import Role
 from metagpt.schema import Message
-from metagpt.team import Team
-from metagpt.context import Context
-from metagpt.config import Config
+try:
+    from metagpt.team import Team
+    from metagpt.context import Context
+except ImportError:
+    from metagpt.config import Config
+    from mgx_agent.metagpt_wrapper import Team, Context
 
 # Import from mgx_agent package for modular structure  
 from mgx_agent.adapter import MetaGPTAdapter
