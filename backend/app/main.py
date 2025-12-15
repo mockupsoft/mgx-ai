@@ -36,6 +36,10 @@ from backend.routers import (
     ws_router,
 )
 
+# Import database session factory and workflow engine integration
+from backend.db.engine import get_session_factory
+from backend.services.workflows.integration import get_workflow_engine_integration
+
 # Configure logging
 logging.basicConfig(
     level=settings.log_level,
@@ -91,6 +95,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         context_service = SharedContextService()
         app.state.context_service = context_service
         logger.info("✓ SharedContextService initialized")
+        
+        # Initialize workflow engine integration
+        try:
+            from backend.services.workflows.integration import initialize_workflow_integration
+            
+            workflow_integration = await initialize_workflow_integration(
+                session_factory=await get_session_factory(),
+                agent_registry=agent_registry,
+                context_service=context_service,
+                task_runner=task_runner,
+            )
+            app.state.workflow_integration = workflow_integration
+            logger.info("✓ WorkflowEngineIntegration initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize workflow engine: {str(e)}")
+            # Continue without workflow functionality
+            app.state.workflow_integration = None
         
         # Auto-load agent modules if specified
         if settings.agent_registry_modules:

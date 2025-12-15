@@ -331,4 +331,207 @@ async def websocket_agent_stream(websocket: WebSocket, agent_id: str):
         logger.info(f"WebSocket disconnected for agent {agent_id}: {subscriber_id}")
 
 
+@router.websocket("/workflows/{workflow_id}")
+async def websocket_workflow_stream(websocket: WebSocket, workflow_id: str):
+    """Subscribe to real-time events for a specific workflow definition."""
+    
+    await websocket.accept()
+    
+    subscriber_id = f"ws_workflow_{workflow_id}_{uuid.uuid4()}"
+    broadcaster = get_event_broadcaster()
+    
+    logger.info(f"WebSocket connected for workflow {workflow_id}: {subscriber_id}")
+    active_connections.add(subscriber_id)
+    
+    try:
+        # Subscribe to workflow-specific channel
+        event_queue = await broadcaster.subscribe(
+            subscriber_id,
+            [f"workflow:{workflow_id}"],
+        )
+        
+        # Send events to WebSocket client
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    event_queue.get(),
+                    timeout=60,  # Connection keep-alive timeout
+                )
+                
+                await websocket.send_json(event)
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "workflow_id": workflow_id,
+                })
+            except Exception as e:
+                logger.error(f"Error sending workflow event: {e}")
+                break
+    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for workflow {workflow_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for workflow {workflow_id}: {e}")
+    
+    finally:
+        active_connections.discard(subscriber_id)
+        await broadcaster.unsubscribe(subscriber_id)
+        logger.info(f"WebSocket disconnected for workflow {workflow_id}: {subscriber_id}")
+
+
+@router.websocket("/workflows/executions/{execution_id}")
+async def websocket_workflow_execution_stream(
+    websocket: WebSocket,
+    execution_id: str,
+):
+    """Subscribe to real-time events for a specific workflow execution."""
+    
+    await websocket.accept()
+    
+    subscriber_id = f"ws_workflow_run_{execution_id}_{uuid.uuid4()}"
+    broadcaster = get_event_broadcaster()
+    
+    logger.info(f"WebSocket connected for workflow execution {execution_id}: {subscriber_id}")
+    active_connections.add(subscriber_id)
+    
+    try:
+        # Subscribe to execution-specific channel
+        event_queue = await broadcaster.subscribe(
+            subscriber_id,
+            [f"workflow-run:{execution_id}"],
+        )
+        
+        # Send events to WebSocket client
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    event_queue.get(),
+                    timeout=60,  # Connection keep-alive timeout
+                )
+                
+                await websocket.send_json(event)
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "workflow_execution_id": execution_id,
+                })
+            except Exception as e:
+                logger.error(f"Error sending workflow execution event: {e}")
+                break
+    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for workflow execution {execution_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for workflow execution {execution_id}: {e}")
+    
+    finally:
+        active_connections.discard(subscriber_id)
+        await broadcaster.unsubscribe(subscriber_id)
+        logger.info(f"WebSocket disconnected for workflow execution {execution_id}: {subscriber_id}")
+
+
+@router.websocket("/workflows/steps/{step_id}")
+async def websocket_workflow_step_stream(websocket: WebSocket, step_id: str):
+    """Subscribe to real-time events for a specific workflow step."""
+    
+    await websocket.accept()
+    
+    subscriber_id = f"ws_workflow_step_{step_id}_{uuid.uuid4()}"
+    broadcaster = get_event_broadcaster()
+    
+    logger.info(f"WebSocket connected for workflow step {step_id}: {subscriber_id}")
+    active_connections.add(subscriber_id)
+    
+    try:
+        # Subscribe to step-specific channel
+        event_queue = await broadcaster.subscribe(
+            subscriber_id,
+            [f"workflow-step:{step_id}"],
+        )
+        
+        # Send events to WebSocket client
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    event_queue.get(),
+                    timeout=60,  # Connection keep-alive timeout
+                )
+                
+                await websocket.send_json(event)
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "workflow_step_id": step_id,
+                })
+            except Exception as e:
+                logger.error(f"Error sending workflow step event: {e}")
+                break
+    
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for workflow step {step_id}")
+    except Exception as e:
+        logger.error(f"WebSocket error for workflow step {step_id}: {e}")
+    
+    finally:
+        active_connections.discard(subscriber_id)
+        await broadcaster.unsubscribe(subscriber_id)
+        logger.info(f"WebSocket disconnected for workflow step {step_id}: {subscriber_id}")
+
+
+@router.websocket("/workflows/stream")
+async def websocket_workflows_all_stream(websocket: WebSocket):
+    """Subscribe to all workflow events across all workflows."""
+    
+    await websocket.accept()
+    
+    subscriber_id = f"ws_workflows_stream_{uuid.uuid4()}"
+    broadcaster = get_event_broadcaster()
+    
+    logger.info(f"WebSocket connected to workflows global stream: {subscriber_id}")
+    active_connections.add(subscriber_id)
+    
+    try:
+        # Subscribe to all workflow events
+        event_queue = await broadcaster.subscribe(
+            subscriber_id,
+            ["workflows"],  # Add workflows channel to events.py broadcaster
+        )
+        
+        # Send events to WebSocket client
+        while True:
+            try:
+                event = await asyncio.wait_for(
+                    event_queue.get(),
+                    timeout=60,  # Connection keep-alive timeout
+                )
+                
+                await websocket.send_json(event)
+            except asyncio.TimeoutError:
+                # Send heartbeat
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "timestamp": asyncio.get_event_loop().time(),
+                    "stream": "workflows",
+                })
+            except Exception as e:
+                logger.error(f"Error sending workflows stream event: {e}")
+                break
+    
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected from workflows global stream")
+    except Exception as e:
+        logger.error(f"WebSocket error for workflows global stream: {e}")
+    
+    finally:
+        active_connections.discard(subscriber_id)
+        await broadcaster.unsubscribe(subscriber_id)
+        logger.info(f"WebSocket disconnected from workflows global stream: {subscriber_id}")
+
+
 __all__ = ['router']

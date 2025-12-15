@@ -8,6 +8,7 @@ All operations are scoped to the active workspace (see :func:`get_workspace_cont
 
 import logging
 from typing import Optional
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, and_
@@ -328,13 +329,13 @@ async def delete_workflow(
     return {"status": "deleted", "workflow_id": workflow_id}
 
 
-@router.post("/{workflow_id}/execute", response_model=WorkflowExecutionResponse)
+@router.post("/{workflow_id}/execute", response_model=dict)
 async def execute_workflow(
     workflow_id: str,
     execution_request: WorkflowExecutionCreate,
     ctx: WorkspaceContext = Depends(get_workspace_context),
-) -> WorkflowExecutionResponse:
-    """Start a workflow execution."""
+) -> dict:
+    """Start a workflow execution using the workflow engine."""
 
     session = ctx.session
 
@@ -357,30 +358,146 @@ async def execute_workflow(
     if not db_workflow.is_active:
         raise HTTPException(status_code=400, detail="Cannot execute inactive workflow")
 
-    # Get next execution number
-    execution_count_result = await session.execute(
-        select(func.count()).select_from(WorkflowExecution).where(
-            WorkflowExecution.workflow_id == workflow_id
+    # Check if workflow integration is available
+    if not hasattr(ctx.app.state, 'workflow_integration') or ctx.app.state.workflow_integration is None:
+        raise HTTPException(status_code=503, detail="Workflow engine not available")
+
+    try:
+        # Execute workflow using the integration service
+        execution_result = await ctx.app.state.workflow_integration.execute_workflow(
+            workflow_id=workflow_id,
+            workspace_id=ctx.workspace.id,
+            project_id=db_workflow.project_id,
+            input_variables=execution_request.input_variables,
+            execution_metadata={
+                "requested_by": execution_request.metadata.get("requested_by", "api"),
+                "source": "api_endpoint",
+            },
+        )
+
+        logger.info("Workflow execution submitted: %s", execution_result)
+
+        return {
+            "status": "submitted",
+            "execution_id": execution_result,
+            "message": "Workflow execution started successfully",
+            "workflow_id": workflow_id,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to execute workflow {workflow_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to execute workflow: {str(e)}")
+
+
+@router.post("/executions/{execution_id}/cancel", response_model=dict)
+async def cancel_workflow_execution(
+    execution_id: str,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> dict:
+    """Cancel a running workflow execution."""
+
+    logger.info("Cancelling workflow execution (workspace_id=%s): %s", ctx.workspace.id, execution_id)
+
+    # Check if workflow integration is available
+    if not hasattr(ctx.app.state, 'workflow_integration') or ctx.app.state.workflow_integration is None:
+        raise HTTPException(status_code=503, detail="Workflow engine not available")
+
+    try:
+        # Cancel workflow execution
+        success = await ctx.app.state.workflow_integration.cancel_workflow_execution(execution_id)
+
+        if success:
+            return {
+                "status": "cancelled",
+                "execution_id": execution_id,
+                "message": "Workflow execution cancelled successfully",
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Workflow execution not found or not running")
+
+    except Exception as e:
+        logger.error(f"Failed to cancel workflow execution {execution_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel workflow execution: {str(e)}")
+
+
+@router.get("/executions/{execution_id}/status", response_model=dict)
+async def get_workflow_execution_status(
+    execution_id: str,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> dict:
+    """Get the status of a workflow execution."""
+
+    session = ctx.session
+
+    logger.info("Getting workflow execution status (workspace_id=%s): %s", ctx.workspace.id, execution_id)
+
+    # Get execution from database
+    result = await session.execute(
+        select(WorkflowExecution).where(
+            WorkflowExecution.id == execution_id,
+            WorkflowExecution.workspace_id == ctx.workspace.id
         )
     )
-    execution_number = execution_count_result.scalar_one() + 1
+    execution = result.scalar_one_or_none()
 
-    # Create execution
-    db_execution = WorkflowExecution(
-        workflow_id=workflow_id,
-        workspace_id=ctx.workspace.id,
-        project_id=db_workflow.project_id,
-        execution_number=execution_number,
-        status=WorkflowStatus.PENDING,
-        input_variables=execution_request.input_variables or {},
-        meta_data={},
+    if execution is None:
+        raise HTTPException(status_code=404, detail="Workflow execution not found")
+
+    return {
+        "execution_id": execution.id,
+        "workflow_id": execution.workflow_id,
+        "status": execution.status.value,
+        "started_at": execution.started_at.isoformat() if execution.started_at else None,
+        "completed_at": execution.completed_at.isoformat() if execution.completed_at else None,
+        "duration": execution.duration,
+        "error_message": execution.error_message,
+        "results": execution.results,
+    }
+
+
+@router.get("/executions/stats", response_model=dict)
+async def get_workflow_execution_stats(
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> dict:
+    """Get workflow execution statistics."""
+
+    session = ctx.session
+
+    logger.info("Getting workflow execution stats (workspace_id=%s)", ctx.workspace.id)
+
+    # Get execution counts by status
+    status_counts_result = await session.execute(
+        select(WorkflowExecution.status, func.count(WorkflowExecution.id))
+        .where(WorkflowExecution.workspace_id == ctx.workspace.id)
+        .group_by(WorkflowExecution.status)
     )
+    status_counts = dict(status_counts_result.all())
 
-    session.add(db_execution)
-    await session.flush()
+    # Get total executions
+    total_result = await session.execute(
+        select(func.count(WorkflowExecution.id))
+        .where(WorkflowExecution.workspace_id == ctx.workspace.id)
+    )
+    total_executions = total_result.scalar()
 
-    logger.info("Workflow execution created: %s", db_execution.id)
-    return WorkflowExecutionResponse.model_validate(db_execution)
+    # Get recent executions (last 24 hours)
+    recent_result = await session.execute(
+        select(func.count(WorkflowExecution.id))
+        .where(
+            WorkflowExecution.workspace_id == ctx.workspace.id,
+            WorkflowExecution.started_at >= datetime.utcnow() - timedelta(hours=24)
+        )
+    )
+    recent_executions = recent_result.scalar()
+
+    return {
+        "total_executions": total_executions,
+        "recent_executions_24h": recent_executions,
+        "status_counts": {status.value: count for status, count in status_counts.items()},
+        "workflow_engine_stats": getattr(ctx.app.state, 'workflow_integration', {}).get_integration_stats() 
+                                if hasattr(ctx.app.state, 'workflow_integration') and ctx.app.state.workflow_integration 
+                                else {},
+    }
 
 
 @router.get("/{workflow_id}/executions", response_model=WorkflowExecutionListResponse)

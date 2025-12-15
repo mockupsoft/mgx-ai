@@ -123,6 +123,14 @@ class EventBroadcaster:
         if getattr(event, "workspace_id", None):
             channels.add(f"workspace:{event.workspace_id}")
 
+        # Workflow-specific channels
+        if getattr(event, "workflow_id", None):
+            channels.add(f"workflow:{event.workflow_id}")
+        if getattr(event, "workflow_execution_id", None):
+            channels.add(f"workflow-run:{event.workflow_execution_id}")
+        if getattr(event, "workflow_step_id", None):
+            channels.add(f"workflow-step:{event.workflow_step_id}")
+
         channels.add("all")  # Always publish to "all"
         
         event_dict = event.model_dump(mode='json')

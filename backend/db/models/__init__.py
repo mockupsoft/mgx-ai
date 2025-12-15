@@ -31,6 +31,16 @@ from .entities import (
     Task,
     TaskRun,
     Workspace,
+    WorkflowDefinition,
+    WorkflowStep,
+    WorkflowVariable,
+    WorkflowExecution,
+    WorkflowStepExecution,
+)
+from .enums import (
+    WorkflowStatus,
+    WorkflowStepStatus,
+    WorkflowStepType,
 )
 
 __all__ = [
@@ -47,6 +57,11 @@ __all__ = [
     "AgentContext",
     "AgentContextVersion",
     "AgentMessage",
+    "WorkflowDefinition",
+    "WorkflowStep",
+    "WorkflowVariable",
+    "WorkflowExecution",
+    "WorkflowStepExecution",
     "TaskStatus",
     "RunStatus",
     "MetricType",
@@ -56,4 +71,7 @@ __all__ = [
     "AgentStatus",
     "AgentMessageDirection",
     "ContextRollbackState",
+    "WorkflowStatus",
+    "WorkflowStepStatus",
+    "WorkflowStepType",
 ]
