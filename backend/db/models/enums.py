@@ -102,3 +102,35 @@ class ContextRollbackState(str, Enum):
     PENDING = "pending"  # Rollback is pending
     SUCCESS = "success"  # Rollback succeeded
     FAILED = "failed"  # Rollback failed
+
+
+class WorkflowStatus(str, Enum):
+    """Workflow execution status."""
+
+    PENDING = "pending"  # Workflow is queued for execution
+    RUNNING = "running"  # Workflow is currently executing
+    COMPLETED = "completed"  # Workflow completed successfully
+    FAILED = "failed"  # Workflow failed with error
+    CANCELLED = "cancelled"  # Workflow was cancelled
+    TIMEOUT = "timeout"  # Workflow timed out
+
+
+class WorkflowStepStatus(str, Enum):
+    """Workflow step execution status."""
+
+    PENDING = "pending"  # Step is queued for execution
+    RUNNING = "running"  # Step is currently executing
+    COMPLETED = "completed"  # Step completed successfully
+    FAILED = "failed"  # Step failed with error
+    CANCELLED = "cancelled"  # Step was cancelled
+    SKIPPED = "skipped"  # Step was skipped
+
+
+class WorkflowStepType(str, Enum):
+    """Types of workflow steps."""
+
+    TASK = "task"  # Simple task execution
+    CONDITION = "condition"  # Conditional branching
+    PARALLEL = "parallel"  # Parallel execution
+    SEQUENTIAL = "sequential"  # Sequential steps
+    AGENT = "agent"  # Agent execution

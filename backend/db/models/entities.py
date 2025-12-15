@@ -41,6 +41,9 @@ from .enums import (
     RepositoryProvider,
     RunStatus,
     TaskStatus,
+    WorkflowStatus,
+    WorkflowStepStatus,
+    WorkflowStepType,
 )
 
 
@@ -550,6 +553,231 @@ class AgentMessage(Base, TimestampMixin, SerializationMixin):
         )
 
 
+class WorkflowDefinition(Base, TimestampMixin, SerializationMixin):
+    """Workflow definition with steps and configuration."""
+
+    __tablename__ = "workflow_definitions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, comment="Workflow name")
+    description = Column(Text, comment="Workflow description")
+    
+    version = Column(Integer, nullable=False, default=1, comment="Version number")
+    is_active = Column(Boolean, default=True, nullable=False, index=True, comment="Whether the workflow is active")
+
+    config = Column(JSON, nullable=False, default=dict, comment="Workflow configuration")
+    timeout_seconds = Column(Integer, default=3600, comment="Default timeout in seconds")
+    max_retries = Column(Integer, default=3, comment="Default maximum retries per step")
+
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_workflow_definitions_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_workflow_definitions_workspace_project", "workspace_id", "project_id"),
+        Index("idx_workflow_definitions_name_version", "name", "version"),
+        UniqueConstraint("workspace_id", "project_id", "name", "version", name="uq_workflow_definitions_unique"),
+    )
+
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    steps = relationship("WorkflowStep", back_populates="workflow", cascade="all, delete-orphan")
+    variables = relationship("WorkflowVariable", back_populates="workflow", cascade="all, delete-orphan")
+    executions = relationship("WorkflowExecution", back_populates="definition", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<WorkflowDefinition(id={self.id}, name='{self.name}', version={self.version})>"
+
+
+class WorkflowStep(Base, TimestampMixin, SerializationMixin):
+    """Individual step within a workflow definition."""
+
+    __tablename__ = "workflow_steps"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workflow_id = Column(String(36), ForeignKey("workflow_definitions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, comment="Step name")
+    step_type = Column(SQLEnum(WorkflowStepType), nullable=False, comment="Type of step")
+    step_order = Column(Integer, nullable=False, comment="Order in execution sequence")
+
+    config = Column(JSON, nullable=False, default=dict, comment="Step configuration")
+    timeout_seconds = Column(Integer, comment="Step-specific timeout override")
+    max_retries = Column(Integer, comment="Step-specific retry override")
+
+    # Agent requirements
+    agent_definition_id = Column(String(36), ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=True, index=True)
+    agent_instance_id = Column(String(36), ForeignKey("agent_instances.id", ondelete="RESTRICT"), nullable=True, index=True)
+
+    # Dependencies
+    depends_on_steps = Column(JSON, nullable=False, default=list, comment="List of step IDs this step depends on")
+    condition_expression = Column(Text, comment="Conditional expression for step execution")
+
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("idx_workflow_steps_workflow_order", "workflow_id", "step_order"),
+        Index("idx_workflow_steps_agent_definition", "agent_definition_id"),
+        Index("idx_workflow_steps_agent_instance", "agent_instance_id"),
+        UniqueConstraint("workflow_id", "name", name="uq_workflow_steps_workflow_name"),
+    )
+
+    workflow = relationship("WorkflowDefinition", back_populates="steps")
+    agent_definition = relationship("AgentDefinition")
+    agent_instance = relationship("AgentInstance")
+    executions = relationship("WorkflowStepExecution", back_populates="step", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<WorkflowStep(id={self.id}, name='{self.name}', type='{self.step_type}', order={self.step_order})>"
+
+
+class WorkflowVariable(Base, TimestampMixin, SerializationMixin):
+    """Variable definitions for workflows."""
+
+    __tablename__ = "workflow_variables"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workflow_id = Column(String(36), ForeignKey("workflow_definitions.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, comment="Variable name")
+    data_type = Column(String(50), nullable=False, comment="Data type (string, int, float, bool, json)")
+    is_required = Column(Boolean, default=False, nullable=False, comment="Whether the variable is required")
+
+    default_value = Column(JSON, comment="Default value")
+    description = Column(Text, comment="Variable description")
+
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("idx_workflow_variables_workflow", "workflow_id"),
+        UniqueConstraint("workflow_id", "name", name="uq_workflow_variables_workflow_name"),
+    )
+
+    workflow = relationship("WorkflowDefinition", back_populates="variables")
+
+    def __repr__(self) -> str:
+        return f"<WorkflowVariable(id={self.id}, name='{self.name}', type='{self.data_type}')>"
+
+
+class WorkflowExecution(Base, TimestampMixin, SerializationMixin):
+    """Individual workflow execution tracking."""
+
+    __tablename__ = "workflow_executions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workflow_id = Column(String(36), ForeignKey("workflow_definitions.id", ondelete="RESTRICT"), nullable=False, index=True)
+    
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    execution_number = Column(Integer, nullable=False, comment="Sequence number within workflow")
+    status = Column(SQLEnum(WorkflowStatus), nullable=False, default=WorkflowStatus.PENDING, index=True)
+
+    # Input parameters
+    input_variables = Column(JSON, comment="Input variables passed to the workflow")
+
+    # Results and tracking
+    results = Column(JSON, comment="Execution results")
+    started_at = Column(DateTime(timezone=True), comment="Execution start time")
+    completed_at = Column(DateTime(timezone=True), comment="Execution completion time")
+    duration = Column(Float, comment="Duration in seconds")
+
+    error_message = Column(Text, comment="Error message if failed")
+    error_details = Column(JSON, comment="Detailed error information")
+
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_workflow_executions_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_workflow_executions_workflow", "workflow_id"),
+        Index("idx_workflow_executions_status", "status"),
+        Index("idx_workflow_executions_started_at", "started_at"),
+        Index("idx_workflow_executions_workspace_status", "workspace_id", "status"),
+    )
+
+    definition = relationship("WorkflowDefinition", back_populates="executions")
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    step_executions = relationship("WorkflowStepExecution", back_populates="execution", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<WorkflowExecution(id={self.id}, workflow_id='{self.workflow_id}', status='{self.status}')>"
+
+    @property
+    def is_success(self) -> bool:
+        return self.status == WorkflowStatus.COMPLETED
+
+    @property
+    def is_failed(self) -> bool:
+        return self.status == WorkflowStatus.FAILED
+
+
+class WorkflowStepExecution(Base, TimestampMixin, SerializationMixin):
+    """Individual step execution tracking."""
+
+    __tablename__ = "workflow_step_executions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    execution_id = Column(String(36), ForeignKey("workflow_executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    step_id = Column(String(36), ForeignKey("workflow_steps.id", ondelete="RESTRICT"), nullable=False, index=True)
+
+    status = Column(SQLEnum(WorkflowStepStatus), nullable=False, default=WorkflowStepStatus.PENDING, index=True)
+
+    # Step execution data
+    input_data = Column(JSON, comment="Input data passed to the step")
+    output_data = Column(JSON, comment="Output data from the step")
+    results = Column(JSON, comment="Step execution results")
+
+    started_at = Column(DateTime(timezone=True), comment="Step start time")
+    completed_at = Column(DateTime(timezone=True), comment="Step completion time")
+    duration = Column(Float, comment="Duration in seconds")
+
+    retry_count = Column(Integer, default=0, comment="Number of retries attempted")
+    error_message = Column(Text, comment="Error message if failed")
+    error_details = Column(JSON, comment="Detailed error information")
+
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("idx_workflow_step_executions_execution", "execution_id"),
+        Index("idx_workflow_step_executions_step", "step_id"),
+        Index("idx_workflow_step_executions_status", "status"),
+        Index("idx_workflow_step_executions_started_at", "started_at"),
+        UniqueConstraint("execution_id", "step_id", name="uq_workflow_step_executions_execution_step"),
+    )
+
+    execution = relationship("WorkflowExecution", back_populates="step_executions")
+    step = relationship("WorkflowStep", back_populates="executions")
+
+    def __repr__(self) -> str:
+        return f"<WorkflowStepExecution(id={self.id}, step_id='{self.step_id}', status='{self.status}')>"
+
+    @property
+    def is_success(self) -> bool:
+        return self.status == WorkflowStepStatus.COMPLETED
+
+    @property
+    def is_failed(self) -> bool:
+        return self.status == WorkflowStepStatus.FAILED
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -563,6 +791,11 @@ __all__ = [
     "AgentContext",
     "AgentContextVersion",
     "AgentMessage",
+    "WorkflowDefinition",
+    "WorkflowStep",
+    "WorkflowVariable",
+    "WorkflowExecution",
+    "WorkflowStepExecution",
     "TaskStatus",
     "RunStatus",
     "MetricType",
@@ -571,4 +804,7 @@ __all__ = [
     "RepositoryLinkStatus",
     "AgentStatus",
     "ContextRollbackState",
+    "WorkflowStatus",
+    "WorkflowStepStatus",
+    "WorkflowStepType",
 ]

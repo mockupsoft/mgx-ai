@@ -32,6 +32,7 @@ from backend.routers import (
     runs_router,
     metrics_router,
     agents_router,
+    workflows_router,
     ws_router,
 )
 
@@ -195,6 +196,9 @@ def create_app() -> FastAPI:
 
     app.include_router(agents_router)
     logger.info("✓ Registered: agents_router")
+    
+    app.include_router(workflows_router)
+    logger.info("✓ Registered: workflows_router")
     
     app.include_router(ws_router)
     logger.info("✓ Registered: ws_router (WebSocket)")

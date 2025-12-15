@@ -12,6 +12,7 @@ from .runs import router as runs_router
 from .tasks import router as tasks_router
 from .agents import router as agents_router
 from .workspaces import router as workspaces_router
+from .workflows import router as workflows_router
 from .ws import router as ws_router
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "runs_router",
     "metrics_router",
     "agents_router",
+    "workflows_router",
     "ws_router",
 ]
