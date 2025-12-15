@@ -417,6 +417,42 @@ class AgentMessageDirectionEnum(str, Enum):
     SYSTEM = "system"
 
 
+class ContextRollbackStateEnum(str, Enum):
+    """Context rollback state for responses."""
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class WorkflowStatusEnum(str, Enum):
+    """Workflow status for responses."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
+
+
+class WorkflowStepStatusEnum(str, Enum):
+    """Workflow step status for responses."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    SKIPPED = "skipped"
+
+
+class WorkflowStepTypeEnum(str, Enum):
+    """Workflow step type for responses."""
+    TASK = "task"
+    CONDITION = "condition"
+    PARALLEL = "parallel"
+    SEQUENTIAL = "sequential"
+    AGENT = "agent"
+
+
 class AgentDefinitionResponse(BaseModel):
     id: str
     name: str
@@ -703,11 +739,234 @@ class HealthStatus(BaseModel):
     checks: Optional[Dict[str, Any]] = None
 
 
+# ============================================
+# Workflow Schemas
+# ============================================
+
+class WorkflowVariableCreate(BaseModel):
+    """Schema for creating workflow variables."""
+    name: str = Field(..., min_length=1, max_length=255, description="Variable name")
+    data_type: str = Field(..., description="Data type (string, int, float, bool, json)")
+    is_required: bool = Field(False, description="Whether the variable is required")
+    default_value: Optional[Dict[str, Any]] = Field(None, description="Default value")
+    description: Optional[str] = Field(None, description="Variable description")
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+
+class WorkflowStepCreate(BaseModel):
+    """Schema for creating workflow steps."""
+    name: str = Field(..., min_length=1, max_length=255, description="Step name")
+    step_type: WorkflowStepTypeEnum = Field(..., description="Type of step")
+    step_order: int = Field(..., ge=1, description="Order in execution sequence")
+    
+    config: Dict[str, Any] = Field(default_factory=dict, description="Step configuration")
+    timeout_seconds: Optional[int] = Field(None, description="Step-specific timeout override")
+    max_retries: Optional[int] = Field(None, description="Step-specific retry override")
+    
+    # Agent requirements
+    agent_definition_id: Optional[str] = Field(None, description="Required agent definition ID")
+    agent_instance_id: Optional[str] = Field(None, description="Required agent instance ID")
+    
+    # Dependencies
+    depends_on_steps: List[str] = Field(default_factory=list, description="List of step IDs this step depends on")
+    condition_expression: Optional[str] = Field(None, description="Conditional expression for step execution")
+    
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+
+class WorkflowCreate(BaseModel):
+    """Schema for creating workflows."""
+    name: str = Field(..., min_length=1, max_length=255, description="Workflow name")
+    description: Optional[str] = Field(None, description="Workflow description")
+    
+    project_id: Optional[str] = Field(None, description="Project ID within the active workspace")
+    
+    config: Dict[str, Any] = Field(default_factory=dict, description="Workflow configuration")
+    timeout_seconds: Optional[int] = Field(3600, ge=1, description="Default timeout in seconds")
+    max_retries: Optional[int] = Field(3, ge=0, description="Default maximum retries per step")
+    
+    # Steps and variables
+    steps: List[WorkflowStepCreate] = Field(default_factory=list, description="Workflow steps")
+    variables: List[WorkflowVariableCreate] = Field(default_factory=list, description="Workflow variables")
+    
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+
+class WorkflowUpdate(BaseModel):
+    """Schema for updating workflows."""
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
+    description: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    timeout_seconds: Optional[int] = Field(None, ge=1)
+    max_retries: Optional[int] = Field(None, ge=0)
+    is_active: Optional[bool] = None
+    meta_data: Optional[Dict[str, Any]] = None
+
+
+class WorkflowVariableResponse(BaseModel):
+    """Schema for workflow variable responses."""
+    id: str
+    workflow_id: str
+    name: str
+    data_type: str
+    is_required: bool
+    default_value: Optional[Dict[str, Any]] = None
+    description: Optional[str] = None
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowStepResponse(BaseModel):
+    """Schema for workflow step responses."""
+    id: str
+    workflow_id: str
+    name: str
+    step_type: WorkflowStepTypeEnum
+    step_order: int
+    config: Dict[str, Any]
+    timeout_seconds: Optional[int] = None
+    max_retries: Optional[int] = None
+    agent_definition_id: Optional[str] = None
+    agent_instance_id: Optional[str] = None
+    depends_on_steps: List[str]
+    condition_expression: Optional[str] = None
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowResponse(BaseModel):
+    """Schema for workflow responses."""
+    id: str
+    workspace_id: str
+    project_id: str
+    name: str
+    description: Optional[str] = None
+    version: int
+    is_active: bool
+    config: Dict[str, Any]
+    timeout_seconds: int
+    max_retries: int
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    # Optional embedded data
+    steps: List[WorkflowStepResponse] = Field(default_factory=list)
+    variables: List[WorkflowVariableResponse] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowListResponse(BaseModel):
+    """Schema for workflow list responses."""
+    items: List[WorkflowResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+class WorkflowExecutionCreate(BaseModel):
+    """Schema for creating workflow executions."""
+    input_variables: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Input variables for the workflow")
+
+
+class WorkflowStepExecutionResponse(BaseModel):
+    """Schema for workflow step execution responses."""
+    id: str
+    execution_id: str
+    step_id: str
+    status: WorkflowStepStatusEnum
+    input_data: Optional[Dict[str, Any]] = None
+    output_data: Optional[Dict[str, Any]] = None
+    results: Optional[Dict[str, Any]] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    duration: Optional[float] = None
+    retry_count: int
+    error_message: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    # Optional embedded data
+    step: Optional[WorkflowStepResponse] = None
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowExecutionResponse(BaseModel):
+    """Schema for workflow execution responses."""
+    id: str
+    workflow_id: str
+    workspace_id: str
+    project_id: str
+    execution_number: int
+    status: WorkflowStatusEnum
+    input_variables: Optional[Dict[str, Any]] = None
+    results: Optional[Dict[str, Any]] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    duration: Optional[float] = None
+    error_message: Optional[str] = None
+    error_details: Optional[Dict[str, Any]] = None
+    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    created_at: datetime
+    updated_at: datetime
+
+    # Optional embedded data
+    definition: Optional[WorkflowResponse] = None
+    step_executions: List[WorkflowStepExecutionResponse] = Field(default_factory=list)
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowExecutionListResponse(BaseModel):
+    """Schema for workflow execution list responses."""
+    items: List[WorkflowExecutionResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+class WorkflowValidationError(BaseModel):
+    """Schema for workflow validation errors."""
+    step_id: Optional[str] = None
+    step_name: Optional[str] = None
+    error_type: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+
+class WorkflowValidationResult(BaseModel):
+    """Schema for workflow validation results."""
+    is_valid: bool
+    errors: List[WorkflowValidationError] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+
 __all__ = [
     # Enums
     'TaskStatusEnum',
     'RunStatusEnum',
     'EventTypeEnum',
+    'AgentStatusEnum',
+    'AgentMessageDirectionEnum',
+    'ContextRollbackStateEnum',
+    'WorkflowStatusEnum',
+    'WorkflowStepStatusEnum',
+    'WorkflowStepTypeEnum',
     # Workspace/Project schemas
     'WorkspaceCreate',
     'WorkspaceSummary',
@@ -728,8 +987,6 @@ __all__ = [
     'RunResponse',
     'RunListResponse',
     # Agent schemas
-    'AgentStatusEnum',
-    'AgentMessageDirectionEnum',
     'AgentDefinitionResponse',
     'AgentInstanceResponse',
     'AgentContextResponse',
@@ -741,6 +998,21 @@ __all__ = [
     'AgentContextUpdateRequest',
     'AgentContextRollbackRequest',
     'AgentSendMessageRequest',
+    # Workflow schemas
+    'WorkflowVariableCreate',
+    'WorkflowStepCreate',
+    'WorkflowCreate',
+    'WorkflowUpdate',
+    'WorkflowVariableResponse',
+    'WorkflowStepResponse',
+    'WorkflowResponse',
+    'WorkflowListResponse',
+    'WorkflowExecutionCreate',
+    'WorkflowStepExecutionResponse',
+    'WorkflowExecutionResponse',
+    'WorkflowExecutionListResponse',
+    'WorkflowValidationError',
+    'WorkflowValidationResult',
     # Metric schemas
     'MetricResponse',
     'MetricListResponse',
