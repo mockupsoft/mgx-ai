@@ -1,0 +1,89 @@
+{
+  "name": "Conditional Workflow",
+  "description": "A workflow that branches based on input conditions",
+  "config": {},
+  "timeout_seconds": 3600,
+  "max_retries": 3,
+  "variables": [
+    {
+      "name": "input_value",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input value that determines the workflow path"
+    },
+    {
+      "name": "mode",
+      "data_type": "string",
+      "is_required": true,
+      "description": "Processing mode: fast, standard, or thorough"
+    }
+  ],
+  "steps": [
+    {
+      "name": "evaluate_condition",
+      "step_type": "condition",
+      "step_order": 1,
+      "config": {
+        "description": "Evaluate input and determine processing path"
+      },
+      "depends_on_steps": [],
+      "meta_data": {
+        "category": "routing"
+      }
+    },
+    {
+      "name": "fast_process",
+      "step_type": "task",
+      "step_order": 2,
+      "config": {
+        "description": "Fast processing path",
+        "timeout": 600
+      },
+      "depends_on_steps": ["evaluate_condition"],
+      "condition_expression": "mode == 'fast'",
+      "meta_data": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "standard_process",
+      "step_type": "task",
+      "step_order": 2,
+      "config": {
+        "description": "Standard processing path",
+        "timeout": 1800
+      },
+      "depends_on_steps": ["evaluate_condition"],
+      "condition_expression": "mode == 'standard'",
+      "meta_data": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "thorough_process",
+      "step_type": "task",
+      "step_order": 2,
+      "config": {
+        "description": "Thorough processing path",
+        "timeout": 3600
+      },
+      "depends_on_steps": ["evaluate_condition"],
+      "condition_expression": "mode == 'thorough'",
+      "meta_data": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "aggregate_results",
+      "step_type": "task",
+      "step_order": 3,
+      "config": {
+        "description": "Aggregate results from all processing paths"
+      },
+      "depends_on_steps": ["fast_process", "standard_process", "thorough_process"],
+      "meta_data": {
+        "category": "finalization"
+      }
+    }
+  ]
+}

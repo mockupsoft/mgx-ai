@@ -1012,6 +1012,71 @@ class WorkflowValidationResult(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
+# ============================================
+# Workflow Telemetry Schemas
+# ============================================
+
+class WorkflowMetricsSummary(BaseModel):
+    """Summary of workflow execution metrics."""
+    total_duration_seconds: float = Field(..., description="Total execution duration in seconds")
+    success_rate: float = Field(..., ge=0, le=100, description="Success rate as percentage")
+    total_executions: int = Field(..., ge=0, description="Total number of executions")
+    successful_executions: int = Field(..., ge=0, description="Number of successful executions")
+    failed_executions: int = Field(..., ge=0, description="Number of failed executions")
+    average_duration_seconds: float = Field(..., ge=0, description="Average execution duration")
+    min_duration_seconds: Optional[float] = Field(None, ge=0, description="Minimum execution duration")
+    max_duration_seconds: Optional[float] = Field(None, ge=0, description="Maximum execution duration")
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowStepTimelineEntry(BaseModel):
+    """Timeline entry for a single step execution."""
+    step_id: str = Field(..., description="ID of the step")
+    step_name: str = Field(..., description="Name of the step")
+    step_order: int = Field(..., description="Order in workflow")
+    status: WorkflowStepStatusEnum = Field(..., description="Step execution status")
+    started_at: Optional[datetime] = Field(None, description="Step start time")
+    completed_at: Optional[datetime] = Field(None, description="Step completion time")
+    duration_seconds: Optional[float] = Field(None, ge=0, description="Step duration in seconds")
+    retry_count: int = Field(default=0, ge=0, description="Number of retries")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    input_summary: Optional[Dict[str, Any]] = Field(None, description="Summary of step input (truncated)")
+    output_summary: Optional[Dict[str, Any]] = Field(None, description="Summary of step output (truncated)")
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowExecutionTimeline(BaseModel):
+    """Complete timeline for a workflow execution."""
+    execution_id: str = Field(..., description="Execution ID")
+    workflow_id: str = Field(..., description="Workflow ID")
+    status: WorkflowStatusEnum = Field(..., description="Overall execution status")
+    started_at: Optional[datetime] = Field(None, description="Execution start time")
+    completed_at: Optional[datetime] = Field(None, description="Execution completion time")
+    total_duration_seconds: Optional[float] = Field(None, ge=0, description="Total execution duration")
+    step_count: int = Field(..., ge=0, description="Total number of steps")
+    completed_step_count: int = Field(..., ge=0, description="Number of completed steps")
+    failed_step_count: int = Field(..., ge=0, description="Number of failed steps")
+    skipped_step_count: int = Field(..., ge=0, description="Number of skipped steps")
+    step_timeline: List[WorkflowStepTimelineEntry] = Field(default_factory=list, description="Timeline entries for each step")
+    error_message: Optional[str] = Field(None, description="Execution error message if failed")
+
+    class Config:
+        from_attributes = True
+
+
+class WorkflowExecutionDetailedResponse(WorkflowExecutionResponse):
+    """Extended workflow execution response with full timeline and metrics."""
+    timeline: Optional[WorkflowExecutionTimeline] = Field(None, description="Detailed execution timeline")
+    step_timelines: List[WorkflowStepTimelineEntry] = Field(default_factory=list, description="Timeline entries for each step")
+
+    class Config:
+        from_attributes = True
+
+
 __all__ = [
     # Enums
     'TaskStatusEnum',
@@ -1069,6 +1134,10 @@ __all__ = [
     'WorkflowExecutionListResponse',
     'WorkflowValidationError',
     'WorkflowValidationResult',
+    'WorkflowMetricsSummary',
+    'WorkflowStepTimelineEntry',
+    'WorkflowExecutionTimeline',
+    'WorkflowExecutionDetailedResponse',
     # Metric schemas
     'MetricResponse',
     'MetricListResponse',

@@ -8,13 +8,13 @@ All operations are scoped to the active workspace (see :func:`get_workspace_cont
 
 import logging
 from typing import Optional
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select, and_
 from sqlalchemy.orm import selectinload
 
-from backend.db.models import Project, WorkflowDefinition, WorkflowExecution, WorkflowStep, WorkflowVariable
+from backend.db.models import Project, WorkflowDefinition, WorkflowExecution, WorkflowStep, WorkflowVariable, WorkflowStepExecution
 from backend.db.models.enums import WorkflowStatus, WorkflowStepStatus, WorkflowStepType
 from backend.routers.deps import WorkspaceContext, get_workspace_context
 from backend.schemas import (
@@ -27,6 +27,10 @@ from backend.schemas import (
     WorkflowUpdate,
     WorkflowValidationResult,
     WorkflowStepTypeEnum,
+    WorkflowMetricsSummary,
+    WorkflowExecutionTimeline,
+    WorkflowStepTimelineEntry,
+    WorkflowExecutionDetailedResponse,
 )
 from backend.services.workflows.dependency_resolver import WorkflowDependencyResolver
 
@@ -590,6 +594,141 @@ async def get_workflow_execution(
         raise HTTPException(status_code=404, detail="Workflow execution not found")
 
     return WorkflowExecutionResponse.model_validate(db_execution)
+
+
+@router.get("/executions/{execution_id}/timeline", response_model=WorkflowExecutionTimeline)
+async def get_workflow_execution_timeline(
+    execution_id: str,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> WorkflowExecutionTimeline:
+    """Get detailed timeline and metrics for a workflow execution."""
+
+    session = ctx.session
+
+    logger.info("Getting workflow execution timeline (workspace_id=%s): %s", ctx.workspace.id, execution_id)
+
+    result = await session.execute(
+        select(WorkflowExecution)
+        .where(
+            WorkflowExecution.id == execution_id,
+            WorkflowExecution.workspace_id == ctx.workspace.id
+        )
+        .options(
+            selectinload(WorkflowExecution.definition),
+            selectinload(WorkflowExecution.step_executions).selectinload(WorkflowStepExecution.step),
+        )
+    )
+    db_execution = result.scalar_one_or_none()
+
+    if db_execution is None:
+        raise HTTPException(status_code=404, detail="Workflow execution not found")
+
+    # Calculate timeline entries for each step
+    step_timeline = []
+    completed_count = 0
+    failed_count = 0
+    skipped_count = 0
+
+    for step_exec in sorted(db_execution.step_executions, key=lambda x: x.step.step_order):
+        duration = None
+        if step_exec.started_at and step_exec.completed_at:
+            duration = (step_exec.completed_at - step_exec.started_at).total_seconds()
+
+        if step_exec.status == WorkflowStepStatus.COMPLETED:
+            completed_count += 1
+        elif step_exec.status == WorkflowStepStatus.FAILED:
+            failed_count += 1
+        elif step_exec.status == WorkflowStepStatus.SKIPPED:
+            skipped_count += 1
+
+        step_timeline.append(
+            WorkflowStepTimelineEntry(
+                step_id=step_exec.step_id,
+                step_name=step_exec.step.name,
+                step_order=step_exec.step.step_order,
+                status=step_exec.status.value,
+                started_at=step_exec.started_at,
+                completed_at=step_exec.completed_at,
+                duration_seconds=duration,
+                retry_count=step_exec.retry_count,
+                error_message=step_exec.error_message,
+                input_summary=step_exec.input_data,
+                output_summary=step_exec.output_data,
+            )
+        )
+
+    total_duration = None
+    if db_execution.started_at and db_execution.completed_at:
+        total_duration = (db_execution.completed_at - db_execution.started_at).total_seconds()
+
+    return WorkflowExecutionTimeline(
+        execution_id=db_execution.id,
+        workflow_id=db_execution.workflow_id,
+        status=db_execution.status.value,
+        started_at=db_execution.started_at,
+        completed_at=db_execution.completed_at,
+        total_duration_seconds=total_duration,
+        step_count=len(db_execution.step_executions),
+        completed_step_count=completed_count,
+        failed_step_count=failed_count,
+        skipped_step_count=skipped_count,
+        step_timeline=step_timeline,
+        error_message=db_execution.error_message,
+    )
+
+
+@router.get("/{workflow_id}/metrics", response_model=WorkflowMetricsSummary)
+async def get_workflow_metrics(
+    workflow_id: str,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> WorkflowMetricsSummary:
+    """Get aggregated metrics and statistics for a workflow."""
+
+    session = ctx.session
+
+    logger.info("Getting workflow metrics (workspace_id=%s): %s", ctx.workspace.id, workflow_id)
+
+    # Verify workflow exists and belongs to workspace
+    workflow_result = await session.execute(
+        select(WorkflowDefinition).where(
+            WorkflowDefinition.id == workflow_id,
+            WorkflowDefinition.workspace_id == ctx.workspace.id
+        )
+    )
+    workflow = workflow_result.scalar_one_or_none()
+    if workflow is None:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    # Get all executions for the workflow
+    executions_result = await session.execute(
+        select(WorkflowExecution).where(WorkflowExecution.workflow_id == workflow_id)
+    )
+    executions = executions_result.scalars().all()
+
+    # Calculate metrics
+    total_executions = len(executions)
+    successful_executions = sum(1 for e in executions if e.status == WorkflowStatus.COMPLETED)
+    failed_executions = sum(1 for e in executions if e.status == WorkflowStatus.FAILED)
+
+    success_rate = (successful_executions / total_executions * 100) if total_executions > 0 else 0
+
+    # Calculate durations
+    durations = [e.duration for e in executions if e.duration is not None]
+    total_duration = sum(durations) if durations else 0.0
+    average_duration = total_duration / len(durations) if durations else 0.0
+    min_duration = min(durations) if durations else None
+    max_duration = max(durations) if durations else None
+
+    return WorkflowMetricsSummary(
+        total_duration_seconds=total_duration,
+        success_rate=success_rate,
+        total_executions=total_executions,
+        successful_executions=successful_executions,
+        failed_executions=failed_executions,
+        average_duration_seconds=average_duration,
+        min_duration_seconds=min_duration,
+        max_duration_seconds=max_duration,
+    )
 
 
 @router.post("/validate", response_model=WorkflowValidationResult)

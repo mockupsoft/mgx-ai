@@ -168,7 +168,7 @@ Expected output (typical):
 
 ## Project status & roadmap
 
-MGX is organized into explicit implementation phases. Phases 1–8.3 are complete and stable; the roadmap section lists potential Phase 9+ work.
+MGX is organized into explicit implementation phases. Phases 1–10 are complete and stable; the roadmap section lists potential Phase 11+ work.
 
 ### Phase 1: Code review & quick fixes
 
@@ -412,7 +412,34 @@ Self-hosting:
 
 See: **[docs/CLI.md](docs/CLI.md)** and **[DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)**.
 
-#### Roadmap (Phase 9+)
+### Phase 10: Workflow Telemetry & Monitoring
+
+Phase 10 delivers comprehensive workflow execution telemetry, monitoring, and documentation.
+
+**Key deliverables:**
+
+- **Execution Timeline APIs**: Per-step metrics with duration, retry counts, and status tracking
+- **Aggregated Metrics**: Workflow success rates, duration statistics, and performance trends
+- **Example Workflows**: Four pre-built workflow templates (sequence, parallel, conditional, ETL)
+- **Workflow Seeding Script**: CLI to load example workflows into any workspace
+- **Comprehensive Documentation**: REST API reference, WebSocket event specs, dependency resolver rules
+- **Integration Tests**: End-to-end workflow execution tests with telemetry validation
+
+**Endpoints:**
+- `GET /api/workflows/executions/{execution_id}/timeline` - Detailed execution timeline with step metrics
+- `GET /api/workflows/{workflow_id}/metrics` - Aggregated workflow metrics and statistics
+- `GET /api/workflows/{workflow_id}/executions` - List executions with pagination/filtering
+- Plus all Phase 9 workflow CRUD endpoints
+
+**Resources:**
+- **[WORKFLOW_TELEMETRY.md](./WORKFLOW_TELEMETRY.md)** - Complete telemetry API guide with examples
+- **[BACKEND_README.md](./BACKEND_README.md#workflows-phase-10)** - Backend API reference
+- **[examples/workflows/](./examples/workflows/)** - Example workflow definitions
+- **[backend/scripts/seed_workflows.py](./backend/scripts/seed_workflows.py)** - Workflow seeding script
+
+See: **[WORKFLOW_TELEMETRY.md](./WORKFLOW_TELEMETRY.md)** for complete documentation.
+
+#### Roadmap (Phase 11+)
 
 - Authentication and authorization (JWT/RBAC)
 - Durable event bus (Kafka-first, replayable)
@@ -420,6 +447,7 @@ See: **[docs/CLI.md](docs/CLI.md)** and **[DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOY
 - Observability (OpenTelemetry)
 - Horizontal scaling and HA playbook
 - Kubernetes deployment option (Helm)
+- Advanced workflow features (error handlers, conditional loops, etc.)
 
 ---
 
