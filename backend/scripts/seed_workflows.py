@@ -66,7 +66,7 @@ async def seed_workflow(
             max_retries=workflow_def.get("max_retries", 3),
             steps=[],
             variables=[],
-            meta_data=workflow_def.get("meta_data", {}),
+            meta_data=workflow_def.get("metadata") or workflow_def.get("meta_data", {}),
         )
 
         # Add variables
@@ -79,7 +79,7 @@ async def seed_workflow(
                     is_required=var_def.get("is_required", False),
                     default_value=var_def.get("default_value"),
                     description=var_def.get("description"),
-                    meta_data=var_def.get("meta_data", {}),
+                    meta_data=var_def.get("metadata") or var_def.get("meta_data", {}),
                 )
             )
 
@@ -98,7 +98,7 @@ async def seed_workflow(
                     agent_instance_id=step_def.get("agent_instance_id"),
                     depends_on_steps=step_def.get("depends_on_steps", []),
                     condition_expression=step_def.get("condition_expression"),
-                    meta_data=step_def.get("meta_data", {}),
+                    meta_data=step_def.get("metadata") or step_def.get("meta_data", {}),
                 )
             )
 

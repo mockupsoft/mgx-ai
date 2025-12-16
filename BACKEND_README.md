@@ -151,96 +151,113 @@ Events are published to:
 
 ### Workflows (Phase 10)
 
-Workflow management API for defining, executing, and monitoring multi-step workflows.
+Phase 10 introduces a **workflow engine** for orchestrating multi-step pipelines (sequential, parallel, conditional) with multi-agent coordination, real-time WebSocket events, and telemetry.
 
-All endpoints are workspace-scoped via the standard workspace selector (headers/query):
+All workflow endpoints are workspace-scoped via the standard workspace selector:
+
 - Headers: `X-Workspace-Id` or `X-Workspace-Slug`
 - Query: `workspace_id` or `workspace_slug`
 
-**Workflow Management**
+#### Backend architecture
 
-- `GET /api/workflows/` - List workflows with pagination/filtering
-  - Query params: `skip` (default 0), `limit` (default 10, max 100), `project_id`, `is_active`
-- `POST /api/workflows/` - Create new workflow
-  - Request body: `WorkflowCreate` schema (see below)
-- `GET /api/workflows/{workflow_id}` - Get workflow details
-  - Query param: `include_steps` (default true)
-- `PATCH /api/workflows/{workflow_id}` - Update workflow metadata
-- `DELETE /api/workflows/{workflow_id}` - Delete workflow
-- `POST /api/workflows/validate` - Validate workflow definition without saving
+**Key modules**
 
-**Workflow Execution**
+- Router (REST): `backend/routers/workflows.py`
+- Router (WebSocket): `backend/routers/ws.py` (workflow channels)
+- Event bus: `backend/services/events.py` (in-memory pub/sub)
 
-- `POST /api/workflows/{workflow_id}/execute` - Start workflow execution
-  - Request body: `WorkflowExecutionCreate` (input variables)
-  - Returns: `{"status": "submitted", "execution_id": "..."}`
-- `GET /api/workflows/{workflow_id}/executions` - List executions for a workflow
-  - Query params: `skip`, `limit`, `status` (pending/running/completed/failed/cancelled/timeout)
-- `GET /api/workflows/executions/{execution_id}` - Get execution details
-- `POST /api/workflows/executions/{execution_id}/cancel` - Cancel running execution
+**Workflow services** (`backend/services/workflows/`)
 
-**Workflow Telemetry (Phase 10)**
+- `engine.py` – core execution engine; manages state, step scheduling, timeouts/retries, and emits events
+- `controller.py` – `MultiAgentController`; agent assignment strategies + failover hooks
+- `dependency_resolver.py` – DAG validation + execution ordering / parallel execution groups
 
-- `GET /api/workflows/executions/{execution_id}/timeline` - Get detailed execution timeline with step metrics
-  - Returns: `WorkflowExecutionTimeline` with per-step timeline entries including:
-    - Step execution status, duration, retry count
-    - Start/completion timestamps
-    - Input/output summaries and error messages
-    - Aggregated counts (completed/failed/skipped steps)
-- `GET /api/workflows/{workflow_id}/metrics` - Get aggregated workflow metrics
-  - Returns: `WorkflowMetricsSummary` including:
-    - Total/successful/failed execution counts
-    - Success rate percentage
-    - Duration statistics (total, average, min, max)
-- `GET /api/workflows/executions/stats` - Get workspace-wide execution statistics
+#### Database schema (Phase 10 tables)
 
-**Workflow Templates**
+Workflows are stored and tracked in PostgreSQL using:
 
-- `GET /api/workflows/templates` - List available workflow templates
-  - Returns example templates for basic sequences, parallel processing, etc.
+- `workflow_definitions` – workflow metadata (name/version/config/is_active)
+- `workflow_steps` – step definitions (type/order/dependencies/agent requirements)
+- `workflow_variables` – typed inputs accepted by executions
+- `workflow_executions` – per-run execution state, duration, results
+- `workflow_step_executions` – per-step run state, retry counts, timings, error details
 
-**WebSocket Events**
+(See `backend/db/models/entities.py` for the authoritative schema.)
 
-- `ws://{host}/ws/workflows/{workflow_id}` - Subscribe to workflow execution events
-  - Events: `workflow_started`, `workflow_completed`, `workflow_failed`, `workflow_cancelled`
-  - Event payload includes: execution_id, status, timestamp, metrics
-- `ws://{host}/ws/workflows/{workflow_id}/step/{step_id}` - Subscribe to step execution events
-  - Events: `step_started`, `step_completed`, `step_failed`, `step_skipped`
-  - Event payload includes: step_id, step_name, status, duration, error details
+#### REST API reference
 
-**Request/Response Schemas**
+See **[docs/API.md](./docs/API.md)** for request/response examples.
 
-See `backend/schemas.py` for complete Pydantic models:
+**Definition management**
 
-- `WorkflowCreate`: Define new workflow with steps and variables
-- `WorkflowResponse`: Workflow details with metadata
-- `WorkflowExecutionCreate`: Trigger execution with input variables
-- `WorkflowExecutionResponse`: Execution snapshot with status/duration
-- `WorkflowExecutionTimeline`: Detailed timeline with step-level metrics (telemetry)
-- `WorkflowMetricsSummary`: Aggregated metrics across executions
-- `WorkflowValidationResult`: Validation errors/warnings
+- `GET /api/workflows/` – list workflows
+- `POST /api/workflows/` – create workflow (`WorkflowCreate`)
+- `GET /api/workflows/{workflow_id}` – get workflow details
+- `PATCH /api/workflows/{workflow_id}` – update metadata
+- `DELETE /api/workflows/{workflow_id}` – delete workflow
+- `POST /api/workflows/validate` – validate without saving
+- `GET /api/workflows/templates` – built-in templates
 
-**Dependency Resolver Rules**
+**Execution**
 
-Workflows use a graph-based dependency resolver that enforces:
+- `POST /api/workflows/{workflow_id}/execute` – start execution
+- `GET /api/workflows/{workflow_id}/executions` – list executions
+- `GET /api/workflows/executions/{execution_id}` – execution details
+- `GET /api/workflows/executions/{execution_id}/status` – lightweight status snapshot
+- `POST /api/workflows/executions/{execution_id}/cancel` – cancel execution
 
-1. **Circular Dependency Detection** - Prevents cycles in step dependencies
-2. **Missing Dependency Detection** - Ensures all referenced steps exist
-3. **Duplicate Name/Order Detection** - Ensures unique step names and sequential ordering
-4. **Self-Dependency Prevention** - Steps cannot depend on themselves
-5. **IO Contract Validation** - Optional validation of input/output compatibility
+**Telemetry**
 
-See `backend/services/workflows/dependency_resolver.py` for implementation.
+- `GET /api/workflows/executions/{execution_id}/timeline` – step-level timeline (durations/retries/status)
+- `GET /api/workflows/{workflow_id}/metrics` – aggregated metrics (success rate + durations)
+- `GET /api/workflows/executions/stats` – workspace execution stats
 
-**Example Workflows**
+#### WebSocket events
 
-Pre-built example workflows are available in `examples/workflows/`:
-- `basic_sequence.json` - Simple sequential 3-step workflow
-- `parallel_processing.json` - Parallel branch processing with merge
-- `conditional_workflow.json` - Conditional branching based on input
-- `data_pipeline.json` - Full ETL pipeline with 7 steps
+See **[docs/WEBSOCKET.md](./docs/WEBSOCKET.md)** for the canonical event contract.
 
-To seed example workflows into a workspace:
+**Channels**
+
+- `ws://{host}/ws/workflows/{workflow_id}`
+- `ws://{host}/ws/workflows/executions/{execution_id}`
+- `ws://{host}/ws/workflows/steps/{step_id}`
+- `ws://{host}/ws/workflows/stream`
+
+**Event types**
+
+- Workflow: `workflow_started`, `workflow_completed`, `workflow_failed`, `workflow_cancelled`
+- Steps: `step_started`, `step_completed`, `step_failed`, `step_skipped`
+
+Workflow events include fields such as `workflow_id`, `workflow_execution_id`, `workflow_step_id`, and optional `agent_id`.
+
+#### Configuration guide
+
+- Workflow defaults:
+  - `timeout_seconds`
+  - `max_retries`
+- Step overrides:
+  - `steps[].timeout_seconds`
+  - `steps[].max_retries`
+- Agent steps:
+  - `steps[].config.assignment_strategy`: `round_robin`, `least_loaded`, `capability_match`, `resource_based`
+  - `steps[].config.required_capabilities`: string[]
+  - Optional pinning: `agent_definition_id` / `agent_instance_id`
+
+If you use agent steps, ensure the agent system is enabled and instances exist (see the **Agents** section above).
+
+#### Example workflows
+
+Example workflow definitions live in `examples/workflows/`:
+
+- `sequential_task.json`
+- `parallel_agents.json`
+- `conditional_workflow.json`
+- `with_retries.json`
+- `multi_agent_chain.json`
+
+(Additional templates are also provided: `basic_sequence.json`, `parallel_processing.json`, `data_pipeline.json`.)
+
+To seed examples into a workspace:
 
 ```bash
 python -m backend.scripts.seed_workflows \
@@ -249,7 +266,16 @@ python -m backend.scripts.seed_workflows \
   --skip-existing
 ```
 
-If `--project-id` is not specified, uses the first project in the workspace.
+#### Troubleshooting
+
+- **503: "Workflow engine not available"**
+  - The app state must initialize `workflow_integration` (see `backend/app/main.py` startup wiring).
+- **Workflow validate fails**
+  - Check `depends_on_steps` references, duplicate step names, and circular dependencies.
+- **No agent available for an `agent` step**
+  - Ensure agent instances exist for the workspace/project and are in an IDLE state.
+- **No events on `/ws/workflows/stream`**
+  - Verify the event broadcaster publishes workflow events to the `workflows` channel (see `backend/services/events.py`).
 
 ## Services
 

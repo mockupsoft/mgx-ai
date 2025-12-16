@@ -801,51 +801,63 @@ class HealthStatus(BaseModel):
 
 class WorkflowVariableCreate(BaseModel):
     """Schema for creating workflow variables."""
+
     name: str = Field(..., min_length=1, max_length=255, description="Variable name")
     data_type: str = Field(..., description="Data type (string, int, float, bool, json)")
     is_required: bool = Field(False, description="Whether the variable is required")
-    default_value: Optional[Dict[str, Any]] = Field(None, description="Default value")
+    default_value: Optional[Any] = Field(None, description="Default value (any JSON type)")
     description: Optional[str] = Field(None, description="Variable description")
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class WorkflowStepCreate(BaseModel):
     """Schema for creating workflow steps."""
+
     name: str = Field(..., min_length=1, max_length=255, description="Step name")
     step_type: WorkflowStepTypeEnum = Field(..., description="Type of step")
     step_order: int = Field(..., ge=1, description="Order in execution sequence")
-    
+
     config: Dict[str, Any] = Field(default_factory=dict, description="Step configuration")
     timeout_seconds: Optional[int] = Field(None, description="Step-specific timeout override")
     max_retries: Optional[int] = Field(None, description="Step-specific retry override")
-    
+
     # Agent requirements
     agent_definition_id: Optional[str] = Field(None, description="Required agent definition ID")
     agent_instance_id: Optional[str] = Field(None, description="Required agent instance ID")
-    
+
     # Dependencies
     depends_on_steps: List[str] = Field(default_factory=list, description="List of step IDs this step depends on")
     condition_expression: Optional[str] = Field(None, description="Conditional expression for step execution")
-    
+
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class WorkflowCreate(BaseModel):
     """Schema for creating workflows."""
+
     name: str = Field(..., min_length=1, max_length=255, description="Workflow name")
     description: Optional[str] = Field(None, description="Workflow description")
-    
+
     project_id: Optional[str] = Field(None, description="Project ID within the active workspace")
-    
+
     config: Dict[str, Any] = Field(default_factory=dict, description="Workflow configuration")
     timeout_seconds: Optional[int] = Field(3600, ge=1, description="Default timeout in seconds")
     max_retries: Optional[int] = Field(3, ge=0, description="Default maximum retries per step")
-    
+
     # Steps and variables
     steps: List[WorkflowStepCreate] = Field(default_factory=list, description="Workflow steps")
     variables: List[WorkflowVariableCreate] = Field(default_factory=list, description="Workflow variables")
-    
+
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+
+    class Config:
+        allow_population_by_field_name = True
 
 
 class WorkflowUpdate(BaseModel):
@@ -861,12 +873,13 @@ class WorkflowUpdate(BaseModel):
 
 class WorkflowVariableResponse(BaseModel):
     """Schema for workflow variable responses."""
+
     id: str
     workflow_id: str
     name: str
     data_type: str
     is_required: bool
-    default_value: Optional[Dict[str, Any]] = None
+    default_value: Optional[Any] = None
     description: Optional[str] = None
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
     created_at: datetime
