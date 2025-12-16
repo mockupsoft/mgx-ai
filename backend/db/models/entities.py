@@ -44,6 +44,8 @@ from .enums import (
     WorkflowStatus,
     WorkflowStepStatus,
     WorkflowStepType,
+    SandboxExecutionStatus,
+    SandboxExecutionLanguage,
 )
 
 
@@ -778,6 +780,79 @@ class WorkflowStepExecution(Base, TimestampMixin, SerializationMixin):
         return self.status == WorkflowStepStatus.FAILED
 
 
+class SandboxExecution(Base, TimestampMixin, SerializationMixin):
+    """Sandboxed code execution record."""
+
+    __tablename__ = "sandbox_executions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    execution_type = Column(SQLEnum(SandboxExecutionLanguage), nullable=False, index=True)
+    status = Column(SQLEnum(SandboxExecutionStatus), nullable=False, default=SandboxExecutionStatus.PENDING, index=True)
+
+    # Execution details
+    command = Column(Text, nullable=False, comment="Command executed")
+    code = Column(Text, comment="Source code executed")
+    
+    # Results
+    stdout = Column(Text, comment="Standard output")
+    stderr = Column(Text, comment="Standard error")
+    exit_code = Column(Integer, comment="Process exit code")
+    success = Column(Boolean, comment="Execution success status")
+    
+    # Resource usage
+    duration_ms = Column(Integer, comment="Execution duration in milliseconds")
+    max_memory_mb = Column(Integer, comment="Maximum memory used in MB")
+    cpu_percent = Column(Float, comment="CPU usage percentage")
+    network_io = Column(BigInteger, comment="Network I/O in bytes")
+    disk_io = Column(BigInteger, comment="Disk I/O in bytes")
+    
+    # Error information
+    error_type = Column(String(255), comment="Error type/category")
+    error_message = Column(Text, comment="Error message")
+    timeout_seconds = Column(Integer, default=30, comment="Execution timeout in seconds")
+    
+    # Container information
+    container_id = Column(String(255), comment="Docker container ID")
+    
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_sandbox_executions_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_sandbox_executions_workspace_project", "workspace_id", "project_id"),
+        Index("idx_sandbox_executions_status", "status"),
+        Index("idx_sandbox_executions_execution_type", "execution_type"),
+        Index("idx_sandbox_executions_created_at", "created_at"),
+    )
+
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+
+    def __repr__(self) -> str:
+        return f"<SandboxExecution(id={self.id}, execution_type='{self.execution_type}', status='{self.status}')>"
+
+    @property
+    def is_success(self) -> bool:
+        return self.status == SandboxExecutionStatus.COMPLETED
+
+    @property
+    def is_failed(self) -> bool:
+        return self.status in [SandboxExecutionStatus.FAILED, SandboxExecutionStatus.TIMEOUT]
+
+    @property
+    def duration_seconds(self) -> float:
+        """Get duration in seconds."""
+        return self.duration_ms / 1000.0 if self.duration_ms else 0.0
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -796,6 +871,7 @@ __all__ = [
     "WorkflowVariable",
     "WorkflowExecution",
     "WorkflowStepExecution",
+    "SandboxExecution",
     "TaskStatus",
     "RunStatus",
     "MetricType",
@@ -807,4 +883,6 @@ __all__ = [
     "WorkflowStatus",
     "WorkflowStepStatus",
     "WorkflowStepType",
+    "SandboxExecutionStatus",
+    "SandboxExecutionLanguage",
 ]
