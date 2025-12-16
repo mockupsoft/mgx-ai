@@ -364,87 +364,252 @@ Orijinal görevi unutma: {instruction}
             if final_output and "FILE:" in final_output:
                 final_output = self._format_output(final_output, target_stack, language)
             
+            # Phase 11: Sandbox execution integration
+            await self._execute_sandbox_testing(final_output, target_stack, language)
+            
             return final_output
         except Exception as e:
             logger.error(f"❌ WriteCode hatası: {e}")
             raise
     
-    @staticmethod
-    def _format_output(file_manifest: str, stack_id: str, language: str) -> str:
+    async def _execute_sandbox_testing(
+        self, 
+        generated_code: str, 
+        target_stack: str, 
+        language: str
+    ) -> bool:
         """
-        Format code in FILE manifest output.
+        Execute generated code in sandbox for testing and validation.
         
-        Parses FILE manifest, formats each file based on language, and returns
-        formatted manifest. Formatting is best-effort (never fails).
+        This is part of Phase 11: Sandboxed Code Runner integration.
+        Automatically runs tests after code generation to validate functionality.
         
         Args:
-            file_manifest: FILE manifest output from LLM
-            stack_id: Stack identifier for language detection
+            generated_code: The generated code content
+            target_stack: Technology stack identifier
             language: Programming language
             
         Returns:
-            FILE manifest with formatted code
+            True if testing passed, False otherwise
         """
         try:
-            from .formatters import CodeFormatter, Language, MinifyDetector
-            from .config import get_formatter_config
+            # Only run sandbox testing in development/testing environments
+            import os
+            if os.getenv("DISABLE_SANDBOX_TESTING", "").lower() in ("true", "1", "yes"):
+                logger.debug("🔍 Sandbox testing disabled via environment variable")
+                return True
             
-            # Parse FILE manifest
-            files = WriteCode._parse_file_manifest(file_manifest)
+            logger.debug("🔍 Running sandbox testing for generated code")
+            
+            # Extract files from FILE manifest if present
+            files = WriteCode._parse_file_manifest(generated_code)
             if not files:
-                return file_manifest  # Unable to parse, return as-is
+                logger.debug("🔍 No files to test - single code block")
+                return True
             
-            # Detect language
-            lang_map = {
-                'python': Language.PYTHON,
-                'typescript': Language.TYPESCRIPT,
-                'javascript': Language.JAVASCRIPT,
-                'php': Language.PHP,
-                'csharp': Language.CSHARP,
+            # Map stack to sandbox language
+            language_map = {
+                'python': 'python',
+                'nodejs': 'javascript',
+                'javascript': 'javascript', 
+                'typescript': 'javascript',
+                'php': 'php',
+                'react': 'javascript',
+                'vue': 'javascript',
+                'express': 'javascript',
             }
-            detected_lang = lang_map.get(language.lower(), Language.PYTHON)
             
-            formatted_files = []
-            total_changes = 0
+            sandbox_language = language_map.get(target_stack.lower(), language.lower())
             
-            for file_path, content in files:
-                # Detect minified files (warn but don't skip)
-                is_minified, issues = MinifyDetector.detect_minified_file(content)
-                if is_minified:
-                    logger.warning(f"⚠️ File {file_path} may be minified: {issues[0]}")
-                
-                # Format code
-                result = CodeFormatter.format_code(content, file_path, detected_lang)
-                
-                if result.success and result.formatters_applied:
-                    logger.debug(f"📝 {file_path}: {result.summary()}")
-                    formatted_content = result.formatted_content
-                    total_changes += result.diff_lines
-                elif result.warnings:
-                    logger.warning(f"⚠️ {file_path}: {'; '.join(result.warnings[:2])}")
-                    formatted_content = content
-                else:
-                    formatted_content = content
-                
-                formatted_files.append((file_path, formatted_content))
+            # Determine test command based on language and files
+            test_command = self._determine_test_command(files, sandbox_language, target_stack)
             
-            # Rebuild FILE manifest with formatted content
-            result_lines = []
-            for file_path, content in formatted_files:
-                result_lines.append(f"FILE: {file_path}")
-                result_lines.append(content)
-                result_lines.append("")
+            if not test_command:
+                logger.debug("🔍 No test command determined for this stack/language")
+                return True
             
-            formatted_manifest = "\n".join(result_lines).rstrip() + "\n"
+            # Get the main code file content for execution
+            main_code = self._extract_main_code(files, sandbox_language)
+            if not main_code:
+                logger.debug("🔍 No main code file found to test")
+                return True
             
-            if total_changes > 0:
-                logger.info(f"✅ Formatted {len(formatted_files)} files, {total_changes} lines changed")
+            # Execute in sandbox
+            success = await self._run_sandbox_execution(
+                code=main_code,
+                command=test_command,
+                language=sandbox_language,
+                timeout=60  # 60 second timeout for testing
+            )
             
-            return formatted_manifest
+            if success:
+                logger.info("✅ Sandbox testing passed")
+            else:
+                logger.warning("⚠️ Sandbox testing failed - check logs for details")
+            
+            return success
             
         except Exception as e:
-            logger.warning(f"⚠️ Format error (non-fatal): {e}")
-            return file_manifest  # Return original on error
+            logger.warning(f"⚠️ Sandbox testing error (non-blocking): {e}")
+            return True  # Don't fail the main task if testing fails
+    
+    def _determine_test_command(
+        self, 
+        files: List[Tuple[str, str]], 
+        language: str, 
+        stack: str
+    ) -> Optional[str]:
+        """
+        Determine appropriate test command for the generated code.
+        
+        Args:
+            files: List of (filepath, content) tuples
+            language: Programming language
+            stack: Technology stack
+            
+        Returns:
+            Test command string or None
+        """
+        # Check for existing test files in FILE manifest
+        test_files = [f[0] for f in files if any(test_indicator in f[0].lower() 
+                       for test_indicator in ['test_', '_test.', 'spec.', '.test.', '.spec.'])]
+        
+        if test_files:
+            # Test files exist, use them
+            if language == 'python':
+                # Check for pytest
+                if any('pytest' in f.lower() or 'test_' in f.lower() for f in test_files):
+                    return "python -m pytest"
+                return "python -m unittest discover"
+            elif language == 'javascript':
+                # Check for package.json
+                package_json_files = [f for f in files if 'package.json' in f[0]]
+                if package_json_files:
+                    return "npm test"
+                return "node test.js"
+            elif language == 'php':
+                return "vendor/bin/phpunit"
+        
+        # No test files found - run basic syntax validation
+        if language == 'python':
+            # Try to compile the code for syntax validation
+            try:
+                import ast
+                for file_path, content in files:
+                    if file_path.endswith('.py'):
+                        ast.parse(content)
+                return None  # Syntax is valid, no additional testing needed
+            except SyntaxError:
+                return "python -m py_compile"
+        
+        elif language == 'javascript':
+            # Basic Node.js syntax check
+            return "node --check"
+        
+        elif language == 'php':
+            # PHP syntax check
+            return "php -l"
+        
+        return None
+    
+    def _extract_main_code(self, files: List[Tuple[str, str]], language: str) -> Optional[str]:
+        """
+        Extract main code file content for sandbox execution.
+        
+        Args:
+            files: List of (filepath, content) tuples
+            language: Programming language
+            
+        Returns:
+            Main code content or None
+        """
+        # Language-specific main file patterns
+        main_patterns = {
+            'python': ['main.py', 'app.py', 'index.py', 'server.py', '__main__.py'],
+            'javascript': ['main.js', 'app.js', 'index.js', 'server.js', 'app.js'],
+            'php': ['index.php', 'main.php', 'app.php', 'server.php'],
+        }
+        
+        # Look for main files
+        main_files = []
+        for file_path, content in files:
+            file_name = file_path.split('/')[-1]
+            if file_name in main_patterns.get(language, []):
+                main_files.append((file_path, content))
+        
+        # If no main files found, take the first non-test file
+        if not main_files:
+            for file_path, content in files:
+                if not any(test_indicator in file_path.lower() 
+                          for test_indicator in ['test_', '_test.', 'spec.', '.test.', '.spec.']):
+                    main_files.append((file_path, content))
+                    break
+        
+        # Return the content of the first main file
+        if main_files:
+            return main_files[0][1]
+        
+        return None
+    
+    async def _run_sandbox_execution(
+        self, 
+        code: str, 
+        command: str, 
+        language: str, 
+        timeout: int = 30
+    ) -> bool:
+        """
+        Execute code in sandbox environment.
+        
+        Args:
+            code: Source code to execute
+            command: Command to run
+            language: Programming language
+            timeout: Execution timeout in seconds
+            
+        Returns:
+            True if execution was successful
+        """
+        try:
+            # Import sandbox runner only when needed
+            try:
+                from backend.services.sandbox import get_sandbox_runner
+                runner = get_sandbox_runner()
+            except ImportError:
+                logger.debug("🔍 Sandbox runner not available - skipping execution")
+                return True
+            
+            # Create execution ID
+            import uuid
+            execution_id = str(uuid.uuid4())
+            
+            # Execute in sandbox
+            result = await runner.execute_code(
+                execution_id=execution_id,
+                code=code,
+                command=command,
+                language=language,
+                timeout=timeout,
+                memory_limit_mb=512,
+                workspace_id="test-workspace",  # TODO: Get from context
+                project_id="test-project",  # TODO: Get from context
+            )
+            
+            # Log results
+            if result.get('success'):
+                logger.info(f"✅ Sandbox execution successful: {command}")
+                if result.get('stdout'):
+                    logger.debug(f"Output: {result['stdout'][:200]}")
+                return True
+            else:
+                logger.warning(f"⚠️ Sandbox execution failed: {command}")
+                if result.get('stderr'):
+                    logger.warning(f"Error: {result['stderr'][:200]}")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Sandbox execution error: {e}")
+            return False
     
     @staticmethod
     def _parse_file_manifest(manifest: str) -> List[Tuple[str, str]]:

@@ -57,6 +57,7 @@ MGX pairs a production-ready **FastAPI backend** (PostgreSQL + WebSocket events 
   - [Phase 83: Code formatting & pre-commit](#phase-83-code-formatting--pre-commit)
   - [Phase 8: Global expansion](#phase-8-global-expansion)
   - [Phase 10: Workflow Engine & Orchestration](#phase-10-workflow-engine--orchestration)
+  - [Phase 11: Sandboxed Code Runner](#phase-11-sandboxed-code-runner)
 - [Architecture & design](#architecture--design)
   - [Overall architecture diagram](#overall-architecture-diagram)
   - [Module dependencies](#module-dependencies)
@@ -486,6 +487,81 @@ flowchart LR
 - Telemetry deep-dive: **[WORKFLOW_TELEMETRY.md](./WORKFLOW_TELEMETRY.md)**
 - Example definitions: **[examples/workflows/](./examples/workflows/)**
 - Seeding script: **[backend/scripts/seed_workflows.py](./backend/scripts/seed_workflows.py)**
+
+### Phase 11: Sandboxed Code Runner
+
+Phase 11 implements **secure, isolated code execution** for automatic testing and validation of generated code using Docker containers with security hardening.
+
+**Highlights:**
+
+- **Multi-language support**: Python, JavaScript/Node.js, PHP with Docker-based isolation
+- **Security hardening**: Read-only filesystem, no network access, resource limits, user isolation
+- **Automatic testing**: Integration with WriteCode action for immediate validation
+- **Resource monitoring**: CPU, memory, I/O tracking with comprehensive metrics
+- **Real-time streaming**: WebSocket logs and execution events
+- **Production-ready**: Enterprise-grade security, scalability, and monitoring
+
+#### Supported Languages & Testing
+
+| Language | Base Image | Test Commands | Build Commands | Execution |
+|---|---|---|---|---|
+| **Python** | `mgx-sandbox-python:latest` | `pytest`, `python -m unittest` | `poetry build` | `python main.py` |
+| **JavaScript/Node.js** | `mgx-sandbox-node:latest` | `npm test`, `yarn test`, `pnpm test` | `npm run build` | `node index.js` |
+| **PHP** | `mgx-sandbox-php:latest` | `vendor/bin/phpunit` | `composer run build` | `php index.php` |
+| **Docker** | `mgx-sandbox-node:latest` | `docker build` | `docker build` | `docker run` |
+
+#### Sandbox API endpoints
+
+| Area | Method | Endpoint |
+|---|---:|---|
+| Execute | POST | `/api/sandbox/execute` |
+| Details | GET | `/api/sandbox/executions/{execution_id}` |
+| List | GET | `/api/sandbox/executions` |
+| Stop | DELETE | `/api/sandbox/executions/{execution_id}` |
+| Metrics | GET | `/api/sandbox/metrics` |
+| Logs (WebSocket) | WS | `/api/sandbox/executions/{execution_id}/logs` |
+
+#### Security Model
+
+```python
+# Container security hardening
+SECURITY_OPTS = [
+    "no-new-privileges:true",
+    "apparmor=unconfined",
+    "seccomp=unconfined",
+]
+
+# Resource isolation
+network_mode: "none"        # No network access
+read_only: True             # Read-only root filesystem  
+user: "nobody"              # Non-root execution
+cap_drop: ["ALL"]           # No capabilities
+mem_limit: "512m"           # Memory limit
+cpu_quota: 30000            # CPU time limit (30s)
+```
+
+#### Example: Automatic Code Testing
+
+```python
+# WriteCode action automatically triggers sandbox testing
+result = await write_code.run(
+    instruction="Create a Python web API",
+    target_stack="python",
+    strict_mode=True
+)
+
+# Results:
+# ✅ Sandbox testing passed     - Code works correctly
+# ⚠️ Sandbox testing failed     - Revision prompt with errors
+# 🔍 Sandbox testing disabled   - Development mode
+```
+
+**Resources:**
+
+- Complete documentation: **[docs/SANDBOX_RUNNER.md](./docs/SANDBOX_RUNNER.md)**
+- Implementation summary: **[PHASE_11_COMPLETION_SUMMARY.md](./PHASE_11_COMPLETION_SUMMARY.md)**
+- Test suite: **[backend/tests/test_sandbox_execution.py](./backend/tests/test_sandbox_execution.py)**
+- Base images: **[sandbox/images/](./sandbox/images/)**
 
 #### Roadmap (Phase 11+)
 

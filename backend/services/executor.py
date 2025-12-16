@@ -37,6 +37,9 @@ from backend.schemas import (
     GitPushFailedEvent,
     PullRequestOpenedEvent,
     GitOperationFailedEvent,
+    SandboxExecutionStartedEvent,
+    SandboxExecutionCompletedEvent,
+    SandboxExecutionFailedEvent,
 )
 from backend.services.events import get_event_broadcaster
 from backend.services.team_provider import MGXTeamProvider

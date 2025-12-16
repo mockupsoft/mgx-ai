@@ -20,6 +20,7 @@ from .agents import (
     AgentMessageBus,
     get_agent_message_bus,
 )
+from .sandbox import SandboxRunner, SandboxRunnerError, get_sandbox_runner
 
 __all__ = [
     'MGXTeamProvider', 
@@ -43,4 +44,6 @@ __all__ = [
     'SharedContextService',
     'AgentMessageBus',
     'get_agent_message_bus',
+    'SandboxRunner',
+    'SandboxRunnerError',
 ]

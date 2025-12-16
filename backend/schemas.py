@@ -76,6 +76,12 @@ class EventTypeEnum(str, Enum):
     STEP_COMPLETED = "step_completed"
     STEP_FAILED = "step_failed"
     STEP_SKIPPED = "step_skipped"
+    
+    # Sandbox execution events
+    SANDBOX_EXECUTION_STARTED = "sandbox_execution_started"
+    SANDBOX_EXECUTION_COMPLETED = "sandbox_execution_completed"
+    SANDBOX_EXECUTION_FAILED = "sandbox_execution_failed"
+    SANDBOX_EXECUTION_LOGS = "sandbox_execution_logs"
 
 
 # ============================================
@@ -1090,6 +1096,156 @@ class WorkflowExecutionDetailedResponse(WorkflowExecutionResponse):
         from_attributes = True
 
 
+# ============================================
+# Sandbox Execution Schemas
+# ============================================
+
+class SandboxExecutionStatusEnum(str, Enum):
+    """Sandbox execution status for responses."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
+
+
+class SandboxExecutionLanguageEnum(str, Enum):
+    """Supported languages for sandbox execution."""
+    JAVASCRIPT = "javascript"
+    NODE = "node"
+    PYTHON = "python"
+    PHP = "php"
+    DOCKER = "docker"
+
+
+class ResourceUsage(BaseModel):
+    """Resource usage information from execution."""
+    max_memory_mb: Optional[int] = Field(None, ge=0, description="Maximum memory used in MB")
+    cpu_percent: Optional[float] = Field(None, ge=0, le=100, description="CPU usage percentage")
+    network_io: Optional[int] = Field(None, ge=0, description="Network I/O in bytes")
+    disk_io: Optional[int] = Field(None, ge=0, description="Disk I/O in bytes")
+
+    class Config:
+        from_attributes = True
+
+
+class ExecutionRequest(BaseModel):
+    """Request schema for code execution."""
+    code: str = Field(..., description="Source code to execute")
+    command: str = Field(..., description="Command to run (e.g., 'npm test', 'pytest')")
+    language: SandboxExecutionLanguageEnum = Field(..., description="Programming language")
+    timeout: Optional[int] = Field(30, gt=0, le=300, description="Execution timeout in seconds")
+    memory_limit_mb: Optional[int] = Field(512, gt=0, le=2048, description="Memory limit in megabytes")
+
+    class Config:
+        from_attributes = True
+
+
+class ExecutionResult(BaseModel):
+    """Result schema for code execution."""
+    success: bool = Field(..., description="Whether execution was successful")
+    stdout: str = Field("", description="Standard output")
+    stderr: str = Field("", description="Standard error")
+    exit_code: Optional[int] = Field(None, description="Process exit code")
+    duration_ms: Optional[int] = Field(None, ge=0, description="Execution duration in milliseconds")
+    resource_usage: ResourceUsage = Field(default_factory=ResourceUsage, description="Resource usage information")
+    error_type: Optional[str] = Field(None, description="Error type if failed")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    container_id: Optional[str] = Field(None, description="Docker container ID")
+
+    class Config:
+        from_attributes = True
+
+
+class SandboxExecutionResponse(BaseModel):
+    """Response schema for sandbox execution."""
+    id: str = Field(..., description="Execution ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    project_id: str = Field(..., description="Project ID")
+    execution_type: SandboxExecutionLanguageEnum = Field(..., description="Execution type")
+    status: SandboxExecutionStatusEnum = Field(..., description="Execution status")
+    command: str = Field(..., description="Command executed")
+    code: Optional[str] = Field(None, description="Source code executed")
+    stdout: Optional[str] = Field(None, description="Standard output")
+    stderr: Optional[str] = Field(None, description="Standard error")
+    exit_code: Optional[int] = Field(None, description="Process exit code")
+    success: Optional[bool] = Field(None, description="Execution success status")
+    duration_ms: Optional[int] = Field(None, description="Execution duration in milliseconds")
+    max_memory_mb: Optional[int] = Field(None, description="Maximum memory used in MB")
+    cpu_percent: Optional[float] = Field(None, description="CPU usage percentage")
+    network_io: Optional[int] = Field(None, description="Network I/O in bytes")
+    disk_io: Optional[int] = Field(None, description="Disk I/O in bytes")
+    error_type: Optional[str] = Field(None, description="Error type")
+    error_message: Optional[str] = Field(None, description="Error message")
+    timeout_seconds: Optional[int] = Field(None, description="Execution timeout in seconds")
+    container_id: Optional[str] = Field(None, description="Docker container ID")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    class Config:
+        from_attributes = True
+
+
+class SandboxExecutionListResponse(BaseModel):
+    """Response schema for listing sandbox executions."""
+    executions: List[SandboxExecutionResponse] = Field(..., description="List of executions")
+    total: int = Field(..., description="Total number of executions")
+    offset: int = Field(..., description="Offset for pagination")
+    limit: int = Field(..., description="Limit for pagination")
+
+    class Config:
+        from_attributes = True
+
+
+class SandboxExecutionLogsEvent(BaseModel):
+    """Event schema for sandbox execution logs."""
+    execution_id: str = Field(..., description="Execution ID")
+    logs: str = Field(..., description="Execution logs")
+    timestamp: datetime = Field(..., description="Log timestamp")
+
+    class Config:
+        from_attributes = True
+
+
+class SandboxExecutionStartedEvent(BaseModel):
+    """Event schema for sandbox execution started."""
+    execution_id: str = Field(..., description="Execution ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    project_id: str = Field(..., description="Project ID")
+    execution_type: SandboxExecutionLanguageEnum = Field(..., description="Execution type")
+    command: str = Field(..., description="Command to execute")
+    timeout_seconds: int = Field(..., description="Timeout in seconds")
+
+    class Config:
+        from_attributes = True
+
+
+class SandboxExecutionCompletedEvent(BaseModel):
+    """Event schema for sandbox execution completed."""
+    execution_id: str = Field(..., description="Execution ID")
+    success: bool = Field(..., description="Execution success status")
+    duration_ms: int = Field(..., description="Execution duration in milliseconds")
+    exit_code: Optional[int] = Field(None, description="Process exit code")
+    resource_usage: ResourceUsage = Field(default_factory=ResourceUsage, description="Resource usage")
+    error_type: Optional[str] = Field(None, description="Error type if failed")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+
+    class Config:
+        from_attributes = True
+
+
+class SandboxExecutionFailedEvent(BaseModel):
+    """Event schema for sandbox execution failed."""
+    execution_id: str = Field(..., description="Execution ID")
+    error_type: str = Field(..., description="Error type")
+    error_message: str = Field(..., description="Error message")
+    duration_ms: int = Field(..., description="Execution duration in milliseconds")
+
+    class Config:
+        from_attributes = True
+
+
 __all__ = [
     # Enums
     'TaskStatusEnum',
@@ -1101,6 +1257,8 @@ __all__ = [
     'WorkflowStatusEnum',
     'WorkflowStepStatusEnum',
     'WorkflowStepTypeEnum',
+    'SandboxExecutionStatusEnum',
+    'SandboxExecutionLanguageEnum',
     # Workspace/Project schemas
     'WorkspaceCreate',
     'WorkspaceSummary',
@@ -1151,6 +1309,16 @@ __all__ = [
     'WorkflowStepTimelineEntry',
     'WorkflowExecutionTimeline',
     'WorkflowExecutionDetailedResponse',
+    # Sandbox schemas
+    'ResourceUsage',
+    'ExecutionRequest',
+    'ExecutionResult',
+    'SandboxExecutionResponse',
+    'SandboxExecutionListResponse',
+    'SandboxExecutionLogsEvent',
+    'SandboxExecutionStartedEvent',
+    'SandboxExecutionCompletedEvent',
+    'SandboxExecutionFailedEvent',
     # Metric schemas
     'MetricResponse',
     'MetricListResponse',

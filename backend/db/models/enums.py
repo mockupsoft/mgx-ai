@@ -134,3 +134,24 @@ class WorkflowStepType(str, Enum):
     PARALLEL = "parallel"  # Parallel execution
     SEQUENTIAL = "sequential"  # Sequential steps
     AGENT = "agent"  # Agent execution
+
+
+class SandboxExecutionStatus(str, Enum):
+    """Sandbox execution status."""
+
+    PENDING = "pending"  # Execution is queued
+    RUNNING = "running"  # Execution is currently running
+    COMPLETED = "completed"  # Execution completed successfully
+    FAILED = "failed"  # Execution failed with error
+    CANCELLED = "cancelled"  # Execution was cancelled
+    TIMEOUT = "timeout"  # Execution timed out
+
+
+class SandboxExecutionLanguage(str, Enum):
+    """Supported programming languages for sandbox execution."""
+
+    JAVASCRIPT = "javascript"
+    NODE = "node"
+    PYTHON = "python"
+    PHP = "php"
+    DOCKER = "docker"
