@@ -1,0 +1,79 @@
+{
+  "name": "Parallel Agents",
+  "description": "Fan-out to multiple agent steps and merge results",
+  "config": {},
+  "timeout_seconds": 3600,
+  "max_retries": 2,
+  "variables": [
+    {
+      "name": "input",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input payload",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "prepare",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 120,
+      "config": {
+        "description": "Normalize inputs for downstream agents"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "category": "setup"
+      }
+    },
+    {
+      "name": "analyze",
+      "step_type": "agent",
+      "step_order": 2,
+      "timeout_seconds": 900,
+      "max_retries": 1,
+      "config": {
+        "description": "Agent performs analysis",
+        "assignment_strategy": "capability_match",
+        "required_capabilities": ["analysis"]
+      },
+      "depends_on_steps": ["prepare"],
+      "metadata": {
+        "category": "agents"
+      }
+    },
+    {
+      "name": "transform",
+      "step_type": "agent",
+      "step_order": 2,
+      "timeout_seconds": 900,
+      "max_retries": 1,
+      "config": {
+        "description": "Agent performs transformation",
+        "assignment_strategy": "capability_match",
+        "required_capabilities": ["data_transformation"]
+      },
+      "depends_on_steps": ["prepare"],
+      "metadata": {
+        "category": "agents"
+      }
+    },
+    {
+      "name": "merge",
+      "step_type": "task",
+      "step_order": 3,
+      "timeout_seconds": 300,
+      "config": {
+        "description": "Merge agent outputs (placeholder)"
+      },
+      "depends_on_steps": ["analyze", "transform"],
+      "metadata": {
+        "category": "finalization"
+      }
+    }
+  ],
+  "metadata": {
+    "template": "parallel_agents"
+  }
+}

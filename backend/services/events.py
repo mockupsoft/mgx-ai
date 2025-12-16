@@ -126,10 +126,13 @@ class EventBroadcaster:
         # Workflow-specific channels
         if getattr(event, "workflow_id", None):
             channels.add(f"workflow:{event.workflow_id}")
+            channels.add("workflows")
         if getattr(event, "workflow_execution_id", None):
             channels.add(f"workflow-run:{event.workflow_execution_id}")
+            channels.add("workflows")
         if getattr(event, "workflow_step_id", None):
             channels.add(f"workflow-step:{event.workflow_step_id}")
+            channels.add("workflows")
 
         channels.add("all")  # Always publish to "all"
         

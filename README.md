@@ -25,8 +25,8 @@ MGX pairs a production-ready **FastAPI backend** (PostgreSQL + WebSocket events 
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Overall completion score:   9.8/10                                           │
-│ Production readiness:        98%                                             │
+│ Overall completion score:   9.8/10 → Production-Ready 🚀                     │
+│ Production readiness:        Production-Ready                                │
 │ Test suite:                  130+ automated tests (80%+ coverage gate)       │
 │ Backend API:                 FastAPI + async DB + WebSockets + migrations    │
 │ Git-aware execution:         branch/commit/PR automation                     │
@@ -56,6 +56,7 @@ MGX pairs a production-ready **FastAPI backend** (PostgreSQL + WebSocket events 
   - [Phase 82: Safe patchdiff writer](#phase-82-safe-patchdiff-writer)
   - [Phase 83: Code formatting & pre-commit](#phase-83-code-formatting--pre-commit)
   - [Phase 8: Global expansion](#phase-8-global-expansion)
+  - [Phase 10: Workflow Engine & Orchestration](#phase-10-workflow-engine--orchestration)
 - [Architecture & design](#architecture--design)
   - [Overall architecture diagram](#overall-architecture-diagram)
   - [Module dependencies](#module-dependencies)
@@ -412,32 +413,79 @@ Self-hosting:
 
 See: **[docs/CLI.md](docs/CLI.md)** and **[DOCKER_DEPLOYMENT.md](./DOCKER_DEPLOYMENT.md)**.
 
-### Phase 10: Workflow Telemetry & Monitoring
+### Phase 10: Workflow Engine & Orchestration
 
-Phase 10 delivers comprehensive workflow execution telemetry, monitoring, and documentation.
+Phase 10 delivers a **workflow engine** for orchestrating multi-step pipelines (sequential, parallel, conditional) with multi-agent execution, real-time events, and telemetry.
 
-**Key deliverables:**
+**Highlights:**
 
-- **Execution Timeline APIs**: Per-step metrics with duration, retry counts, and status tracking
-- **Aggregated Metrics**: Workflow success rates, duration statistics, and performance trends
-- **Example Workflows**: Four pre-built workflow templates (sequence, parallel, conditional, ETL)
-- **Workflow Seeding Script**: CLI to load example workflows into any workspace
-- **Comprehensive Documentation**: REST API reference, WebSocket event specs, dependency resolver rules
-- **Integration Tests**: End-to-end workflow execution tests with telemetry validation
+- **Workflow CRUD + validation**: define, update, validate, and template workflows
+- **Dependency resolver (DAG)**: determines safe parallel execution groups
+- **Conditional steps**: boolean-gated execution via `condition_expression`
+- **Retries & timeouts**: workflow defaults + per-step overrides
+- **Multi-agent orchestration**: assignment strategies + failover hooks
+- **Monitoring**: execution timelines, aggregated metrics, and WebSocket streams
 
-**Endpoints:**
-- `GET /api/workflows/executions/{execution_id}/timeline` - Detailed execution timeline with step metrics
-- `GET /api/workflows/{workflow_id}/metrics` - Aggregated workflow metrics and statistics
-- `GET /api/workflows/{workflow_id}/executions` - List executions with pagination/filtering
-- Plus all Phase 9 workflow CRUD endpoints
+#### Workflow API endpoints
+
+| Area | Method | Endpoint |
+|---|---:|---|
+| CRUD | GET | `/api/workflows/` |
+| CRUD | POST | `/api/workflows/` |
+| CRUD | GET | `/api/workflows/{workflow_id}` |
+| CRUD | PATCH | `/api/workflows/{workflow_id}` |
+| CRUD | DELETE | `/api/workflows/{workflow_id}` |
+| Validation | POST | `/api/workflows/validate` |
+| Templates | GET | `/api/workflows/templates` |
+| Execution | POST | `/api/workflows/{workflow_id}/execute` |
+| Execution | GET | `/api/workflows/{workflow_id}/executions` |
+| Execution | GET | `/api/workflows/executions/{execution_id}` |
+| Telemetry | GET | `/api/workflows/executions/{execution_id}/timeline` |
+| Telemetry | GET | `/api/workflows/{workflow_id}/metrics` |
+
+#### Workflow WebSocket channels
+
+- `ws://{host}/ws/workflows/{workflow_id}`
+- `ws://{host}/ws/workflows/executions/{execution_id}`
+- `ws://{host}/ws/workflows/steps/{step_id}`
+- `ws://{host}/ws/workflows/stream`
+
+**Primary event types:** `workflow_started`, `step_started`, `step_completed`, `step_failed`, `workflow_completed` (plus `step_skipped`, `workflow_failed`, `workflow_cancelled`).
+
+#### Example workflow usage
+
+- Create a workflow: `POST /api/workflows/` (see **[docs/API.md](./docs/API.md)**)
+- Execute: `POST /api/workflows/{workflow_id}/execute`
+- Monitor: connect to **[docs/WEBSOCKET.md](./docs/WEBSOCKET.md)**
+
+#### Architecture diagram (workflow components)
+
+```mermaid
+flowchart LR
+  UI[Client / UI] -->|REST| WFAPI[FastAPI: /api/workflows]
+  UI -->|WebSocket| WSWF[/ws/workflows/*]
+
+  WFAPI --> DB[(PostgreSQL)]
+  WFAPI --> INT[WorkflowEngineIntegration]
+
+  INT --> ENG[WorkflowEngine]
+  ENG --> RES[WorkflowDependencyResolver]
+  ENG --> CTRL[MultiAgentController]
+
+  CTRL --> AR[AgentRegistry]
+  CTRL --> CS[SharedContextService]
+
+  ENG --> EV[EventBroadcaster]
+  EV --> WSWF
+```
 
 **Resources:**
-- **[WORKFLOW_TELEMETRY.md](./WORKFLOW_TELEMETRY.md)** - Complete telemetry API guide with examples
-- **[BACKEND_README.md](./BACKEND_README.md#workflows-phase-10)** - Backend API reference
-- **[examples/workflows/](./examples/workflows/)** - Example workflow definitions
-- **[backend/scripts/seed_workflows.py](./backend/scripts/seed_workflows.py)** - Workflow seeding script
 
-See: **[WORKFLOW_TELEMETRY.md](./WORKFLOW_TELEMETRY.md)** for complete documentation.
+- Workflow guide: **[docs/WORKFLOWS.md](./docs/WORKFLOWS.md)**
+- Backend architecture: **[BACKEND_README.md](./BACKEND_README.md#workflows-phase-10)**
+- Telemetry deep-dive: **[WORKFLOW_TELEMETRY.md](./WORKFLOW_TELEMETRY.md)**
+- Example definitions: **[examples/workflows/](./examples/workflows/)**
+- Seeding script: **[backend/scripts/seed_workflows.py](./backend/scripts/seed_workflows.py)**
 
 #### Roadmap (Phase 11+)
 

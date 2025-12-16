@@ -1,0 +1,50 @@
+{
+  "name": "With Retries",
+  "description": "Demonstrates step-level retry and timeout configuration",
+  "config": {},
+  "timeout_seconds": 1800,
+  "max_retries": 1,
+  "variables": [
+    {
+      "name": "request_id",
+      "data_type": "string",
+      "is_required": true,
+      "description": "External request identifier",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "call_external_service",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 30,
+      "max_retries": 5,
+      "config": {
+        "description": "Call an external API (placeholder)",
+        "endpoint": "https://example.invalid/api"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "category": "network"
+      }
+    },
+    {
+      "name": "process_response",
+      "step_type": "task",
+      "step_order": 2,
+      "timeout_seconds": 120,
+      "max_retries": 2,
+      "config": {
+        "description": "Process the response"
+      },
+      "depends_on_steps": ["call_external_service"],
+      "metadata": {
+        "category": "processing"
+      }
+    }
+  ],
+  "metadata": {
+    "template": "with_retries"
+  }
+}

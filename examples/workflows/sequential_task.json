@@ -1,0 +1,58 @@
+{
+  "name": "Sequential Task",
+  "description": "A minimal sequential workflow with three task steps",
+  "config": {},
+  "timeout_seconds": 3600,
+  "max_retries": 3,
+  "variables": [
+    {
+      "name": "input",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input payload",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "prepare",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 120,
+      "max_retries": 1,
+      "config": {
+        "description": "Prepare inputs"
+      },
+      "depends_on_steps": [],
+      "metadata": {}
+    },
+    {
+      "name": "process",
+      "step_type": "task",
+      "step_order": 2,
+      "timeout_seconds": 600,
+      "max_retries": 2,
+      "config": {
+        "description": "Process input",
+        "processing_type": "data_transformation"
+      },
+      "depends_on_steps": ["prepare"],
+      "metadata": {}
+    },
+    {
+      "name": "finalize",
+      "step_type": "task",
+      "step_order": 3,
+      "timeout_seconds": 120,
+      "max_retries": 0,
+      "config": {
+        "description": "Finalize workflow"
+      },
+      "depends_on_steps": ["process"],
+      "metadata": {}
+    }
+  ],
+  "metadata": {
+    "template": "sequential_task"
+  }
+}
