@@ -21,6 +21,14 @@ from .agents import (
     get_agent_message_bus,
 )
 from .sandbox import SandboxRunner, SandboxRunnerError, get_sandbox_runner
+from .generator import (
+    ProjectGenerator,
+    TemplateManager,
+    FileEngine,
+    EnvEngine,
+    DockerEngine,
+    ScriptEngine,
+)
 
 __all__ = [
     'MGXTeamProvider', 
@@ -46,4 +54,10 @@ __all__ = [
     'get_agent_message_bus',
     'SandboxRunner',
     'SandboxRunnerError',
+    'ProjectGenerator',
+    'TemplateManager',
+    'FileEngine',
+    'EnvEngine',
+    'DockerEngine',
+    'ScriptEngine',
 ]

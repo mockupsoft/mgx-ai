@@ -1,0 +1,50 @@
+{
+  "name": "Express-TS API Server",
+  "stack": "express_ts", 
+  "version": "1.0.0",
+  "description": "RESTful API server built with Express.js and TypeScript",
+  "files": {
+    "package.json": "express_ts/package.json.template",
+    "tsconfig.json": "express_ts/tsconfig.json.template",
+    "src/server.ts": "express_ts/src/server.ts.template",
+    "src/routes/health.ts": "express_ts/src/routes/health.ts.template",
+    "src/middleware/auth.ts": "express_ts/src/middleware/auth.ts.template",
+    "src/middleware/error.ts": "express_ts/src/middleware/error.ts.template",
+    "src/utils/logger.ts": "express_ts/src/utils/logger.ts.template",
+    "tests/health.test.ts": "express_ts/tests/health.test.ts.template",
+    ".eslintrc.json": "express_ts/.eslintrc.json.template",
+    ".prettierrc": "express_ts/.prettierrc.template",
+    "README.md": "express_ts/README.md.template",
+    "SETUP_GUIDE.md": "common/SETUP_GUIDE.md.template"
+  },
+  "scripts": {
+    "dev": "npm run dev",
+    "build": "npm run build",
+    "test": "npm test",
+    "start": "node dist/server.js",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write src"
+  },
+  "env_vars": [
+    "PORT",
+    "NODE_ENV", 
+    "DATABASE_URL",
+    "LOG_LEVEL",
+    "CORS_ORIGIN",
+    "JWT_SECRET"
+  ],
+  "default_features": ["testing", "logging", "validation"],
+  "supported_features": [
+    "auth",
+    "database", 
+    "logging",
+    "validation",
+    "testing",
+    "docker",
+    "cicd",
+    "api_docs",
+    "websocket",
+    "file_upload"
+  ]
+}

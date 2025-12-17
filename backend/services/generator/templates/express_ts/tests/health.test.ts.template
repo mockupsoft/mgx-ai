@@ -1,0 +1,104 @@
+import request from 'supertest';
+import app from '../src/server';
+
+describe('Health Endpoints', () => {
+  describe('GET /health', () => {
+    it('should return health status', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('status', 'OK');
+      expect(response.body).toHaveProperty('timestamp');
+      expect(response.body).toHaveProperty('uptime');
+      expect(response.body).toHaveProperty('environment');
+      expect(response.body).toHaveProperty('version');
+      expect(response.body).toHaveProperty('memory');
+      expect(response.body).toHaveProperty('cpu');
+    });
+
+    it('should return current timestamp', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      const timestamp = new Date(response.body.timestamp);
+      const now = new Date();
+      const timeDiff = Math.abs(now.getTime() - timestamp.getTime());
+      
+      expect(timeDiff).toBeLessThan(5000); // Should be within 5 seconds
+    });
+
+    it('should return correct environment', async () => {
+      const response = await request(app)
+        .get('/health')
+        .expect(200);
+
+      expect(response.body.environment).toBeDefined();
+    });
+  });
+
+  describe('GET /health/ready', () => {
+    it('should return readiness status', async () => {
+      const response = await request(app)
+        .get('/health/ready')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('status', 'READY');
+      expect(response.body).toHaveProperty('checks');
+      expect(response.body.checks).toHaveProperty('database');
+      expect(response.body.checks).toHaveProperty('cache');
+      expect(response.body.checks).toHaveProperty('external_services');
+    });
+  });
+
+  describe('GET /health/live', () => {
+    it('should return liveness status', async () => {
+      const response = await request(app)
+        .get('/health/live')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('status', 'ALIVE');
+      expect(response.body).toHaveProperty('timestamp');
+      expect(response.body).toHaveProperty('pid');
+    });
+
+    it('should return process ID', async () => {
+      const response = await request(app)
+        .get('/health/live')
+        .expect(200);
+
+      expect(response.body.pid).toBeGreaterThan(0);
+    });
+  });
+
+  describe('GET /api/health', () => {
+    it('should return API health status', async () => {
+      const response = await request(app)
+        .get('/api/health')
+        .expect(200);
+
+      expect(response.body).toHaveProperty('status', 'OK');
+      expect(response.body).toHaveProperty('timestamp');
+    });
+  });
+});
+
+describe('404 Handler', () => {
+  it('should return 404 for unknown routes', async () => {
+    const response = await request(app)
+      .get('/unknown-route')
+      .expect(404);
+
+    expect(response.body).toHaveProperty('error', 'Not Found');
+    expect(response.body).toHaveProperty('message');
+  });
+
+  it('should return 404 for unknown API routes', async () => {
+    const response = await request(app)
+      .get('/api/unknown')
+      .expect(404);
+
+    expect(response.body).toHaveProperty('error', 'Not Found');
+  });
+});

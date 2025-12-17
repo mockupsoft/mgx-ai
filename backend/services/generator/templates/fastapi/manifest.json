@@ -1,0 +1,48 @@
+{
+  "name": "FastAPI Python Server",
+  "stack": "fastapi",
+  "version": "1.0.0",
+  "description": "Modern Python web framework for building APIs",
+  "files": {
+    "main.py": "fastapi/main.py.template",
+    "requirements.txt": "fastapi/requirements.txt.template",
+    "pyproject.toml": "fastapi/pyproject.toml.template",
+    "app/api/__init__.py": "fastapi/app/api/__init__.py.template",
+    "app/api/health.py": "fastapi/app/api/health.py.template",
+    "app/core/__init__.py": "fastapi/app/core/__init__.py.template",
+    "app/core/config.py": "fastapi/app/core/config.py.template",
+    "app/models/__init__.py": "fastapi/app/models/__init__.py.template",
+    "app/services/__init__.py": "fastapi/app/services/__init__.py.template",
+    "tests/__init__.py": "fastapi/tests/__init__.py.template",
+    "tests/test_health.py": "fastapi/tests/test_health.py.template",
+    "Dockerfile": "fastapi/Dockerfile.template",
+    ".env.example": "fastapi/.env.example.template",
+    "README.md": "fastapi/README.md.template"
+  },
+  "scripts": {
+    "dev": "uvicorn main:app --reload --host 0.0.0.0 --port 8000",
+    "build": "echo 'No build step required for Python'",
+    "test": "pytest",
+    "start": "uvicorn main:app --host 0.0.0.0 --port 8000",
+    "lint": "black . && flake8 .",
+    "format": "black ."
+  },
+  "env_vars": [
+    "APP_NAME",
+    "APP_VERSION", 
+    "DEBUG",
+    "DATABASE_URL",
+    "SECRET_KEY",
+    "ALLOWED_HOSTS"
+  ],
+  "default_features": ["testing", "logging"],
+  "supported_features": [
+    "auth",
+    "database",
+    "logging", 
+    "validation",
+    "testing",
+    "docker",
+    "api_docs"
+  ]
+}

@@ -17,6 +17,13 @@ from .enums import (
     RepositoryProvider,
     RunStatus,
     TaskStatus,
+    WorkflowStatus,
+    WorkflowStepStatus,
+    WorkflowStepType,
+    ProjectTemplateStatus,
+    ProjectGenerationStatus,
+    StackType,
+    TemplateFeatureType,
 )
 from .entities import (
     Artifact,
@@ -27,6 +34,9 @@ from .entities import (
     AgentMessage,
     MetricSnapshot,
     Project,
+    ProjectTemplate,
+    TemplateFeature,
+    GeneratedProject,
     RepositoryLink,
     Task,
     TaskRun,
@@ -36,17 +46,17 @@ from .entities import (
     WorkflowVariable,
     WorkflowExecution,
     WorkflowStepExecution,
-)
-from .enums import (
-    WorkflowStatus,
-    WorkflowStepStatus,
-    WorkflowStepType,
+    Secret,
+    SecretAudit,
 )
 
 __all__ = [
     "Base",
     "Workspace",
     "Project",
+    "ProjectTemplate",
+    "TemplateFeature", 
+    "GeneratedProject",
     "RepositoryLink",
     "Task",
     "TaskRun",
@@ -62,6 +72,8 @@ __all__ = [
     "WorkflowVariable",
     "WorkflowExecution",
     "WorkflowStepExecution",
+    "Secret",
+    "SecretAudit",
     "TaskStatus",
     "RunStatus",
     "MetricType",
@@ -74,4 +86,8 @@ __all__ = [
     "WorkflowStatus",
     "WorkflowStepStatus",
     "WorkflowStepType",
+    "ProjectTemplateStatus",
+    "ProjectGenerationStatus",
+    "StackType",
+    "TemplateFeatureType",
 ]
