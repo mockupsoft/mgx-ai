@@ -38,6 +38,7 @@ from backend.routers import (
     rbac_router,
     audit_router,
     secrets_router,
+    generator_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -274,6 +275,9 @@ def create_app() -> FastAPI:
     
     app.include_router(secrets_router)
     logger.info("✓ Registered: secrets_router")
+    
+    app.include_router(generator_router)
+    logger.info("✓ Registered: generator_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])

@@ -104,6 +104,55 @@ class ContextRollbackState(str, Enum):
     FAILED = "failed"  # Rollback failed
 
 
+class ProjectTemplateStatus(str, Enum):
+    """Status of a project template."""
+
+    DRAFT = "draft"  # Template is being created/edited
+    ACTIVE = "active"  # Template is available for use
+    DEPRECATED = "deprecated"  # Template is deprecated but still available
+    ARCHIVED = "archived"  # Template is archived and not available
+
+
+class ProjectGenerationStatus(str, Enum):
+    """Status of a project generation process."""
+
+    PENDING = "pending"  # Generation is queued
+    RUNNING = "running"  # Generation is in progress
+    COMPLETED = "completed"  # Generation completed successfully
+    FAILED = "failed"  # Generation failed with error
+    CANCELLED = "cancelled"  # Generation was cancelled
+
+
+class StackType(str, Enum):
+    """Programming stack types for project templates."""
+
+    EXPRESS_TS = "express_ts"  # Express.js with TypeScript
+    FASTAPI = "fastapi"  # FastAPI Python framework
+    NEXTJS = "nextjs"  # Next.js React framework
+    LARAVEL = "laravel"  # Laravel PHP framework
+
+
+class TemplateFeatureType(str, Enum):
+    """Types of features that can be added to project templates."""
+
+    AUTH = "auth"  # Authentication system
+    DATABASE = "database"  # Database integration
+    LOGGING = "logging"  # Logging system
+    VALIDATION = "validation"  # Input validation
+    TESTING = "testing"  # Testing framework
+    DOCKER = "docker"  # Docker configuration
+    CICD = "cicd"  # CI/CD pipeline
+    MONITORING = "monitoring"  # Monitoring and metrics
+    API_DOCS = "api_docs"  # API documentation
+    WEBSOCKET = "websocket"  # WebSocket support
+    FILE_UPLOAD = "file_upload"  # File upload handling
+    EMAIL = "email"  # Email service integration
+    CACHE = "cache"  # Caching system
+    QUEUE = "queue"  # Job queue system
+    SUCCESS = "success"  # Rollback succeeded
+    FAILED = "failed"  # Rollback failed
+
+
 class WorkflowStatus(str, Enum):
     """Workflow execution status."""
 

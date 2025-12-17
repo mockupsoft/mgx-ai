@@ -1247,7 +1247,140 @@ class SecretAudit(Base, TimestampMixin, SerializationMixin):
         return f"<SecretAudit(id={self.id}, secret_id='{self.secret_id}', action='{self.action}', user_id='{self.user_id}')>"
 
 
+class ProjectTemplate(Base, TimestampMixin, SerializationMixin):
+    """Template definition for project generation."""
+
+    __tablename__ = "project_templates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    # Template identification
+    name = Column(String(200), nullable=False, index=True, comment="Template name")
+    description = Column(Text, comment="Template description")
+    stack = Column(SQLEnum(StackType), nullable=False, index=True, comment="Programming stack type")
+    version = Column(String(50), default="1.0.0", comment="Template version")
+    
+    # Template metadata
+    status = Column(SQLEnum(ProjectTemplateStatus), default=ProjectTemplateStatus.DRAFT, nullable=False, index=True, comment="Template status")
+    author = Column(String(200), comment="Template author")
+    
+    # Template configuration
+    manifest = Column(JSON, nullable=False, comment="Template manifest with file definitions and metadata")
+    default_features = Column(JSON, comment="Default features included in this template")
+    supported_features = Column(JSON, comment="List of features supported by this template")
+    environment_variables = Column(JSON, comment="Environment variables used by this template")
+    
+    # Statistics
+    usage_count = Column(Integer, default=0, comment="Number of times this template has been used")
+    last_used_at = Column(DateTime, comment="When this template was last used")
+    
+    __table_args__ = (
+        Index("idx_project_templates_stack_status", "stack", "status"),
+        Index("idx_project_templates_usage", "usage_count"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ProjectTemplate(id={self.id}, name='{self.name}', stack='{self.stack}', version='{self.version}')>"
+
+
+class TemplateFeature(Base, TimestampMixin, SerializationMixin):
+    """Feature definition that can be added to project templates."""
+
+    __tablename__ = "template_features"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    # Feature identification
+    name = Column(String(100), nullable=False, unique=True, index=True, comment="Feature name")
+    display_name = Column(String(200), nullable=False, comment="User-friendly feature name")
+    description = Column(Text, comment="Feature description")
+    feature_type = Column(SQLEnum(TemplateFeatureType), nullable=False, index=True, comment="Type of feature")
+    
+    # Feature configuration
+    compatible_stacks = Column(JSON, nullable=False, comment="List of stack types this feature supports")
+    dependencies = Column(JSON, comment="Other features this feature depends on")
+    conflicts = Column(JSON, comment="Features that conflict with this feature")
+    
+    # Feature implementation
+    files = Column(JSON, comment="Files that comprise this feature")
+    scripts = Column(JSON, comment="Scripts provided by this feature")
+    configuration = Column(JSON, comment="Feature-specific configuration options")
+    
+    # Metadata
+    version = Column(String(50), default="1.0.0", comment="Feature version")
+    author = Column(String(200), comment="Feature author")
+    tags = Column(JSON, comment="Tags for categorization")
+    
+    # Usage statistics
+    usage_count = Column(Integer, default=0, comment="Number of times this feature has been used")
+    
+    __table_args__ = (
+        Index("idx_template_features_type", "feature_type"),
+        Index("idx_template_features_stacks", "compatible_stacks"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<TemplateFeature(id={self.id}, name='{self.name}', type='{self.feature_type}')>"
+
+
+class GeneratedProject(Base, TimestampMixin, SerializationMixin):
+    """Record of a generated project from a template."""
+
+    __tablename__ = "generated_projects"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Project identification
+    name = Column(String(200), nullable=False, index=True, comment="Generated project name")
+    description = Column(Text, comment="Project description")
+    
+    # Generation details
+    template_id = Column(String(36), ForeignKey("project_templates.id", ondelete="RESTRICT"), nullable=False, index=True)
+    features_used = Column(JSON, comment="Features included in this generation")
+    custom_settings = Column(JSON, comment="Custom settings used for generation")
+    
+    # Generation status
+    status = Column(SQLEnum(ProjectGenerationStatus), default=ProjectGenerationStatus.PENDING, nullable=False, index=True, comment="Generation status")
+    progress = Column(Integer, default=0, comment="Generation progress percentage (0-100)")
+    
+    # Generated project details
+    project_path = Column(String(500), comment="Path where the project was generated")
+    files_created = Column(Integer, default=0, comment="Number of files created")
+    repository_url = Column(String(500), comment="Git repository URL if created")
+    
+    # Error tracking
+    error_message = Column(Text, comment="Error message if generation failed")
+    error_details = Column(JSON, comment="Detailed error information")
+    
+    # Completion details
+    completed_at = Column(DateTime, comment="When generation was completed")
+    build_successful = Column(Boolean, comment="Whether the generated project builds successfully")
+    tests_passed = Column(Boolean, comment="Whether the generated project's tests pass")
+    
+    # User context
+    generated_by = Column(String(36), comment="User who initiated the generation")
+    
+    __table_args__ = (
+        Index("idx_generated_projects_workspace_status", "workspace_id", "status"),
+        Index("idx_generated_projects_template", "template_id"),
+        Index("idx_generated_projects_status_timestamp", "status", "created_at"),
+    )
+
+    workspace = relationship("Workspace", back_populates="generated_projects")
+    template = relationship("ProjectTemplate")
+
+    def __repr__(self) -> str:
+        return f"<GeneratedProject(id={self.id}, name='{self.name}', template_id='{self.template_id}', status='{self.status}')>"
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if the generation process is complete."""
+        return self.status in [ProjectGenerationStatus.COMPLETED, ProjectGenerationStatus.FAILED, ProjectGenerationStatus.CANCELLED]
+
+
 Workspace.roles = relationship("Role", back_populates="workspace", cascade="all, delete-orphan")
+Workspace.generated_projects = relationship("GeneratedProject", back_populates="workspace", cascade="all, delete-orphan")
 
 
 __all__ = [
@@ -1293,4 +1426,7 @@ __all__ = [
     "AuditLog",
     "Secret",
     "SecretAudit",
+    "ProjectTemplate",
+    "TemplateFeature",
+    "GeneratedProject",
 ]

@@ -1,0 +1,42 @@
+{
+  "name": "Next.js React App",
+  "stack": "nextjs",
+  "version": "1.0.0", 
+  "description": "Full-stack React framework with server-side rendering",
+  "files": {
+    "package.json": "nextjs/package.json.template",
+    "tsconfig.json": "nextjs/tsconfig.json.template",
+    "next.config.ts": "nextjs/next.config.ts.template",
+    "app/page.tsx": "nextjs/app/page.tsx.template",
+    "app/layout.tsx": "nextjs/app/layout.tsx.template",
+    "app/api/health/route.ts": "nextjs/app/api/health/route.ts.template",
+    "components/Header.tsx": "nextjs/components/Header.tsx.template",
+    "styles/globals.css": "nextjs/styles/globals.css.template",
+    "jest.config.js": "nextjs/jest.config.js.template",
+    "__tests__/index.test.tsx": "nextjs/__tests__/index.test.tsx.template",
+    "Dockerfile": "nextjs/Dockerfile.template",
+    ".env.local.example": "nextjs/.env.local.example.template",
+    "README.md": "nextjs/README.md.template"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "jest",
+    "lint": "next lint",
+    "format": "prettier --write ."
+  },
+  "env_vars": [
+    "NEXT_PUBLIC_API_URL",
+    "NODE_ENV",
+    "PORT"
+  ],
+  "default_features": ["testing"],
+  "supported_features": [
+    "auth",
+    "database",
+    "testing", 
+    "docker",
+    "cicd"
+  ]
+}
