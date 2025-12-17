@@ -62,6 +62,9 @@ from .enums import (
     ProjectGenerationStatus,
     StackType,
     TemplateFeatureType,
+    LLMProvider,
+    ResourceType,
+    BudgetAlertType,
 )
 
 
@@ -79,6 +82,8 @@ class Workspace(Base, TimestampMixin, SerializationMixin):
 
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="workspace", cascade="all, delete-orphan")
+    generated_projects = relationship("GeneratedProject", back_populates="workspace", cascade="all, delete-orphan")
+    budget = relationship("WorkspaceBudget", back_populates="workspace", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Workspace(id={self.id}, slug='{self.slug}')>"
@@ -130,7 +135,8 @@ class Project(Base, TimestampMixin, SerializationMixin):
         cascade="all, delete-orphan",
         foreign_keys="RepositoryLink.project_id",
     )
-
+    
+    budget = relationship("ProjectBudget", back_populates="project", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Project(id={self.id}, workspace_id='{self.workspace_id}', slug='{self.slug}')>"
@@ -1369,6 +1375,192 @@ class GeneratedProject(Base, TimestampMixin, SerializationMixin):
         return self.status in [ProjectGenerationStatus.COMPLETED, ProjectGenerationStatus.FAILED, ProjectGenerationStatus.CANCELLED]
 
 
+class LLMCall(Base, TimestampMixin, SerializationMixin):
+    """Record of LLM API call with cost tracking."""
+
+    __tablename__ = "llm_calls"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    execution_id = Column(String(36), index=True, comment="Task run or workflow execution ID")
+
+    provider = Column(String(50), nullable=False, index=True, comment="LLM provider (openai, claude, mistral, etc.)")
+    model = Column(String(100), nullable=False, index=True, comment="Model name (gpt-4, claude-3-opus, etc.)")
+    
+    tokens_prompt = Column(Integer, nullable=False, default=0, comment="Prompt tokens used")
+    tokens_completion = Column(Integer, nullable=False, default=0, comment="Completion tokens used")
+    tokens_total = Column(Integer, nullable=False, default=0, comment="Total tokens used")
+    
+    cost_usd = Column(Float, nullable=False, default=0.0, comment="Total cost in USD")
+    latency_ms = Column(Integer, comment="API call latency in milliseconds")
+    
+    call_metadata = Column(JSON, comment="Additional call metadata (temperature, max_tokens, etc.)")
+    timestamp = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True, comment="Call timestamp")
+
+    __table_args__ = (
+        Index("idx_llm_calls_workspace_timestamp", "workspace_id", "timestamp"),
+        Index("idx_llm_calls_execution", "execution_id"),
+        Index("idx_llm_calls_provider_model", "provider", "model"),
+        Index("idx_llm_calls_timestamp", "timestamp"),
+    )
+
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<LLMCall(id={self.id}, provider='{self.provider}', model='{self.model}', cost=${self.cost_usd:.4f})>"
+
+
+class ResourceUsage(Base, TimestampMixin, SerializationMixin):
+    """Record of compute resource usage."""
+
+    __tablename__ = "resource_usage"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    execution_id = Column(String(36), index=True, comment="Task run or workflow execution ID")
+
+    resource_type = Column(String(50), nullable=False, index=True, comment="Resource type (cpu, memory, gpu, storage, etc.)")
+    usage_value = Column(Float, nullable=False, comment="Amount of resource used")
+    unit = Column(String(20), nullable=False, comment="Unit of measurement (cores, gb, hours, etc.)")
+    
+    cost_usd = Column(Float, nullable=False, default=0.0, comment="Cost in USD")
+    duration_seconds = Column(Float, comment="Duration of usage in seconds")
+    
+    usage_metadata = Column(JSON, comment="Additional usage metadata")
+    timestamp = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True, comment="Usage timestamp")
+
+    __table_args__ = (
+        Index("idx_resource_usage_workspace_timestamp", "workspace_id", "timestamp"),
+        Index("idx_resource_usage_execution", "execution_id"),
+        Index("idx_resource_usage_type", "resource_type"),
+        Index("idx_resource_usage_timestamp", "timestamp"),
+    )
+
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<ResourceUsage(id={self.id}, type='{self.resource_type}', value={self.usage_value} {self.unit}, cost=${self.cost_usd:.4f})>"
+
+
+class ExecutionCost(Base, TimestampMixin, SerializationMixin):
+    """Aggregated cost summary for an execution."""
+
+    __tablename__ = "execution_costs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    execution_id = Column(String(36), nullable=False, unique=True, index=True, comment="Task run or workflow execution ID")
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    total_llm_cost = Column(Float, nullable=False, default=0.0, comment="Total LLM API costs in USD")
+    total_compute_cost = Column(Float, nullable=False, default=0.0, comment="Total compute costs in USD")
+    total_cost = Column(Float, nullable=False, default=0.0, comment="Grand total cost in USD")
+    
+    breakdown = Column(JSON, nullable=False, default=dict, comment="Detailed cost breakdown by phase/model")
+    
+    llm_call_count = Column(Integer, default=0, comment="Total number of LLM calls")
+    total_tokens = Column(Integer, default=0, comment="Total tokens used across all LLM calls")
+    
+    timestamp = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True, comment="Cost calculation timestamp")
+
+    __table_args__ = (
+        Index("idx_execution_costs_workspace", "workspace_id"),
+        Index("idx_execution_costs_timestamp", "timestamp"),
+    )
+
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<ExecutionCost(id={self.id}, execution_id='{self.execution_id}', total=${self.total_cost:.2f})>"
+
+
+class WorkspaceBudget(Base, TimestampMixin, SerializationMixin):
+    """Budget limits and alerts for a workspace."""
+
+    __tablename__ = "workspace_budgets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+
+    monthly_budget_usd = Column(Float, nullable=False, comment="Monthly budget limit in USD")
+    current_month_spent = Column(Float, nullable=False, default=0.0, comment="Current month spending in USD")
+    
+    alert_threshold_percent = Column(Integer, nullable=False, default=80, comment="Alert threshold percentage (e.g., 80 for 80%)")
+    alert_emails = Column(JSON, nullable=False, default=list, comment="Email addresses to notify for alerts")
+    
+    alerts_sent = Column(JSON, nullable=False, default=list, comment="History of alerts sent")
+    last_alert_at = Column(DateTime(timezone=True), comment="Last alert timestamp")
+    
+    budget_period_start = Column(DateTime(timezone=True), comment="Current budget period start date")
+    budget_period_end = Column(DateTime(timezone=True), comment="Current budget period end date")
+    
+    is_enabled = Column(Boolean, nullable=False, default=True, comment="Whether budget enforcement is enabled")
+    hard_limit = Column(Boolean, nullable=False, default=False, comment="Whether to block operations when budget exceeded")
+
+    __table_args__ = (
+        Index("idx_workspace_budgets_workspace", "workspace_id"),
+    )
+
+    workspace = relationship("Workspace", back_populates="budget")
+
+    def __repr__(self) -> str:
+        return f"<WorkspaceBudget(id={self.id}, workspace_id='{self.workspace_id}', budget=${self.monthly_budget_usd:.2f}, spent=${self.current_month_spent:.2f})>"
+
+    @property
+    def budget_remaining(self) -> float:
+        """Calculate remaining budget."""
+        return max(0.0, self.monthly_budget_usd - self.current_month_spent)
+
+    @property
+    def budget_used_percent(self) -> float:
+        """Calculate percentage of budget used."""
+        if self.monthly_budget_usd <= 0:
+            return 0.0
+        return (self.current_month_spent / self.monthly_budget_usd) * 100
+
+    @property
+    def is_over_budget(self) -> bool:
+        """Check if over budget."""
+        return self.current_month_spent >= self.monthly_budget_usd
+
+
+class ProjectBudget(Base, TimestampMixin, SerializationMixin):
+    """Budget limits for a specific project."""
+
+    __tablename__ = "project_budgets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    monthly_budget_usd = Column(Float, nullable=False, comment="Monthly budget limit in USD")
+    current_month_spent = Column(Float, nullable=False, default=0.0, comment="Current month spending in USD")
+    
+    is_enabled = Column(Boolean, nullable=False, default=True, comment="Whether budget enforcement is enabled")
+
+    __table_args__ = (
+        Index("idx_project_budgets_project", "project_id"),
+        Index("idx_project_budgets_workspace", "workspace_id"),
+    )
+
+    project = relationship("Project", back_populates="budget")
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<ProjectBudget(id={self.id}, project_id='{self.project_id}', budget=${self.monthly_budget_usd:.2f}, spent=${self.current_month_spent:.2f})>"
+
+    @property
+    def budget_remaining(self) -> float:
+        """Calculate remaining budget."""
+        return max(0.0, self.monthly_budget_usd - self.current_month_spent)
+
+    @property
+    def budget_used_percent(self) -> float:
+        """Calculate percentage of budget used."""
+        if self.monthly_budget_usd <= 0:
+            return 0.0
+        return (self.current_month_spent / self.monthly_budget_usd) * 100
+
+
 class ArtifactBuild(Base, TimestampMixin, SerializationMixin):
     """Artifact/release pipeline build record."""
 
@@ -1457,4 +1649,9 @@ __all__ = [
     "TemplateFeature",
     "GeneratedProject",
     "ArtifactBuild",
+    "LLMCall",
+    "ResourceUsage",
+    "ExecutionCost",
+    "WorkspaceBudget",
+    "ProjectBudget",
 ]

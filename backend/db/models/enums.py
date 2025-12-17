@@ -422,3 +422,40 @@ class SecretAuditAction(str, Enum):
     ENCRYPTION_KEY_ROTATED = "encryption_key_rotated"  # Encryption key was rotated
     BACKUP_CREATED = "backup_created"  # Secret backup was created
     RESTORE_PERFORMED = "restore_performed"  # Secret was restored from backup
+
+
+class LLMProvider(str, Enum):
+    """LLM provider types for cost tracking."""
+
+    OPENAI = "openai"  # OpenAI (GPT models)
+    ANTHROPIC = "anthropic"  # Anthropic (Claude models)
+    CLAUDE = "claude"  # Claude (alias for Anthropic)
+    MISTRAL = "mistral"  # Mistral AI
+    COHERE = "cohere"  # Cohere
+    GOOGLE = "google"  # Google (Gemini, PaLM)
+    HUGGINGFACE = "huggingface"  # HuggingFace models
+    LOCAL = "local"  # Local models (Ollama, etc.)
+    OTHER = "other"  # Other providers
+
+
+class ResourceType(str, Enum):
+    """Resource types for usage tracking."""
+
+    CPU = "cpu"  # CPU cores
+    MEMORY = "memory"  # RAM memory
+    GPU = "gpu"  # GPU resources
+    STORAGE = "storage"  # Disk storage
+    BANDWIDTH = "bandwidth"  # Network bandwidth
+    SANDBOX = "sandbox"  # Sandbox execution time
+    DATABASE = "database"  # Database operations
+
+
+class BudgetAlertType(str, Enum):
+    """Budget alert threshold types."""
+
+    THRESHOLD_50 = "threshold_50"  # 50% of budget reached
+    THRESHOLD_80 = "threshold_80"  # 80% of budget reached
+    THRESHOLD_90 = "threshold_90"  # 90% of budget reached
+    THRESHOLD_100 = "threshold_100"  # 100% of budget reached
+    THRESHOLD_EXCEEDED = "threshold_exceeded"  # Budget exceeded
+    ANOMALY_DETECTED = "anomaly_detected"  # Cost anomaly detected
