@@ -189,3 +189,130 @@ class GateSeverity(str, Enum):
     HIGH = "high"  # Blocking failure
     MEDIUM = "medium"  # Warning level
     LOW = "low"  # Info level
+
+
+class RoleName(str, Enum):
+    """System-defined role names."""
+
+    ADMIN = "admin"
+    DEVELOPER = "developer"
+    VIEWER = "viewer"
+    AUDITOR = "auditor"
+
+
+class PermissionResource(str, Enum):
+    """Resource types for permissions."""
+
+    TASKS = "tasks"
+    WORKFLOWS = "workflows"
+    REPOSITORIES = "repositories"
+    REPOS = "repos"
+    AGENTS = "agents"
+    SETTINGS = "settings"
+    USERS = "users"
+    AUDIT = "audit"
+    METRICS = "metrics"
+    WORKSPACES = "workspaces"
+    PROJECTS = "projects"
+
+
+class PermissionAction(str, Enum):
+    """Action types for permissions."""
+
+    CREATE = "create"
+    READ = "read"
+    UPDATE = "update"
+    DELETE = "delete"
+    EXECUTE = "execute"
+    APPROVE = "approve"
+    MANAGE = "manage"
+    CONNECT = "connect"
+
+
+class AuditAction(str, Enum):
+    """Audit log action types."""
+
+    # User management
+    USER_LOGIN = "USER_LOGIN"
+    USER_LOGOUT = "USER_LOGOUT"
+    USER_CREATED = "USER_CREATED"
+    USER_UPDATED = "USER_UPDATED"
+    USER_DELETED = "USER_DELETED"
+    
+    # Role and permission management
+    ROLE_CREATED = "ROLE_CREATED"
+    ROLE_UPDATED = "ROLE_UPDATED"
+    ROLE_DELETED = "ROLE_DELETED"
+    ROLE_ASSIGNED = "ROLE_ASSIGNED"
+    ROLE_REVOKED = "ROLE_REVOKED"
+    PERMISSION_GRANTED = "PERMISSION_GRANTED"
+    PERMISSION_REVOKED = "PERMISSION_REVOKED"
+    
+    # Workspace management
+    WORKSPACE_CREATED = "WORKSPACE_CREATED"
+    WORKSPACE_UPDATED = "WORKSPACE_UPDATED"
+    WORKSPACE_DELETED = "WORKSPACE_DELETED"
+    WORKSPACE_ACCESS_GRANTED = "WORKSPACE_ACCESS_GRANTED"
+    WORKSPACE_ACCESS_REVOKED = "WORKSPACE_ACCESS_REVOKED"
+    
+    # Project management
+    PROJECT_CREATED = "PROJECT_CREATED"
+    PROJECT_UPDATED = "PROJECT_UPDATED"
+    PROJECT_DELETED = "PROJECT_DELETED"
+    
+    # Task management
+    TASK_CREATED = "TASK_CREATED"
+    TASK_UPDATED = "TASK_UPDATED"
+    TASK_DELETED = "TASK_DELETED"
+    TASK_EXECUTED = "TASK_EXECUTED"
+    TASK_RUN_STARTED = "TASK_RUN_STARTED"
+    TASK_RUN_COMPLETED = "TASK_RUN_COMPLETED"
+    TASK_RUN_FAILED = "TASK_RUN_FAILED"
+    
+    # Workflow management
+    WORKFLOW_CREATED = "WORKFLOW_CREATED"
+    WORKFLOW_UPDATED = "WORKFLOW_UPDATED"
+    WORKFLOW_DELETED = "WORKFLOW_DELETED"
+    WORKFLOW_EXECUTED = "WORKFLOW_EXECUTED"
+    WORKFLOW_STEP_EXECUTED = "WORKFLOW_STEP_EXECUTED"
+    
+    # Repository management
+    REPOSITORY_CONNECTED = "REPOSITORY_CONNECTED"
+    REPOSITORY_DISCONNECTED = "REPOSITORY_DISCONNECTED"
+    REPOSITORY_ACCESS_GRANTED = "REPOSITORY_ACCESS_GRANTED"
+    
+    # Agent management
+    AGENT_CREATED = "AGENT_CREATED"
+    AGENT_UPDATED = "AGENT_UPDATED"
+    AGENT_DELETED = "AGENT_DELETED"
+    AGENT_ENABLED = "AGENT_ENABLED"
+    AGENT_DISABLED = "AGENT_DISABLED"
+    AGENT_MESSAGE_SENT = "AGENT_MESSAGE_SENT"
+    
+    # System and settings
+    SETTINGS_CHANGED = "SETTINGS_CHANGED"
+    SYSTEM_BACKUP_CREATED = "SYSTEM_BACKUP_CREATED"
+    SYSTEM_MAINTENANCE_MODE_ENABLED = "SYSTEM_MAINTENANCE_MODE_ENABLED"
+    
+    # Security events
+    UNAUTHORIZED_ACCESS_ATTEMPT = "UNAUTHORIZED_ACCESS_ATTEMPT"
+    SECURITY_VIOLATION_DETECTED = "SECURITY_VIOLATION_DETECTED"
+    
+    # Data operations
+    DATA_EXPORTED = "DATA_EXPORTED"
+    DATA_IMPORTED = "DATA_IMPORTED"
+    BULK_OPERATION_PERFORMED = "BULK_OPERATION_PERFORMED"
+    
+    # Sandbox operations
+    SANDBOX_EXECUTION_STARTED = "SANDBOX_EXECUTION_STARTED"
+    SANDBOX_EXECUTION_COMPLETED = "SANDBOX_EXECUTION_COMPLETED"
+    SANDBOX_EXECUTION_FAILED = "SANDBOX_EXECUTION_FAILED"
+
+
+class AuditLogStatus(str, Enum):
+    """Status of audit log entries."""
+
+    SUCCESS = "success"
+    FAILURE = "failure"
+    ERROR = "error"
+    WARNING = "warning"

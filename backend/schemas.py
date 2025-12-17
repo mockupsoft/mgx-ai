@@ -802,6 +802,215 @@ class HealthStatus(BaseModel):
 
 
 # ============================================
+# RBAC & Permission Schemas
+# ============================================
+
+class RoleCreate(BaseModel):
+    """Schema for creating roles."""
+    name: str = Field(..., min_length=1, max_length=100, description="Role name")
+    permissions: List[str] = Field(default_factory=list, description="List of permission strings")
+    description: Optional[str] = Field(None, max_length=500, description="Role description")
+
+
+class RoleUpdate(BaseModel):
+    """Schema for updating roles."""
+    permissions: Optional[List[str]] = Field(None, description="List of permission strings")
+    description: Optional[str] = Field(None, max_length=500, description="Role description")
+    is_active: Optional[bool] = Field(None, description="Whether role is active")
+
+
+class RoleResponse(BaseModel):
+    """Schema for role responses."""
+    id: str = Field(..., description="Role ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    name: str = Field(..., description="Role name")
+    permissions: List[str] = Field(default_factory=list, description="List of permission strings")
+    description: Optional[str] = Field(None, description="Role description")
+    is_system_role: bool = Field(..., description="Whether this is a system role")
+    is_active: bool = Field(..., description="Whether role is active")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    
+    class Config:
+        from_attributes = True
+
+
+class RoleListResponse(BaseModel):
+    """Schema for role list responses."""
+    roles: List[RoleResponse] = Field(..., description="List of roles")
+    total: int = Field(..., description="Total number of roles")
+    page: int = Field(..., description="Current page")
+    per_page: int = Field(..., description="Items per page")
+
+
+class UserRoleCreate(BaseModel):
+    """Schema for creating user role assignments."""
+    user_id: str = Field(..., description="User ID to assign role to")
+    role_id: str = Field(..., description="Role ID to assign")
+
+
+class UserRoleUpdate(BaseModel):
+    """Schema for updating user role assignments."""
+    is_active: Optional[bool] = Field(None, description="Whether assignment is active")
+
+
+class UserRoleResponse(BaseModel):
+    """Schema for user role responses."""
+    id: str = Field(..., description="Assignment ID")
+    user_id: str = Field(..., description="User ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    role_id: str = Field(..., description="Role ID")
+    assigned_at: datetime = Field(..., description="Assignment timestamp")
+    assigned_by_user_id: Optional[str] = Field(None, description="User who assigned the role")
+    is_active: bool = Field(..., description="Whether assignment is active")
+    
+    # Nested role information
+    role: RoleResponse = Field(..., description="Role details")
+    
+    class Config:
+        from_attributes = True
+
+
+class UserRoleListResponse(BaseModel):
+    """Schema for user role list responses."""
+    assignments: List[UserRoleResponse] = Field(..., description="List of user role assignments")
+    total: int = Field(..., description="Total number of assignments")
+    page: int = Field(..., description="Current page")
+    per_page: int = Field(..., description="Items per page")
+
+
+class PermissionResponse(BaseModel):
+    """Schema for permission responses."""
+    id: str = Field(..., description="Permission ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    role_id: str = Field(..., description="Role ID")
+    resource: str = Field(..., description="Resource type")
+    action: str = Field(..., description="Action type")
+    conditions: Optional[Dict[str, Any]] = Field(None, description="Permission conditions")
+    is_active: bool = Field(..., description="Whether permission is active")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    
+    class Config:
+        from_attributes = True
+
+
+class PermissionListResponse(BaseModel):
+    """Schema for permission list responses."""
+    permissions: List[PermissionResponse] = Field(..., description="List of permissions")
+    total: int = Field(..., description="Total number of permissions")
+    page: int = Field(..., description="Current page")
+    per_page: int = Field(..., description="Items per page")
+
+
+class PermissionCheck(BaseModel):
+    """Schema for permission check requests."""
+    user_id: str = Field(..., description="User ID to check")
+    workspace_id: str = Field(..., description="Workspace ID")
+    resource: str = Field(..., description="Resource type to check")
+    action: str = Field(..., description="Action type to check")
+    resource_id: Optional[str] = Field(None, description="Specific resource ID")
+
+
+class PermissionResult(BaseModel):
+    """Schema for permission check results."""
+    has_permission: bool = Field(..., description="Whether permission is granted")
+    required_permission: str = Field(..., description="Required permission string")
+    user_roles: List[str] = Field(default_factory=list, description="User's roles")
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional context")
+
+
+# ============================================
+# Audit Logging Schemas
+# ============================================
+
+class AuditLogCreate(BaseModel):
+    """Schema for creating audit log entries."""
+    workspace_id: str = Field(..., description="Workspace ID")
+    user_id: Optional[str] = Field(None, description="User ID (nullable for system actions)")
+    action: str = Field(..., description="Action performed")
+    resource_type: str = Field(..., description="Type of resource affected")
+    resource_id: Optional[str] = Field(None, description="Specific resource ID")
+    changes: Optional[Dict[str, Any]] = Field(None, description="Before/after values")
+    status: Optional[str] = Field("success", description="Operation status")
+    ip_address: Optional[str] = Field(None, description="Client IP address")
+    user_agent: Optional[str] = Field(None, description="Client user agent")
+    execution_time_ms: Optional[int] = Field(None, description="Execution time in milliseconds")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional context")
+
+
+class AuditLogResponse(BaseModel):
+    """Schema for audit log responses."""
+    id: str = Field(..., description="Audit log ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    user_id: Optional[str] = Field(None, description="User ID")
+    action: str = Field(..., description="Action performed")
+    resource_type: str = Field(..., description="Type of resource affected")
+    resource_id: Optional[str] = Field(None, description="Specific resource ID")
+    changes: Optional[Dict[str, Any]] = Field(None, description="Operation details")
+    status: str = Field(..., description="Operation status")
+    ip_address: Optional[str] = Field(None, description="Client IP address")
+    user_agent: Optional[str] = Field(None, description="Client user agent")
+    execution_time_ms: Optional[int] = Field(None, description="Execution time in milliseconds")
+    error_message: Optional[str] = Field(None, description="Error message if failed")
+    created_at: datetime = Field(..., description="Log timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+    
+    class Config:
+        from_attributes = True
+
+
+class AuditLogListResponse(BaseModel):
+    """Schema for audit log list responses."""
+    logs: List[AuditLogResponse] = Field(..., description="List of audit logs")
+    total: int = Field(..., description="Total number of logs")
+    page: int = Field(..., description="Current page")
+    per_page: int = Field(..., description="Items per page")
+
+
+class AuditLogFilter(BaseModel):
+    """Schema for audit log filtering."""
+    user_id: Optional[str] = Field(None, description="Filter by user ID")
+    action: Optional[str] = Field(None, description="Filter by action")
+    resource_type: Optional[str] = Field(None, description="Filter by resource type")
+    resource_id: Optional[str] = Field(None, description="Filter by resource ID")
+    status: Optional[str] = Field(None, description="Filter by status")
+    date_from: Optional[datetime] = Field(None, description="Filter from date")
+    date_to: Optional[datetime] = Field(None, description="Filter to date")
+    ip_address: Optional[str] = Field(None, description="Filter by IP address")
+
+
+class AuditLogExportRequest(BaseModel):
+    """Schema for audit log export requests."""
+    filters: Optional[AuditLogFilter] = Field(None, description="Filter criteria")
+    format: str = Field("json", description="Export format (json or csv)")
+    limit: Optional[int] = Field(None, description="Maximum number of records")
+    offset: Optional[int] = Field(None, description="Offset for pagination")
+    sort_by: Optional[str] = Field(None, description="Field to sort by")
+    sort_order: Optional[str] = Field(None, description="Sort order (asc or desc)")
+
+
+class AuditLogExportResponse(BaseModel):
+    """Schema for audit log export responses."""
+    format: str = Field(..., description="Export format")
+    record_count: int = Field(..., description="Number of records exported")
+    exported_at: datetime = Field(..., description="Export timestamp")
+    data: Any = Field(..., description="Exported data")
+
+
+class AuditLogStatistics(BaseModel):
+    """Schema for audit log statistics."""
+    total_logs: int = Field(..., description="Total number of logs")
+    date_range_days: int = Field(..., description="Analysis period in days")
+    start_date: str = Field(..., description="Analysis start date")
+    end_date: str = Field(..., description="Analysis end date")
+    action_distribution: Dict[str, int] = Field(..., description="Logs by action type")
+    status_distribution: Dict[str, int] = Field(..., description="Logs by status")
+    daily_activity: Dict[str, int] = Field(..., description="Daily log counts")
+
+
+# ============================================
 # Workflow Schemas
 # ============================================
 
@@ -1360,4 +1569,25 @@ __all__ = [
     'CancelledEvent',
     # Health
     'HealthStatus',
+    # RBAC schemas
+    'RoleCreate',
+    'RoleUpdate',
+    'RoleResponse',
+    'RoleListResponse',
+    'UserRoleCreate',
+    'UserRoleUpdate',
+    'UserRoleResponse',
+    'UserRoleListResponse',
+    'PermissionResponse',
+    'PermissionListResponse',
+    'PermissionCheck',
+    'PermissionResult',
+    # Audit logging schemas
+    'AuditLogCreate',
+    'AuditLogResponse',
+    'AuditLogListResponse',
+    'AuditLogFilter',
+    'AuditLogExportRequest',
+    'AuditLogExportResponse',
+    'AuditLogStatistics',
 ]
