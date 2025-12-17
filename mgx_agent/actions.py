@@ -446,8 +446,22 @@ Orijinal görevi unutma: {instruction}
                 logger.info("✅ Sandbox testing passed")
             else:
                 logger.warning("⚠️ Sandbox testing failed - check logs for details")
+                return False
             
-            return success
+            # Phase 12: Run Quality Gates after successful sandbox execution
+            quality_gate_success = await self._run_quality_gates_after_sandbox(
+                files=files,
+                workspace_id="test-workspace",  # TODO: Get from context
+                project_id="test-project",  # TODO: Get from context
+                task_run_id=None  # TODO: Get from context
+            )
+            
+            if not quality_gate_success:
+                logger.warning("⚠️ Quality gates failed - code needs revision")
+                return False
+            
+            logger.info("✅ Quality gates passed")
+            return True
             
         except Exception as e:
             logger.warning(f"⚠️ Sandbox testing error (non-blocking): {e}")
@@ -610,6 +624,121 @@ Orijinal görevi unutma: {instruction}
         except Exception as e:
             logger.warning(f"⚠️ Sandbox execution error: {e}")
             return False
+    
+    async def _run_quality_gates_after_sandbox(
+        self,
+        files: List[Tuple[str, str]],
+        workspace_id: str,
+        project_id: str,
+        task_run_id: Optional[str] = None
+    ) -> bool:
+        """
+        Run quality gates after successful sandbox execution.
+        
+        Args:
+            files: List of (filepath, content) tuples
+            workspace_id: Workspace ID
+            project_id: Project ID  
+            task_run_id: Task run ID
+            
+        Returns:
+            True if all quality gates pass
+        """
+        try:
+            # Import quality gate manager
+            try:
+                from backend.services.quality_gates import get_gate_manager
+                gate_manager = await get_gate_manager()
+            except ImportError:
+                logger.debug("🔍 Quality gate manager not available - skipping")
+                return True
+            
+            # Determine which gates to run based on file types
+            gate_types = self._determine_quality_gates_for_files(files)
+            
+            if not gate_types:
+                logger.debug("🔍 No applicable quality gates found for these files")
+                return True
+            
+            logger.info(f"🏗️ Running quality gates: {gate_types}")
+            
+            # Run quality gates
+            result = await gate_manager.evaluate_gates(
+                workspace_id=workspace_id,
+                project_id=project_id,
+                gate_types=gate_types,
+                task_run_id=task_run_id,
+                working_directory="/tmp/test",  # Use temp directory for testing
+            )
+            
+            if not result.get("success", False):
+                logger.warning(f"⚠️ Quality gate evaluation failed: {result.get('error', 'Unknown error')}")
+                return False
+            
+            # Check if evaluation passed
+            if result.get("passed", False):
+                blocking_failures = result.get("blocking_failures", [])
+                if blocking_failures:
+                    logger.warning(f"⚠️ Quality gates failed with blocking failures: {blocking_failures}")
+                    return False
+                else:
+                    logger.info("✅ All quality gates passed")
+                    return True
+            else:
+                blocking_failures = result.get("blocking_failures", [])
+                logger.warning(f"⚠️ Quality gates failed: {blocking_failures}")
+                
+                # Log detailed results for debugging
+                for gate_type, gate_result in result.get("results", {}).items():
+                    if not gate_result.get("passed", True):
+                        logger.warning(f"  - {gate_type}: {gate_result.get('status', 'unknown')} - {gate_result.get('error_message', 'No details')}")
+                
+                return False
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Quality gate execution error: {e}")
+            return False  # Fail closed - if quality gates can't run, assume failure
+    
+    def _determine_quality_gates_for_files(self, files: List[Tuple[str, str]]) -> List[str]:
+        """
+        Determine which quality gates to run based on file types.
+        
+        Args:
+            files: List of (filepath, content) tuples
+            
+        Returns:
+            List of gate types to run
+        """
+        gate_types = []
+        file_extensions = set()
+        
+        # Collect file extensions
+        for filepath, _ in files:
+            if filepath:
+                ext = filepath.split('.')[-1].lower() if '.' in filepath else ''
+                if ext:
+                    file_extensions.add(ext)
+        
+        # Determine gates based on file types
+        if any(ext in file_extensions for ext in ['js', 'jsx', 'ts', 'tsx']):
+            gate_types.extend(["lint", "security"])  # JavaScript/TypeScript files
+        
+        if any(ext in file_extensions for ext in ['py']):
+            gate_types.extend(["lint", "coverage", "security", "complexity", "type_check"])  # Python files
+        
+        if any(ext in file_extensions for ext in ['php']):
+            gate_types.extend(["lint", "coverage", "security", "complexity"])  # PHP files
+        
+        # Always include performance gate if there are any executable files
+        if file_extensions:
+            gate_types.append("performance")
+        
+        # Always include contract gate for any web/API projects
+        if any(ext in file_extensions for ext in ['js', 'jsx', 'ts', 'tsx', 'py', 'php', 'go', 'java']):
+            gate_types.append("contract")
+        
+        # Remove duplicates while preserving order
+        return list(dict.fromkeys(gate_types))
     
     @staticmethod
     def _parse_file_manifest(manifest: str) -> List[Tuple[str, str]]:

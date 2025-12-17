@@ -46,6 +46,9 @@ from .enums import (
     WorkflowStepType,
     SandboxExecutionStatus,
     SandboxExecutionLanguage,
+    QualityGateType,
+    QualityGateStatus,
+    GateSeverity,
 )
 
 
@@ -853,6 +856,166 @@ class SandboxExecution(Base, TimestampMixin, SerializationMixin):
         return self.duration_ms / 1000.0 if self.duration_ms else 0.0
 
 
+class QualityGate(Base, TimestampMixin, SerializationMixin):
+    """Quality gate configuration and definition."""
+
+    __tablename__ = "quality_gates"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, comment="Gate name")
+    gate_type = Column(SQLEnum(QualityGateType), nullable=False, index=True, comment="Type of quality gate")
+    
+    # Gate configuration
+    is_enabled = Column(Boolean, default=True, nullable=False, comment="Whether this gate is enabled")
+    is_blocking = Column(Boolean, default=True, nullable=False, comment="Whether gate failure blocks deployment")
+    
+    # Threshold configuration (JSON for flexibility)
+    threshold_config = Column("threshold_config", JSON, nullable=False, default=dict, comment="Gate-specific threshold configuration")
+    
+    # Gate status
+    status = Column(SQLEnum(QualityGateStatus), nullable=False, default=QualityGateStatus.PENDING, index=True)
+    last_evaluation_at = Column(DateTime(timezone=True), comment="Last time this gate was evaluated")
+    last_result = Column(Boolean, comment="Last evaluation result")
+    
+    # Statistics
+    total_evaluations = Column(Integer, default=0, comment="Total number of evaluations")
+    passed_evaluations = Column(Integer, default=0, comment="Number of passed evaluations")
+    failed_evaluations = Column(Integer, default=0, comment="Number of failed evaluations")
+    
+    # Metadata
+    description = Column(Text, comment="Gate description")
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_quality_gates_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_quality_gates_workspace_project", "workspace_id", "project_id"),
+        Index("idx_quality_gates_type", "gate_type"),
+        Index("idx_quality_gates_status", "status"),
+        UniqueConstraint("workspace_id", "project_id", "gate_type", name="uq_quality_gates_unique_type"),
+    )
+
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    executions = relationship("GateExecution", back_populates="gate", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<QualityGate(id={self.id}, gate_type='{self.gate_type}', status='{self.status}')>"
+
+    @property
+    def pass_rate(self) -> float:
+        """Calculate pass rate as percentage."""
+        if self.total_evaluations == 0:
+            return 0.0
+        return (self.passed_evaluations / self.total_evaluations) * 100
+
+    @property
+    def is_healthy(self) -> bool:
+        """Check if gate is in a healthy state."""
+        return self.pass_rate >= 80.0  # 80% pass rate threshold
+
+
+class GateExecution(Base, TimestampMixin, SerializationMixin):
+    """Individual execution of a quality gate."""
+
+    __tablename__ = "gate_executions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    gate_id = Column(String(36), ForeignKey("quality_gates.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Related execution context
+    task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
+    task_run_id = Column(String(36), ForeignKey("task_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    sandbox_execution_id = Column(String(36), ForeignKey("sandbox_executions.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    # Execution details
+    status = Column(SQLEnum(QualityGateStatus), nullable=False, default=QualityGateStatus.PENDING, index=True)
+    started_at = Column(DateTime(timezone=True), comment="Execution start time")
+    completed_at = Column(DateTime(timezone=True), comment="Execution completion time")
+    duration_ms = Column(Integer, comment="Execution duration in milliseconds")
+    
+    # Results
+    passed = Column(Boolean, comment="Execution result")
+    passed_with_warnings = Column(Boolean, default=False, comment="Passed but with warnings")
+    error_message = Column(Text, comment="Error message if failed")
+    
+    # Detailed results (JSON for flexibility)
+    result_details = Column("result_details", JSON, comment="Detailed gate-specific results")
+    metrics = Column(JSON, comment="Metrics captured during execution")
+    recommendations = Column(JSON, comment="Recommendations for improvement")
+    
+    # Issue tracking
+    issues_found = Column(Integer, default=0, comment="Number of issues found")
+    critical_issues = Column(Integer, default=0, comment="Number of critical issues")
+    high_issues = Column(Integer, default=0, comment="Number of high severity issues")
+    medium_issues = Column(Integer, default=0, comment="Number of medium severity issues")
+    low_issues = Column(Integer, default=0, comment="Number of low severity issues")
+    
+    # Configuration snapshot
+    config_used = Column(JSON, comment="Configuration used for this execution")
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["task_id", "workspace_id"],
+            ["tasks.workspace_id", "tasks.id"],
+            name="fk_gate_executions_task",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["task_run_id", "workspace_id"],
+            ["task_runs.workspace_id", "task_runs.id"],
+            name="fk_gate_executions_task_run",
+            ondelete="SET NULL",
+        ),
+        ForeignKeyConstraint(
+            ["sandbox_execution_id", "workspace_id"],
+            ["sandbox_executions.workspace_id", "sandbox_executions.id"],
+            name="fk_gate_executions_sandbox_execution",
+            ondelete="SET NULL",
+        ),
+        Index("idx_gate_executions_gate_id", "gate_id"),
+        Index("idx_gate_executions_task_run", "task_run_id"),
+        Index("idx_gate_executions_sandbox_execution", "sandbox_execution_id"),
+        Index("idx_gate_executions_status", "status"),
+        Index("idx_gate_executions_started_at", "started_at"),
+    )
+
+    gate = relationship("QualityGate", back_populates="executions")
+    task = relationship("Task")
+    task_run = relationship("TaskRun")
+    sandbox_execution = relationship("SandboxExecution")
+
+    def __repr__(self) -> str:
+        return f"<GateExecution(id={self.id}, gate_id='{self.gate_id}', status='{self.status}')>"
+
+    @property
+    def is_success(self) -> bool:
+        return self.status == QualityGateStatus.PASSED
+
+    @property
+    def is_failure(self) -> bool:
+        return self.status == QualityGateStatus.FAILED
+
+    @property
+    def duration_seconds(self) -> float:
+        """Get duration in seconds."""
+        return self.duration_ms / 1000.0 if self.duration_ms else 0.0
+
+    @property
+    def total_issues(self) -> int:
+        """Get total number of issues."""
+        return self.critical_issues + self.high_issues + self.medium_issues + self.low_issues
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -872,6 +1035,8 @@ __all__ = [
     "WorkflowExecution",
     "WorkflowStepExecution",
     "SandboxExecution",
+    "QualityGate",
+    "GateExecution",
     "TaskStatus",
     "RunStatus",
     "MetricType",
@@ -885,4 +1050,7 @@ __all__ = [
     "WorkflowStepType",
     "SandboxExecutionStatus",
     "SandboxExecutionLanguage",
+    "QualityGateType",
+    "QualityGateStatus",
+    "GateSeverity",
 ]

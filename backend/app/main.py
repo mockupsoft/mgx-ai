@@ -34,6 +34,7 @@ from backend.routers import (
     agents_router,
     workflows_router,
     ws_router,
+    quality_gates_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -223,6 +224,9 @@ def create_app() -> FastAPI:
     
     app.include_router(ws_router)
     logger.info("✓ Registered: ws_router (WebSocket)")
+    
+    app.include_router(quality_gates_router)
+    logger.info("✓ Registered: quality_gates_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])

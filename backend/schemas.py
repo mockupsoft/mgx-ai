@@ -1119,6 +1119,29 @@ class SandboxExecutionLanguageEnum(str, Enum):
     DOCKER = "docker"
 
 
+class QualityGateTypeEnum(str, Enum):
+    """Quality gate type for responses."""
+    LINT = "lint"
+    COVERAGE = "coverage"
+    CONTRACT = "contract"
+    PERFORMANCE = "performance"
+    SECURITY = "security"
+    COMPLEXITY = "complexity"
+    TYPE_CHECK = "type_check"
+
+
+class QualityGateStatusEnum(str, Enum):
+    """Quality gate status for responses."""
+    PENDING = "pending"
+    RUNNING = "running"
+    PASSED = "passed"
+    FAILED = "failed"
+    WARNING = "warning"
+    SKIPPED = "skipped"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+
+
 class ResourceUsage(BaseModel):
     """Resource usage information from execution."""
     max_memory_mb: Optional[int] = Field(None, ge=0, description="Maximum memory used in MB")
@@ -1259,6 +1282,8 @@ __all__ = [
     'WorkflowStepTypeEnum',
     'SandboxExecutionStatusEnum',
     'SandboxExecutionLanguageEnum',
+    'QualityGateTypeEnum',
+    'QualityGateStatusEnum',
     # Workspace/Project schemas
     'WorkspaceCreate',
     'WorkspaceSummary',

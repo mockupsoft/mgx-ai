@@ -155,3 +155,37 @@ class SandboxExecutionLanguage(str, Enum):
     PYTHON = "python"
     PHP = "php"
     DOCKER = "docker"
+
+
+class QualityGateType(str, Enum):
+    """Types of quality gates."""
+
+    LINT = "lint"  # Code linting (ESLint, Ruff, Pint)
+    COVERAGE = "coverage"  # Test coverage enforcement
+    CONTRACT = "contract"  # API endpoint contract testing
+    PERFORMANCE = "performance"  # Performance smoke tests
+    SECURITY = "security"  # Security audit and vulnerability scanning
+    COMPLEXITY = "complexity"  # Code complexity limits
+    TYPE_CHECK = "type_check"  # Type checking (TypeScript, MyPy)
+
+
+class QualityGateStatus(str, Enum):
+    """Quality gate evaluation status."""
+
+    PENDING = "pending"  # Gate evaluation is queued
+    RUNNING = "running"  # Gate is currently being evaluated
+    PASSED = "passed"  # Gate passed all checks
+    FAILED = "failed"  # Gate failed one or more checks
+    WARNING = "warning"  # Gate passed but has warnings
+    SKIPPED = "skipped"  # Gate was skipped due to configuration
+    ERROR = "error"  # Gate evaluation encountered an error
+    TIMEOUT = "timeout"  # Gate evaluation timed out
+
+
+class GateSeverity(str, Enum):
+    """Severity levels for gate failures."""
+
+    CRITICAL = "critical"  # Blocking failure
+    HIGH = "high"  # Blocking failure
+    MEDIUM = "medium"  # Warning level
+    LOW = "low"  # Info level
