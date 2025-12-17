@@ -49,6 +49,11 @@ from .enums import (
     QualityGateType,
     QualityGateStatus,
     GateSeverity,
+    AuditLogStatus,
+    AuditAction,
+    PermissionResource,
+    PermissionAction,
+    RoleName,
 )
 
 
@@ -1016,6 +1021,140 @@ class GateExecution(Base, TimestampMixin, SerializationMixin):
         return self.critical_issues + self.high_issues + self.medium_issues + self.low_issues
 
 
+class Role(Base, TimestampMixin, SerializationMixin):
+    """Role definition for RBAC system."""
+    
+    __tablename__ = "roles"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    name = Column(SQLEnum(RoleName), nullable=False, index=True)
+    permissions = Column(JSON, nullable=False, default=list, comment="List of permission strings (e.g., 'tasks:*', 'users:read')")
+    
+    description = Column(Text, comment="Role description")
+    
+    is_system_role = Column(Boolean, default=False, nullable=False, index=True, comment="Whether this is a system-defined role")
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_roles_workspace_name"),
+        Index("idx_roles_workspace_name", "workspace_id", "name"),
+    )
+    
+    workspace = relationship("Workspace", back_populates="roles")
+    user_roles = relationship("UserRole", back_populates="role", cascade="all, delete-orphan")
+    permissions_table = relationship("Permission", back_populates="role", cascade="all, delete-orphan")
+    
+    def __repr__(self) -> str:
+        return f"<Role(id={self.id}, workspace_id='{self.workspace_id}', name='{self.name}')>"
+
+
+class UserRole(Base, TimestampMixin, SerializationMixin):
+    """User-role assignments for RBAC system."""
+    
+    __tablename__ = "user_roles"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    
+    user_id = Column(String(36), nullable=False, index=True, comment="User ID (references external auth system)")
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column(String(36), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    assigned_at = Column(DateTime(timezone=True), default=func.now(), nullable=False)
+    assigned_by_user_id = Column(String(36), nullable=True, comment="User ID who assigned this role")
+    
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    __table_args__ = (
+        Index("idx_user_roles_user_workspace", "user_id", "workspace_id"),
+        Index("idx_user_roles_role", "role_id"),
+        UniqueConstraint("user_id", "workspace_id", "role_id", name="uq_user_roles_unique_assignment"),
+    )
+    
+    workspace = relationship("Workspace")
+    role = relationship("Role", back_populates="user_roles")
+    
+    def __repr__(self) -> str:
+        return f"<UserRole(id={self.id}, user_id='{self.user_id}', workspace_id='{self.workspace_id}', role_id='{self.role_id}')>"
+
+
+class Permission(Base, TimestampMixin, SerializationMixin):
+    """Permission definitions for RBAC system."""
+    
+    __tablename__ = "permissions"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    role_id = Column(String(36), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    resource = Column(SQLEnum(PermissionResource), nullable=False, index=True)
+    action = Column(SQLEnum(PermissionAction), nullable=False, index=True)
+    
+    conditions = Column(JSON, comment="Additional conditions for this permission (e.g., resource ownership)")
+    
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id"],
+            ["workspaces.id"],
+            name="fk_permissions_workspace",
+            ondelete="CASCADE",
+        ),
+        Index("idx_permissions_role_resource_action", "role_id", "resource", "action"),
+        UniqueConstraint("workspace_id", "role_id", "resource", "action", name="uq_permissions_unique"),
+    )
+    
+    workspace = relationship("Workspace")
+    role = relationship("Role", back_populates="permissions_table")
+    
+    def __repr__(self) -> str:
+        return f"<Permission(id={self.id}, role_id='{self.role_id}', resource='{self.resource}', action='{self.action}')>"
+
+
+class AuditLog(Base, TimestampMixin, SerializationMixin):
+    """Audit log for tracking all user actions and changes."""
+    
+    __tablename__ = "audit_logs"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    user_id = Column(String(36), nullable=True, index=True, comment="User ID who performed the action (nullable for system actions)")
+    
+    action = Column(SQLEnum(AuditAction), nullable=False, index=True)
+    resource_type = Column(String(100), nullable=False, index=True, comment="Type of resource affected (task, workflow, etc.)")
+    resource_id = Column(String(36), nullable=True, index=True, comment="ID of the affected resource")
+    
+    changes = Column(JSON, comment="Before/after values for changes")
+    
+    status = Column(SQLEnum(AuditLogStatus), nullable=False, default=AuditLogStatus.SUCCESS, index=True)
+    
+    ip_address = Column(String(45), comment="Client IP address")
+    user_agent = Column(Text, comment="Client user agent")
+    
+    execution_time_ms = Column(Integer, comment="Execution time in milliseconds")
+    error_message = Column(Text, comment="Error message if action failed")
+    
+    __table_args__ = (
+        Index("idx_audit_logs_workspace_timestamp", "workspace_id", "created_at"),
+        Index("idx_audit_logs_user_action", "user_id", "action"),
+        Index("idx_audit_logs_resource", "resource_type", "resource_id"),
+        Index("idx_audit_logs_status", "status"),
+    )
+    
+    workspace = relationship("Workspace")
+    
+    def __repr__(self) -> str:
+        return f"<AuditLog(id={self.id}, workspace_id='{self.workspace_id}', user_id='{self.user_id}', action='{self.action}')>"
+
+
+Workspace.roles = relationship("Role", back_populates="workspace", cascade="all, delete-orphan")
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -1053,4 +1192,8 @@ __all__ = [
     "QualityGateType",
     "QualityGateStatus",
     "GateSeverity",
+    "Role",
+    "UserRole",
+    "Permission",
+    "AuditLog",
 ]
