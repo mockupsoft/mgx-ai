@@ -11,6 +11,7 @@ from .enums import (
     AgentMessageDirection,
     AgentStatus,
     ArtifactType,
+    ArtifactBuildStatus,
     ContextRollbackState,
     MetricType,
     RepositoryLinkStatus,
@@ -27,6 +28,7 @@ from .enums import (
 )
 from .entities import (
     Artifact,
+    ArtifactBuild,
     AgentContext,
     AgentContextVersion,
     AgentDefinition,
@@ -62,6 +64,7 @@ __all__ = [
     "TaskRun",
     "MetricSnapshot",
     "Artifact",
+    "ArtifactBuild",
     "AgentDefinition",
     "AgentInstance",
     "AgentContext",
@@ -78,6 +81,7 @@ __all__ = [
     "RunStatus",
     "MetricType",
     "ArtifactType",
+    "ArtifactBuildStatus",
     "RepositoryProvider",
     "RepositoryLinkStatus",
     "AgentStatus",

@@ -57,6 +57,7 @@ def upgrade():
     op.create_table(
         'gate_executions',
         sa.Column('id', sa.String(36), nullable=False),
+        sa.Column('workspace_id', sa.String(36), sa.ForeignKey('workspaces.id', ondelete='CASCADE'), nullable=False),
         sa.Column('gate_id', sa.String(36), sa.ForeignKey('quality_gates.id', ondelete='CASCADE'), nullable=False),
         sa.Column('task_id', sa.String(36), sa.ForeignKey('tasks.id', ondelete='SET NULL'), nullable=True),
         sa.Column('task_run_id', sa.String(36), sa.ForeignKey('task_runs.id', ondelete='SET NULL'), nullable=True),
@@ -79,25 +80,8 @@ def upgrade():
         sa.Column('config_used', sa.JSON(), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
-        sa.ForeignKeyConstraint(
-            ['task_id', 'workspace_id'],
-            ['tasks.workspace_id', 'tasks.id'],
-            name='fk_gate_executions_task',
-            ondelete='SET NULL'
-        ),
-        sa.ForeignKeyConstraint(
-            ['task_run_id', 'workspace_id'],
-            ['task_runs.workspace_id', 'task_runs.id'],
-            name='fk_gate_executions_task_run',
-            ondelete='SET NULL'
-        ),
-        sa.ForeignKeyConstraint(
-            ['sandbox_execution_id', 'workspace_id'],
-            ['sandbox_executions.workspace_id', 'sandbox_executions.id'],
-            name='fk_gate_executions_sandbox_execution',
-            ondelete='SET NULL'
-        ),
         sa.Index('idx_gate_executions_gate_id', 'gate_id'),
+        sa.Index('idx_gate_executions_workspace_id', 'workspace_id'),
         sa.Index('idx_gate_executions_task_run', 'task_run_id'),
         sa.Index('idx_gate_executions_sandbox_execution', 'sandbox_execution_id'),
         sa.Index('idx_gate_executions_status', 'status'),
