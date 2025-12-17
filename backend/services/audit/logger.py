@@ -523,6 +523,70 @@ class AuditLogger:
                 for log in logs
             ]
 
+    async def log_secret_action(
+        self,
+        secret_id: str,
+        action: Union[str, Any],  # SecretAuditAction
+        user_id: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        request_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None
+    ) -> Any:  # SecretAudit
+        """Log a secret-related action.
+        
+        Args:
+            secret_id: ID of the secret
+            action: Action performed on the secret
+            user_id: User who performed the action
+            ip_address: Client IP address
+            user_agent: Client user agent
+            request_id: Unique request identifier
+            details: Additional operation details
+            metadata: Additional metadata
+            success: Whether the operation was successful
+            error_message: Error message if the operation failed
+            
+        Returns:
+            Created SecretAudit record
+        """
+        try:
+            from ...db.models.entities import SecretAudit
+            from ...db.models.enums import SecretAuditAction
+            
+            # Convert action to enum if it's a string
+            if isinstance(action, str):
+                action = SecretAuditAction(action)
+            
+            secret_audit = SecretAudit(
+                secret_id=secret_id,
+                action=action,
+                user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                request_id=request_id,
+                details=details or {},
+                metadata=metadata or {},
+                success=success,
+                error_message=error_message
+            )
+            
+            async with self.session_factory() as session:
+                session.add(secret_audit)
+                await session.commit()
+                await session.refresh(secret_audit)
+                
+                logger.debug(f"Logged secret audit: {action} for secret {secret_id}")
+                return secret_audit
+                
+        except Exception as e:
+            logger.error(f"Failed to log secret action: {e}")
+            # Don't raise here to avoid disrupting the main operation
+            return None
+
 
 # Global audit logger instance
 audit_logger = None

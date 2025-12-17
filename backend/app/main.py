@@ -37,6 +37,7 @@ from backend.routers import (
     quality_gates_router,
     rbac_router,
     audit_router,
+    secrets_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -127,6 +128,41 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
                     logger.warning(f"Failed to load agent module {module_name}: {str(e)}")
     else:
         logger.info("Agent system disabled (set AGENTS_ENABLED=true to enable)")
+    
+    # Initialize secret management system
+    try:
+        from backend.services.secrets.encryption import encryption_service
+        from backend.db.models.enums import SecretBackend
+        
+        # Initialize encryption service based on configuration
+        backend_type = SecretBackend(settings.secret_encryption_backend.lower())
+        
+        if backend_type == SecretBackend.FERNET:
+            encryption_kwargs = {}
+            if settings.secret_encryption_key:
+                encryption_kwargs['encryption_key'] = settings.secret_encryption_key
+        elif backend_type == SecretBackend.AWS_KMS:
+            encryption_kwargs = {
+                'kms_key_id': settings.aws_kms_key_id,
+                'region': settings.aws_region
+            }
+        elif backend_type == SecretBackend.VAULT:
+            encryption_kwargs = {
+                'vault_url': settings.vault_url,
+                'vault_token': settings.vault_token,
+                'mount_point': settings.vault_mount_point
+            }
+        else:
+            raise ValueError(f"Unsupported secret encryption backend: {backend_type}")
+        
+        await encryption_service.initialize(backend_type, **encryption_kwargs)
+        app.state.encryption_service = encryption_service
+        logger.info(f"✓ Secret management initialized with {backend_type} backend")
+        
+    except Exception as e:
+        logger.error(f"Failed to initialize secret management: {str(e)}")
+        # Continue without secret management
+        app.state.encryption_service = None
     
     logger.info("FastAPI Application Ready")
     logger.info("=" * 60)
@@ -235,6 +271,9 @@ def create_app() -> FastAPI:
     
     app.include_router(audit_router)
     logger.info("✓ Registered: audit_router")
+    
+    app.include_router(secrets_router)
+    logger.info("✓ Registered: secrets_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])

@@ -5,6 +5,7 @@ from . import sandbox
 from .quality_gates import router as quality_gates_router
 from .rbac import router as rbac_router
 from .audit import router as audit_router
+from .secrets import router as secrets_router
 
 # Legacy routers (kept for backwards compatibility)
 try:
@@ -36,6 +37,7 @@ __all__ = [
     "quality_gates_router",
     "rbac_router", 
     "audit_router",
+    "secrets_router",
     "health_router",
     "workspaces_router",
     "projects_router", 

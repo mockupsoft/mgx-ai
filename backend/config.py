@@ -108,6 +108,56 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
     
+    # Secret Management Settings
+    secret_encryption_backend: str = Field(
+        default="fernet",
+        description="Secret encryption backend: fernet | vault | aws_kms"
+    )
+    secret_encryption_key: Optional[str] = Field(
+        default=None,
+        description="Encryption key for Fernet backend (base64 encoded)"
+    )
+    vault_url: Optional[str] = Field(
+        default=None,
+        description="HashiCorp Vault URL"
+    )
+    vault_token: Optional[str] = Field(
+        default=None,
+        description="HashiCorp Vault authentication token"
+    )
+    vault_mount_point: str = Field(
+        default="secret",
+        description="Vault mount point for secrets"
+    )
+    vault_namespace: Optional[str] = Field(
+        default=None,
+        description="Vault namespace for multi-tenancy"
+    )
+    aws_kms_key_id: Optional[str] = Field(
+        default=None,
+        description="AWS KMS key ID for encryption"
+    )
+    aws_region: str = Field(
+        default="us-east-1",
+        description="AWS region for KMS and Secrets Manager"
+    )
+    secret_rotation_days: int = Field(
+        default=90,
+        ge=1,
+        le=365,
+        description="Default secret rotation period in days"
+    )
+    enable_secret_audit_logging: bool = Field(
+        default=True,
+        description="Enable comprehensive audit logging for secret operations"
+    )
+    secret_audit_retention_days: int = Field(
+        default=365,
+        ge=1,
+        le=2555,
+        description="How long to retain secret audit logs (in days)"
+    )
+    
     @property
     def database_url(self) -> str:
         """Generate PostgreSQL connection URL."""

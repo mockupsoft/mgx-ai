@@ -1591,3 +1591,166 @@ __all__ = [
     'AuditLogExportResponse',
     'AuditLogStatistics',
 ]
+
+# ============================================
+# Secret Management Schemas
+# ============================================
+
+
+class SecretCreateRequest(BaseModel):
+    """Schema for creating a secret."""
+
+    name: str = Field(..., min_length=1, max_length=255, description="Secret name")
+    secret_type: str = Field(..., description="Type of secret")
+    value: str = Field(..., description="Secret value to encrypt")
+    usage: Optional[str] = Field(None, max_length=1000, description="Description of what the secret is used for")
+    rotation_policy: str = Field(default="manual", description="Rotation policy")
+    tags: Optional[List[str]] = Field(default_factory=list, description="Tags for categorizing secrets")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional metadata")
+
+
+class SecretUpdateRequest(BaseModel):
+    """Schema for updating a secret."""
+
+    value: Optional[str] = Field(None, description="New secret value (if updating)")
+    usage: Optional[str] = Field(None, max_length=1000, description="Description of what the secret is used for")
+    rotation_policy: Optional[str] = Field(None, description="Rotation policy")
+    tags: Optional[List[str]] = Field(None, description="Tags for categorizing secrets")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
+
+
+class SecretRotationRequest(BaseModel):
+    """Schema for rotating a secret."""
+
+    new_value: str = Field(..., description="New secret value")
+
+
+class SecretResponse(BaseModel):
+    """Schema for secret response (includes encrypted value)."""
+
+    id: str
+    workspace_id: str
+    name: str
+    secret_type: str
+    usage: Optional[str]
+    encrypted_value: str
+    rotation_policy: str
+    last_rotated_at: Optional[datetime]
+    rotation_due_at: Optional[datetime]
+    created_by_user_id: Optional[str]
+    updated_by_user_id: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    is_active: bool
+    tags: List[str]
+    metadata: Dict[str, Any]
+
+    class Config:
+        from_attributes = True
+
+    @classmethod
+    def from_secret_model(cls, secret) -> 'SecretResponse':
+        """Create response from Secret model."""
+        return cls(
+            id=secret.id,
+            workspace_id=secret.workspace_id,
+            name=secret.name,
+            secret_type=secret.secret_type.value if hasattr(secret.secret_type, 'value') else secret.secret_type,
+            usage=secret.usage,
+            encrypted_value=secret.encrypted_value,
+            rotation_policy=secret.rotation_policy.value if hasattr(secret.rotation_policy, 'value') else secret.rotation_policy,
+            last_rotated_at=secret.last_rotated_at,
+            rotation_due_at=secret.rotation_due_at,
+            created_by_user_id=secret.created_by_user_id,
+            updated_by_user_id=secret.updated_by_user_id,
+            created_at=secret.created_at,
+            updated_at=secret.updated_at,
+            is_active=secret.is_active,
+            tags=secret.tags or [],
+            metadata=secret.meta_data or {}
+        )
+
+
+class SecretMetadataResponse(BaseModel):
+    """Schema for secret metadata response (no encrypted value)."""
+
+    id: str
+    name: str
+    secret_type: str
+    usage: Optional[str]
+    rotation_policy: str
+    last_rotated_at: Optional[datetime]
+    rotation_due_at: Optional[datetime]
+    created_by_user_id: Optional[str]
+    updated_by_user_id: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    is_active: bool
+    tags: List[str]
+    metadata: Dict[str, Any]
+    is_rotation_due: bool
+
+    class Config:
+        from_attributes = True
+
+    @classmethod
+    def from_secret_metadata(cls, secret_metadata) -> 'SecretMetadataResponse':
+        """Create response from SecretMetadata object."""
+        return cls(
+            id=secret_metadata.id,
+            name=secret_metadata.name,
+            secret_type=secret_metadata.secret_type.value if hasattr(secret_metadata.secret_type, 'value') else secret_metadata.secret_type,
+            usage=secret_metadata.usage,
+            rotation_policy=secret_metadata.rotation_policy.value if hasattr(secret_metadata.rotation_policy, 'value') else secret_metadata.rotation_policy,
+            last_rotated_at=secret_metadata.last_rotated_at,
+            rotation_due_at=secret_metadata.rotation_due_at,
+            created_by_user_id=secret_metadata.created_by_user_id,
+            updated_by_user_id=secret_metadata.updated_by_user_id,
+            created_at=secret_metadata.created_at,
+            updated_at=secret_metadata.updated_at,
+            is_active=secret_metadata.is_active,
+            tags=secret_metadata.tags,
+            metadata=secret_metadata.metadata,
+            is_rotation_due=secret_metadata.is_rotation_due
+        )
+
+
+class SecretListResponse(BaseModel):
+    """Schema for listing secrets response."""
+
+    secrets: List[SecretMetadataResponse]
+    total: int
+    limit: int
+    offset: int
+
+
+class SecretAuditLogResponse(BaseModel):
+    """Schema for secret audit logs response."""
+
+    audit_logs: List[Dict[str, Any]]  # Simplified - could be enhanced with proper audit log model
+    total: int
+    limit: int
+    offset: int
+
+
+class SecretStatisticsResponse(BaseModel):
+    """Schema for secret statistics response."""
+
+    total_secrets: int
+    secrets_by_type: Dict[str, int]
+    secrets_by_rotation_policy: Dict[str, int]
+    rotation_due_count: int
+    last_updated: str
+
+
+# Update __all__ to include new schemas
+__all__ += [
+    'SecretCreateRequest',
+    'SecretUpdateRequest',
+    'SecretRotationRequest',
+    'SecretResponse',
+    'SecretMetadataResponse',
+    'SecretListResponse',
+    'SecretAuditLogResponse',
+    'SecretStatisticsResponse',
+]

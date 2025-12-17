@@ -54,6 +54,9 @@ from .enums import (
     PermissionResource,
     PermissionAction,
     RoleName,
+    SecretType,
+    SecretRotationPolicy,
+    SecretAuditAction,
 )
 
 
@@ -1152,6 +1155,98 @@ class AuditLog(Base, TimestampMixin, SerializationMixin):
         return f"<AuditLog(id={self.id}, workspace_id='{self.workspace_id}', user_id='{self.user_id}', action='{self.action}')>"
 
 
+class Secret(Base, TimestampMixin, SerializationMixin):
+    """Secure secret storage with encryption and rotation support."""
+
+    __tablename__ = "secrets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    name = Column(String(255), nullable=False, index=True, comment="Secret name (e.g., 'GITHUB_TOKEN', 'DATABASE_PASSWORD')")
+    secret_type = Column(SQLEnum(SecretType), nullable=False, comment="Type of secret")
+    usage = Column(Text, comment="Description of what the secret is used for")
+
+    # Encrypted value - never store plaintext
+    encrypted_value = Column(Text, nullable=False, comment="Encrypted secret value")
+
+    # Rotation configuration
+    rotation_policy = Column(SQLEnum(SecretRotationPolicy), nullable=False, default=SecretRotationPolicy.MANUAL, index=True)
+    last_rotated_at = Column(DateTime(timezone=True), comment="When the secret was last rotated")
+    rotation_due_at = Column(DateTime(timezone=True), comment="When rotation is next due")
+
+    # Audit trail for secret management
+    created_by_user_id = Column(String(36), nullable=True, index=True, comment="User who created the secret")
+    updated_by_user_id = Column(String(36), nullable=True, index=True, comment="User who last updated the secret")
+
+    # Metadata
+    meta_data = Column(JSON, nullable=False, default=dict, comment="Additional secret metadata")
+    is_active = Column(Boolean, default=True, nullable=False, index=True, comment="Whether the secret is active")
+
+    # Tags for organization
+    tags = Column(JSON, comment="Tags for categorizing secrets")
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_secrets_workspace_name"),
+        Index("idx_secrets_workspace_type", "workspace_id", "secret_type"),
+        Index("idx_secrets_rotation_due", "rotation_due_at"),
+        Index("idx_secrets_active", "is_active"),
+    )
+
+    workspace = relationship("Workspace")
+    audit_logs = relationship("SecretAudit", back_populates="secret", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<Secret(id={self.id}, workspace_id='{self.workspace_id}', name='{self.name}', type='{self.secret_type}')>"
+
+    @property
+    def is_rotation_due(self) -> bool:
+        """Check if the secret is due for rotation."""
+        if not self.rotation_due_at:
+            return False
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc) >= self.rotation_due_at
+
+
+class SecretAudit(Base, TimestampMixin, SerializationMixin):
+    """Audit trail for secret access and management operations."""
+
+    __tablename__ = "secret_audits"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    secret_id = Column(String(36), ForeignKey("secrets.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    # Audit details
+    action = Column(SQLEnum(SecretAuditAction), nullable=False, index=True, comment="Action performed on the secret")
+    user_id = Column(String(36), nullable=True, index=True, comment="User who performed the action")
+
+    # Context information
+    ip_address = Column(String(45), comment="IP address of the request")
+    user_agent = Column(String(500), comment="User agent of the request")
+    request_id = Column(String(100), comment="Unique request identifier")
+
+    # Operation details
+    details = Column(JSON, comment="Additional operation details")
+    metadata = Column(JSON, comment="Additional metadata")
+
+    # Success/failure tracking
+    success = Column(Boolean, default=True, nullable=False, index=True, comment="Whether the operation was successful")
+    error_message = Column(Text, comment="Error message if the operation failed")
+
+    __table_args__ = (
+        Index("idx_secret_audits_secret_timestamp", "secret_id", "created_at"),
+        Index("idx_secret_audits_user_action", "user_id", "action"),
+        Index("idx_secret_audits_action_timestamp", "action", "created_at"),
+    )
+
+    secret = relationship("Secret", back_populates="audit_logs")
+
+    def __repr__(self) -> str:
+        return f"<SecretAudit(id={self.id}, secret_id='{self.secret_id}', action='{self.action}', user_id='{self.user_id}')>"
+
+
 Workspace.roles = relationship("Role", back_populates="workspace", cascade="all, delete-orphan")
 
 
@@ -1196,4 +1291,6 @@ __all__ = [
     "UserRole",
     "Permission",
     "AuditLog",
+    "Secret",
+    "SecretAudit",
 ]
