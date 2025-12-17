@@ -214,6 +214,7 @@ class PermissionResource(str, Enum):
     METRICS = "metrics"
     WORKSPACES = "workspaces"
     PROJECTS = "projects"
+    SECRETS = "secrets"
 
 
 class PermissionAction(str, Enum):
@@ -316,3 +317,50 @@ class AuditLogStatus(str, Enum):
     FAILURE = "failure"
     ERROR = "error"
     WARNING = "warning"
+
+
+class SecretType(str, Enum):
+    """Types of secrets that can be stored."""
+
+    API_KEY = "api_key"  # General API keys
+    DATABASE_CREDENTIAL = "database_cred"  # Database passwords/credentials
+    OAUTH_TOKEN = "oauth_token"  # OAuth access/refresh tokens
+    WEBHOOK_SECRET = "webhook_secret"  # Webhook verification secrets
+    SSH_KEY = "ssh_key"  # SSH private keys
+    CERTIFICATE = "certificate"  # SSL/TLS certificates
+    ENCRYPTION_KEY = "encryption_key"  # Encryption keys
+    PASSWORD = "password"  # General passwords
+    JWT_SECRET = "jwt_secret"  # JWT signing secrets
+
+
+class SecretRotationPolicy(str, Enum):
+    """Rotation policies for secrets."""
+
+    MANUAL = "manual"  # Manual rotation only
+    AUTO_30_DAYS = "auto_30_days"  # Auto rotate every 30 days
+    AUTO_60_DAYS = "auto_60_days"  # Auto rotate every 60 days
+    AUTO_90_DAYS = "auto_90_days"  # Auto rotate every 90 days
+    AUTO_180_DAYS = "auto_180_days"  # Auto rotate every 180 days
+    AUTO_365_DAYS = "auto_365_days"  # Auto rotate every 365 days
+
+
+class SecretBackend(str, Enum):
+    """Secret storage backend types."""
+
+    FERNET = "fernet"  # Built-in Fernet encryption
+    VAULT = "vault"  # HashiCorp Vault
+    AWS_KMS = "aws_kms"  # AWS KMS + Secrets Manager
+    AZURE_KEYVAULT = "azure_keyvault"  # Azure Key Vault
+
+
+class SecretAuditAction(str, Enum):
+    """Actions tracked in secret audit logs."""
+
+    CREATED = "created"  # Secret was created
+    ACCESSED = "accessed"  # Secret value was retrieved
+    ROTATED = "rotated"  # Secret was rotated
+    DELETED = "deleted"  # Secret was deleted
+    UPDATED = "updated"  # Secret metadata was updated
+    ENCRYPTION_KEY_ROTATED = "encryption_key_rotated"  # Encryption key was rotated
+    BACKUP_CREATED = "backup_created"  # Secret backup was created
+    RESTORE_PERFORMED = "restore_performed"  # Secret was restored from backup
