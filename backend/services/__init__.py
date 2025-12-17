@@ -29,6 +29,12 @@ from .generator import (
     DockerEngine,
     ScriptEngine,
 )
+from .pipeline import (
+    ArtifactPipeline,
+    ArtifactBuildConfig,
+    ArtifactBuildResult,
+    PublishTargets,
+)
 
 __all__ = [
     'MGXTeamProvider', 
@@ -60,4 +66,8 @@ __all__ = [
     'EnvEngine',
     'DockerEngine',
     'ScriptEngine',
+    'ArtifactPipeline',
+    'ArtifactBuildConfig',
+    'ArtifactBuildResult',
+    'PublishTargets',
 ]

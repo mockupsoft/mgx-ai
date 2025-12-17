@@ -63,6 +63,15 @@ class ArtifactType(str, Enum):
     CHART = "chart"  # Charts and graphs
 
 
+class ArtifactBuildStatus(str, Enum):
+    """Status of an artifact build pipeline execution."""
+
+    PENDING = "pending"
+    BUILDING = "building"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class RepositoryProvider(str, Enum):
     """Source control provider for a linked repository."""
 

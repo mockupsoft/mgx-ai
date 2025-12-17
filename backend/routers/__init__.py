@@ -7,6 +7,7 @@ from .rbac import router as rbac_router
 from .audit import router as audit_router
 from .secrets import router as secrets_router
 from .generator import router as generator_router
+from .artifacts import router as artifacts_router
 
 # Legacy routers (kept for backwards compatibility)
 try:
@@ -40,6 +41,7 @@ __all__ = [
     "audit_router",
     "secrets_router",
     "generator_router",
+    "artifacts_router",
     "health_router",
     "workspaces_router",
     "projects_router", 

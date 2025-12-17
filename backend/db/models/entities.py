@@ -35,6 +35,7 @@ from .enums import (
     AgentMessageDirection,
     AgentStatus,
     ArtifactType,
+    ArtifactBuildStatus,
     ContextRollbackState,
     MetricType,
     RepositoryLinkStatus,
@@ -57,6 +58,10 @@ from .enums import (
     SecretType,
     SecretRotationPolicy,
     SecretAuditAction,
+    ProjectTemplateStatus,
+    ProjectGenerationStatus,
+    StackType,
+    TemplateFeatureType,
 )
 
 
@@ -938,8 +943,10 @@ class GateExecution(Base, TimestampMixin, SerializationMixin):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
 
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
     gate_id = Column(String(36), ForeignKey("quality_gates.id", ondelete="CASCADE"), nullable=False, index=True)
-    
+
     # Related execution context
     task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True)
     task_run_id = Column(String(36), ForeignKey("task_runs.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -950,47 +957,30 @@ class GateExecution(Base, TimestampMixin, SerializationMixin):
     started_at = Column(DateTime(timezone=True), comment="Execution start time")
     completed_at = Column(DateTime(timezone=True), comment="Execution completion time")
     duration_ms = Column(Integer, comment="Execution duration in milliseconds")
-    
+
     # Results
     passed = Column(Boolean, comment="Execution result")
     passed_with_warnings = Column(Boolean, default=False, comment="Passed but with warnings")
     error_message = Column(Text, comment="Error message if failed")
-    
+
     # Detailed results (JSON for flexibility)
     result_details = Column("result_details", JSON, comment="Detailed gate-specific results")
     metrics = Column(JSON, comment="Metrics captured during execution")
     recommendations = Column(JSON, comment="Recommendations for improvement")
-    
+
     # Issue tracking
     issues_found = Column(Integer, default=0, comment="Number of issues found")
     critical_issues = Column(Integer, default=0, comment="Number of critical issues")
     high_issues = Column(Integer, default=0, comment="Number of high severity issues")
     medium_issues = Column(Integer, default=0, comment="Number of medium severity issues")
     low_issues = Column(Integer, default=0, comment="Number of low severity issues")
-    
+
     # Configuration snapshot
     config_used = Column(JSON, comment="Configuration used for this execution")
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ["task_id", "workspace_id"],
-            ["tasks.workspace_id", "tasks.id"],
-            name="fk_gate_executions_task",
-            ondelete="SET NULL",
-        ),
-        ForeignKeyConstraint(
-            ["task_run_id", "workspace_id"],
-            ["task_runs.workspace_id", "task_runs.id"],
-            name="fk_gate_executions_task_run",
-            ondelete="SET NULL",
-        ),
-        ForeignKeyConstraint(
-            ["sandbox_execution_id", "workspace_id"],
-            ["sandbox_executions.workspace_id", "sandbox_executions.id"],
-            name="fk_gate_executions_sandbox_execution",
-            ondelete="SET NULL",
-        ),
         Index("idx_gate_executions_gate_id", "gate_id"),
+        Index("idx_gate_executions_workspace_id", "workspace_id"),
         Index("idx_gate_executions_task_run", "task_run_id"),
         Index("idx_gate_executions_sandbox_execution", "sandbox_execution_id"),
         Index("idx_gate_executions_status", "status"),
@@ -1229,7 +1219,7 @@ class SecretAudit(Base, TimestampMixin, SerializationMixin):
 
     # Operation details
     details = Column(JSON, comment="Additional operation details")
-    metadata = Column(JSON, comment="Additional metadata")
+    meta_data = Column("metadata", JSON, comment="Additional metadata")
 
     # Success/failure tracking
     success = Column(Boolean, default=True, nullable=False, index=True, comment="Whether the operation was successful")
@@ -1379,6 +1369,43 @@ class GeneratedProject(Base, TimestampMixin, SerializationMixin):
         return self.status in [ProjectGenerationStatus.COMPLETED, ProjectGenerationStatus.FAILED, ProjectGenerationStatus.CANCELLED]
 
 
+class ArtifactBuild(Base, TimestampMixin, SerializationMixin):
+    """Artifact/release pipeline build record."""
+
+    __tablename__ = "artifact_builds"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    execution_id = Column(String(36), nullable=False, index=True, comment="Execution UUID driving this build")
+    project_id = Column(String(36), nullable=False, index=True, comment="GeneratedProject id (or external project id)")
+
+    status = Column(
+        SQLEnum(ArtifactBuildStatus),
+        nullable=False,
+        default=ArtifactBuildStatus.PENDING,
+        index=True,
+        comment="Build status",
+    )
+
+    build_config = Column(JSON, nullable=False, default=dict, comment="Build configuration payload")
+    results = Column(JSON, nullable=False, default=dict, comment="Build results payload")
+
+    error_message = Column(Text, comment="Error message if build failed")
+
+    started_at = Column(DateTime(timezone=True), comment="Build started at")
+    completed_at = Column(DateTime(timezone=True), comment="Build completed at")
+
+    __table_args__ = (
+        Index("idx_artifact_builds_execution", "execution_id"),
+        Index("idx_artifact_builds_project", "project_id"),
+        Index("idx_artifact_builds_status", "status"),
+        Index("idx_artifact_builds_created_at", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ArtifactBuild(id={self.id}, project_id='{self.project_id}', status='{self.status}')>"
+
+
 Workspace.roles = relationship("Role", back_populates="workspace", cascade="all, delete-orphan")
 Workspace.generated_projects = relationship("GeneratedProject", back_populates="workspace", cascade="all, delete-orphan")
 
@@ -1429,4 +1456,5 @@ __all__ = [
     "ProjectTemplate",
     "TemplateFeature",
     "GeneratedProject",
+    "ArtifactBuild",
 ]

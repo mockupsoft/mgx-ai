@@ -4,9 +4,13 @@ Database session management for async SQLAlchemy operations.
 """
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Generator, Optional
+
+from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from .engine import get_engine
+from sqlalchemy.orm import Session, sessionmaker
+
+from backend.config import settings
 
 
 class SessionManager:
@@ -58,3 +62,33 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Dependency injection function for FastAPI routes."""
     async with get_session_manager().session() as session:
         yield session
+
+
+# ============================================
+# Sync sessions (legacy)
+# ============================================
+
+_sync_engine = None
+_sync_session_factory: Optional[sessionmaker[Session]] = None
+
+
+def _get_sync_session_factory() -> sessionmaker[Session]:
+    global _sync_engine, _sync_session_factory
+
+    if _sync_session_factory is not None:
+        return _sync_session_factory
+
+    _sync_engine = create_engine(settings.database_url, pool_pre_ping=True)
+    _sync_session_factory = sessionmaker(autocommit=False, autoflush=False, bind=_sync_engine)
+    return _sync_session_factory
+
+
+def get_db() -> Generator[Session, None, None]:
+    """Sync SQLAlchemy session dependency (used by legacy routers/services)."""
+
+    SessionLocal = _get_sync_session_factory()
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
