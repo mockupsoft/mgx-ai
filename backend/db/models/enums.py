@@ -511,3 +511,46 @@ class DeploymentPhase(str, Enum):
     CONFIGURATION_CHECK = "configuration_check"  # Configuration validation
     DRY_RUN = "dry_run"  # Dry-run simulation
     ROLLBACK_VALIDATION = "rollback_validation"  # Rollback procedure validation
+
+
+class TemplateCategory(str, Enum):
+    """Template categories for organization."""
+
+    AUTHENTICATION = "authentication"  # Auth-related templates
+    COMMERCE = "commerce"  # E-commerce templates
+    ADMIN = "admin"  # Admin dashboard templates
+    INFRASTRUCTURE = "infrastructure"  # Infrastructure templates
+    API_DESIGN = "api_design"  # API design templates
+    DATABASE = "database"  # Database templates
+    TESTING = "testing"  # Testing templates
+    DOCUMENTATION = "documentation"  # Documentation templates
+    WORKFLOW = "workflow"  # Workflow templates
+    SECURITY = "security"  # Security templates
+
+
+class ADRStatus(str, Enum):
+    """Architecture Decision Record status."""
+
+    PROPOSED = "proposed"  # ADR is proposed
+    ACCEPTED = "accepted"  # ADR is accepted and implemented
+    DEPRECATED = "deprecated"  # ADR is deprecated
+    SUPERSEDED = "superseded"  # ADR is superseded by another
+
+
+class TemplateVisibility(str, Enum):
+    """Template visibility levels."""
+
+    PUBLIC = "public"  # Public template, shared
+    PRIVATE = "private"  # Private template, organization only
+    DRAFT = "draft"  # Draft template, not published
+
+
+class PromptOutputFormat(str, Enum):
+    """Prompt template output formats."""
+
+    CODE = "code"  # Generate code
+    DOCUMENTATION = "documentation"  # Generate documentation
+    SCHEMA = "schema"  # Generate schema
+    EXPLANATION = "explanation"  # Generate explanation
+    TEST_CASE = "test_case"  # Generate test cases
+    CONFIGURATION = "configuration"  # Generate configuration

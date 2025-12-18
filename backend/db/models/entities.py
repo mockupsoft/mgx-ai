@@ -1786,6 +1786,155 @@ class RollbackPlan(Base, TimestampMixin, SerializationMixin):
         return f"<RollbackPlan(id={self.id}, from_version='{self.from_version}', to_version='{self.to_version}')>"
 
 
+# Template System Models
+class ReusableModule(Base, TimestampMixin, SerializationMixin):
+    """Reusable module template that can be applied to projects."""
+    __tablename__ = "reusable_modules"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    name = Column(String(255), nullable=False, unique=True)
+    category = Column(SQLEnum(TemplateCategory), nullable=False)
+    description = Column(Text, nullable=True)
+    version = Column(String(50), nullable=False, default="1.0.0")
+    tech_stacks = Column(JSON, nullable=False, server_default="[]")
+    dependencies = Column(JSON, nullable=False, server_default="[]")
+    documentation = Column(Text, nullable=True)
+    params = Column(JSON, nullable=False, server_default="[]")
+    author = Column(String(255), nullable=True)
+    usage_count = Column(Integer, nullable=False, server_default="0")
+    rating = Column(Float, nullable=False, server_default="0.0")
+    visibility = Column(SQLEnum(TemplateVisibility), nullable=False, default=TemplateVisibility.PRIVATE)
+    is_active = Column(Boolean, nullable=False, server_default="true")
+    tags = Column(JSON, nullable=False, server_default="[]")
+    created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    # Relationships
+    file_templates = relationship("FileTemplate", back_populates="module", cascade="all, delete-orphan")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    updated_by_user = relationship("User", foreign_keys=[updated_by])
+    
+    __table_args__ = (
+        Index("idx_reusable_modules_category", "category"),
+        Index("idx_reusable_modules_visibility", "visibility"),
+        Index("idx_reusable_modules_active", "is_active"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<ReusableModule(id={self.id}, name='{self.name}', category='{self.category.value}')>"
+
+
+class FileTemplate(Base, TimestampMixin, SerializationMixin):
+    """File template for a reusable module."""
+    __tablename__ = "file_templates"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    module_id = Column(String(36), ForeignKey("reusable_modules.id", ondelete="CASCADE"), nullable=False)
+    path = Column(String(500), nullable=False)
+    content = Column(Text, nullable=False)
+    language = Column(String(100), nullable=True)
+    is_test = Column(Boolean, nullable=False, server_default="false")
+    is_config = Column(Boolean, nullable=False, server_default="false")
+    priority = Column(Integer, nullable=False, server_default="0")
+    
+    # Relationships
+    module = relationship("ReusableModule", back_populates="file_templates")
+    
+    __table_args__ = (
+        Index("idx_file_templates_module", "module_id"),
+        Index("idx_file_templates_language", "language"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<FileTemplate(id={self.id}, module_id='{self.module_id}', path='{self.path}')>"
+
+
+class Parameter(Base, TimestampMixin, SerializationMixin):
+    """Parameter definition for a reusable module template."""
+    __tablename__ = "parameters"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    module_id = Column(String(36), ForeignKey("reusable_modules.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    param_type = Column(String(50), nullable=False)
+    default_value = Column(JSON, nullable=True)
+    description = Column(Text, nullable=True)
+    required = Column(Boolean, nullable=False, server_default="false")
+    validation_rules = Column(JSON, nullable=False, server_default="{}")
+    
+    # Relationships
+    module = relationship("ReusableModule")
+    
+    __table_args__ = (
+        Index("idx_parameters_module", "module_id"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<Parameter(id={self.id}, module_id='{self.module_id}', name='{self.name}')>"
+
+
+class PromptTemplate(Base, TimestampMixin, SerializationMixin):
+    """Prompt template for generating code and documentation."""
+    __tablename__ = "prompt_templates"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    name = Column(String(255), nullable=False, unique=True)
+    category = Column(SQLEnum(TemplateCategory), nullable=False)
+    template = Column(Text, nullable=False)
+    context_required = Column(JSON, nullable=False, server_default="[]")
+    output_format = Column(SQLEnum(PromptOutputFormat), nullable=False)
+    examples = Column(JSON, nullable=False, server_default="[]")
+    created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    version = Column(String(50), nullable=False, default="1.0.0")
+    usage_count = Column(Integer, nullable=False, server_default="0")
+    rating = Column(Float, nullable=False, server_default="0.0")
+    visibility = Column(SQLEnum(TemplateVisibility), nullable=False, default=TemplateVisibility.PUBLIC)
+    tags = Column(JSON, nullable=False, server_default="[]")
+    
+    # Relationships
+    created_by_user = relationship("User")
+    
+    __table_args__ = (
+        Index("idx_prompt_templates_category", "category"),
+        Index("idx_prompt_templates_visibility", "visibility"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<PromptTemplate(id={self.id}, name='{self.name}', category='{self.category.value}')>"
+
+
+class ADR(Base, TimestampMixin, SerializationMixin):
+    """Architecture Decision Record for tracking system design decisions."""
+    __tablename__ = "adrs"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(500), nullable=False)
+    status = Column(SQLEnum(ADRStatus), nullable=False, default=ADRStatus.PROPOSED)
+    context = Column(Text, nullable=False)
+    decision = Column(Text, nullable=False)
+    consequences = Column(Text, nullable=False)
+    alternatives_considered = Column(JSON, nullable=False, server_default="[]")
+    related_adrs = Column(JSON, nullable=False, server_default="[]")
+    tags = Column(JSON, nullable=False, server_default="[]")
+    created_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    updated_by_user = relationship("User", foreign_keys=[updated_by])
+    
+    __table_args__ = (
+        Index("idx_adrs_workspace", "workspace_id"),
+        Index("idx_adrs_status", "status"),
+        Index("idx_adrs_created_at", "created_at"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<ADR(id={self.id}, workspace_id='{self.workspace_id}', title='{self.title}', status='{self.status.value}')>"
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -1843,4 +1992,10 @@ __all__ = [
     "PreDeploymentChecklist",
     "DeploymentSimulation",
     "RollbackPlan",
+    # Template System Models
+    "ReusableModule",
+    "FileTemplate",
+    "Parameter",
+    "PromptTemplate",
+    "ADR",
 ]

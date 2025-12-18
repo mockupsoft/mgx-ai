@@ -10,6 +10,7 @@ from .generator import router as generator_router
 from .artifacts import router as artifacts_router
 from .costs import router as costs_router
 from .validators import router as validators_router
+from .templates import router as templates_router
 
 # Legacy routers (kept for backwards compatibility)
 try:
@@ -46,6 +47,7 @@ __all__ = [
     "artifacts_router",
     "costs_router",
     "validators_router",
+    "templates_router",
     "health_router",
     "workspaces_router",
     "projects_router", 
