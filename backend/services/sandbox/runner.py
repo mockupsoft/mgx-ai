@@ -15,9 +15,23 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
-import docker
-from docker.models.containers import Container
-from docker.errors import DockerException, NotFound, APIError
+try:
+    import docker  # type: ignore
+    from docker.models.containers import Container  # type: ignore
+    from docker.errors import DockerException, NotFound, APIError  # type: ignore
+except ImportError:  # pragma: no cover
+    docker = None  # type: ignore
+
+    class DockerException(Exception):
+        pass
+
+    class NotFound(DockerException):
+        pass
+
+    class APIError(DockerException):
+        pass
+
+    Container = object  # type: ignore
 
 from .executors import LanguageExecutor, ExecutorFactory
 
@@ -81,17 +95,30 @@ class SandboxRunner:
         "docker": "mgx-sandbox-node:latest",  # For Docker-in-Docker scenarios
     }
     
-    def __init__(self, docker_client: Optional[docker.DockerClient] = None):
-        """
-        Initialize the sandbox runner.
-        
+    def __init__(self, docker_client: Optional["docker.DockerClient"] = None):
+        """Initialize the sandbox runner.
+
         Args:
-            docker_client: Docker client instance (optional, will create default)
+            docker_client: Docker client instance. If omitted, we try to build one from
+                environment variables via ``docker.from_env()``.
+
+        Note:
+            The Python ``docker`` package is an optional dependency in this repo.
+            When it's not installed, this class can still be imported, but it cannot
+            be instantiated unless a compatible ``docker_client`` is provided.
         """
-        self.docker_client = docker_client or docker.from_env()
+
+        if docker_client is None:
+            if docker is None:
+                raise SandboxRunnerError(
+                    "Docker SDK for Python is not installed. Install 'docker' or provide a docker_client."
+                )
+            docker_client = docker.from_env()
+
+        self.docker_client = docker_client
         self.executor_factory = ExecutorFactory()
         self.active_containers: Dict[str, Container] = {}
-        
+
         # Validate Docker connection
         try:
             self.docker_client.ping()

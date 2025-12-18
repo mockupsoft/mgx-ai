@@ -99,6 +99,17 @@ class WorkspaceCreate(BaseModel):
         allow_population_by_field_name = True
 
 
+class WorkspaceUpdate(BaseModel):
+    """Schema for updating a workspace."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Workspace name")
+    slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Workspace slug (unique)")
+    meta_data: Optional[Dict[str, Any]] = Field(None, alias="metadata", description="Workspace metadata")
+
+    class Config:
+        allow_population_by_field_name = True
+
+
 class WorkspaceSummary(BaseModel):
     """Small embedded representation of a workspace."""
 
@@ -135,6 +146,20 @@ class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Project name")
     slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Project slug (unique within workspace)")
     meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata", description="Project metadata")
+
+    class Config:
+        allow_population_by_field_name = True
+
+
+class ProjectUpdate(BaseModel):
+    """Schema for updating a project in the active workspace."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=255, description="Project name")
+    slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Project slug (unique within workspace)")
+    meta_data: Optional[Dict[str, Any]] = Field(None, alias="metadata", description="Project metadata")
+
+    run_branch_prefix: Optional[str] = Field(None, min_length=1, max_length=255)
+    commit_template: Optional[str] = Field(None, max_length=4000)
 
     class Config:
         allow_population_by_field_name = True

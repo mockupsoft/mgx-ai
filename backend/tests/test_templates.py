@@ -324,14 +324,7 @@ class TestTemplateSeeder:
 
 class TestTemplateAPI:
     """Test cases for template API endpoints."""
-    
-    @pytest.fixture
-    def client(self):
-        """Create test client for API testing."""
-        from fastapi.testclient import TestClient
-        from backend.app.main import app
-        return TestClient(app)
-    
+
     def test_list_module_templates_endpoint(self, client):
         """Test listing module templates endpoint."""
         response = client.get("/api/templates/modules")

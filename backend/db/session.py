@@ -64,6 +64,12 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
+# Backwards-compatible alias used by some routers (knowledge/sandbox).
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+    async for session in get_session():
+        yield session
+
+
 # ============================================
 # Sync sessions (legacy)
 # ============================================

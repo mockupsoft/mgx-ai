@@ -165,6 +165,17 @@ async def get_run(
     return RunResponse.model_validate(db_run)
 
 
+@router.put("/{run_id}", response_model=RunResponse)
+async def replace_run(
+    run_id: str,
+    status: Optional[str] = Query(None),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> RunResponse:
+    """Update a run's status in the active workspace (PUT alias)."""
+
+    return await update_run(run_id=run_id, status=status, ctx=ctx)
+
+
 @router.patch("/{run_id}", response_model=RunResponse)
 async def update_run(
     run_id: str,
