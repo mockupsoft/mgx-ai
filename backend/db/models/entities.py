@@ -65,6 +65,11 @@ from .enums import (
     LLMProvider,
     ResourceType,
     BudgetAlertType,
+    DeploymentValidationStatus,
+    ValidationCheckStatus,
+    ChecklistItemStatus,
+    DeploymentEnvironment,
+    DeploymentPhase,
 )
 
 
@@ -1602,6 +1607,185 @@ Workspace.roles = relationship("Role", back_populates="workspace", cascade="all,
 Workspace.generated_projects = relationship("GeneratedProject", back_populates="workspace", cascade="all, delete-orphan")
 
 
+class DeploymentValidation(Base, TimestampMixin, SerializationMixin):
+    """Deployment validation run record."""
+
+    __tablename__ = "deployment_validations"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    build_id = Column(String(36), ForeignKey("artifact_builds.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    status = Column(
+        SQLEnum(DeploymentValidationStatus),
+        nullable=False,
+        default=DeploymentValidationStatus.PENDING,
+        index=True,
+        comment="Validation status",
+    )
+    
+    environment = Column(
+        SQLEnum(DeploymentEnvironment),
+        nullable=False,
+        default=DeploymentEnvironment.SANDBOX,
+        comment="Target environment",
+    )
+
+    passed_checks = Column(Integer, nullable=False, default=0, comment="Number of passed checks")
+    failed_checks = Column(Integer, nullable=False, default=0, comment="Number of failed checks")
+    warning_checks = Column(Integer, nullable=False, default=0, comment="Number of checks with warnings")
+    total_checks = Column(Integer, nullable=False, default=0, comment="Total number of checks")
+
+    validation_results = Column(JSON, nullable=False, default=dict, comment="Detailed validation results")
+    error_message = Column(Text, comment="Error message if validation failed")
+
+    started_at = Column(DateTime(timezone=True), comment="Validation started at")
+    completed_at = Column(DateTime(timezone=True), comment="Validation completed at")
+
+    __table_args__ = (
+        Index("idx_deployment_validations_build", "build_id"),
+        Index("idx_deployment_validations_workspace", "workspace_id"),
+        Index("idx_deployment_validations_status", "status"),
+        Index("idx_deployment_validations_created_at", "created_at"),
+    )
+
+    build = relationship("ArtifactBuild")
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<DeploymentValidation(id={self.id}, build_id='{self.build_id}', status='{self.status}')>"
+
+
+class ValidationCheckResult(Base, TimestampMixin, SerializationMixin):
+    """Individual validation check result."""
+
+    __tablename__ = "validation_check_results"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    validation_id = Column(String(36), ForeignKey("deployment_validations.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    phase = Column(
+        SQLEnum(DeploymentPhase),
+        nullable=False,
+        comment="Validation phase",
+    )
+    
+    check_name = Column(String(255), nullable=False, comment="Name of the check")
+    description = Column(Text, comment="Description of what was checked")
+
+    status = Column(
+        SQLEnum(ValidationCheckStatus),
+        nullable=False,
+        default=ValidationCheckStatus.PENDING,
+        comment="Check result status",
+    )
+
+    details = Column(JSON, nullable=False, default=dict, comment="Detailed check results")
+    error_message = Column(Text, comment="Error message if check failed")
+    remediation = Column(Text, comment="Suggested remediation if check failed")
+
+    __table_args__ = (
+        Index("idx_validation_check_results_validation", "validation_id"),
+        Index("idx_validation_check_results_phase", "phase"),
+        Index("idx_validation_check_results_status", "status"),
+    )
+
+    validation = relationship("DeploymentValidation")
+
+    def __repr__(self) -> str:
+        return f"<ValidationCheckResult(id={self.id}, phase='{self.phase}', check='{self.check_name}', status='{self.status}')>"
+
+
+class PreDeploymentChecklist(Base, TimestampMixin, SerializationMixin):
+    """Pre-deployment checklist for a deployment."""
+
+    __tablename__ = "pre_deployment_checklists"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    validation_id = Column(String(36), ForeignKey("deployment_validations.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    all_passed = Column(Boolean, nullable=False, default=False, comment="Whether all checklist items passed")
+    completed_at = Column(DateTime(timezone=True), comment="When checklist was completed")
+
+    checklist_data = Column(JSON, nullable=False, default=dict, comment="Checklist items and their statuses")
+
+    __table_args__ = (
+        Index("idx_pre_deployment_checklists_validation", "validation_id"),
+        Index("idx_pre_deployment_checklists_workspace", "workspace_id"),
+    )
+
+    validation = relationship("DeploymentValidation")
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<PreDeploymentChecklist(id={self.id}, all_passed={self.all_passed})>"
+
+
+class DeploymentSimulation(Base, TimestampMixin, SerializationMixin):
+    """Dry-run deployment simulation record."""
+
+    __tablename__ = "deployment_simulations"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    validation_id = Column(String(36), ForeignKey("deployment_validations.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    simulation_status = Column(String(50), nullable=False, index=True, comment="Simulation status")
+    namespace = Column(String(255), comment="Test namespace used for simulation")
+    
+    resource_requirements = Column(JSON, nullable=False, default=dict, comment="Required resources for deployment")
+    deployment_metrics = Column(JSON, nullable=False, default=dict, comment="Metrics from simulation")
+    health_check_results = Column(JSON, nullable=False, default=dict, comment="Health check results from simulation")
+
+    started_at = Column(DateTime(timezone=True), comment="Simulation started at")
+    completed_at = Column(DateTime(timezone=True), comment="Simulation completed at")
+    error_message = Column(Text, comment="Error message if simulation failed")
+
+    __table_args__ = (
+        Index("idx_deployment_simulations_validation", "validation_id"),
+        Index("idx_deployment_simulations_workspace", "workspace_id"),
+    )
+
+    validation = relationship("DeploymentValidation")
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<DeploymentSimulation(id={self.id}, validation_id='{self.validation_id}', status='{self.simulation_status}')>"
+
+
+class RollbackPlan(Base, TimestampMixin, SerializationMixin):
+    """Rollback procedure plan for a deployment."""
+
+    __tablename__ = "rollback_plans"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    validation_id = Column(String(36), ForeignKey("deployment_validations.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    from_version = Column(String(50), nullable=False, comment="Version deploying from")
+    to_version = Column(String(50), nullable=False, comment="Version deploying to")
+
+    validation_passed = Column(Boolean, nullable=False, default=False, comment="Whether rollback validation passed")
+    
+    rollback_procedure = Column(JSON, nullable=False, default=dict, comment="Rollback procedure steps")
+    manual_steps = Column(JSON, nullable=False, default=list, comment="Manual intervention required steps")
+    database_rollback_plan = Column(JSON, nullable=False, default=dict, comment="Database rollback procedure")
+    
+    estimated_rollback_time_minutes = Column(Integer, comment="Estimated time to rollback in minutes")
+
+    __table_args__ = (
+        Index("idx_rollback_plans_validation", "validation_id"),
+        Index("idx_rollback_plans_workspace", "workspace_id"),
+    )
+
+    validation = relationship("DeploymentValidation")
+    workspace = relationship("Workspace")
+
+    def __repr__(self) -> str:
+        return f"<RollbackPlan(id={self.id}, from_version='{self.from_version}', to_version='{self.to_version}')>"
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -1654,4 +1838,9 @@ __all__ = [
     "ExecutionCost",
     "WorkspaceBudget",
     "ProjectBudget",
+    "DeploymentValidation",
+    "ValidationCheckResult",
+    "PreDeploymentChecklist",
+    "DeploymentSimulation",
+    "RollbackPlan",
 ]

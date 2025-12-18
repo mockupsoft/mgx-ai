@@ -9,6 +9,7 @@ from .secrets import router as secrets_router
 from .generator import router as generator_router
 from .artifacts import router as artifacts_router
 from .costs import router as costs_router
+from .validators import router as validators_router
 
 # Legacy routers (kept for backwards compatibility)
 try:
@@ -44,6 +45,7 @@ __all__ = [
     "generator_router",
     "artifacts_router",
     "costs_router",
+    "validators_router",
     "health_router",
     "workspaces_router",
     "projects_router", 

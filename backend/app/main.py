@@ -41,6 +41,7 @@ from backend.routers import (
     generator_router,
     artifacts_router,
     costs_router,
+    validators_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -286,6 +287,9 @@ def create_app() -> FastAPI:
     
     app.include_router(costs_router)
     logger.info("✓ Registered: costs_router")
+    
+    app.include_router(validators_router)
+    logger.info("✓ Registered: validators_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])

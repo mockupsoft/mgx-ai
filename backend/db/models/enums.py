@@ -459,3 +459,55 @@ class BudgetAlertType(str, Enum):
     THRESHOLD_100 = "threshold_100"  # 100% of budget reached
     THRESHOLD_EXCEEDED = "threshold_exceeded"  # Budget exceeded
     ANOMALY_DETECTED = "anomaly_detected"  # Cost anomaly detected
+
+
+class DeploymentValidationStatus(str, Enum):
+    """Status of deployment validation."""
+
+    PENDING = "pending"  # Validation is queued
+    RUNNING = "running"  # Validation is in progress
+    PASSED = "passed"  # All validations passed
+    FAILED = "failed"  # Validation failed
+    WARNING = "warning"  # Validation passed with warnings
+    COMPLETED = "completed"  # Validation completed
+
+
+class ValidationCheckStatus(str, Enum):
+    """Status of individual validation checks."""
+
+    PENDING = "pending"  # Check is pending
+    RUNNING = "running"  # Check is running
+    PASSED = "passed"  # Check passed
+    FAILED = "failed"  # Check failed
+    WARNING = "warning"  # Check passed with warnings
+    SKIPPED = "skipped"  # Check was skipped
+
+
+class ChecklistItemStatus(str, Enum):
+    """Status of a pre-deployment checklist item."""
+
+    PENDING = "pending"  # Item is pending
+    PASS = "pass"  # Item passed
+    FAIL = "fail"  # Item failed
+    MANUAL = "manual"  # Requires manual review
+    NOT_APPLICABLE = "not_applicable"  # Item not applicable
+
+
+class DeploymentEnvironment(str, Enum):
+    """Deployment target environments."""
+
+    SANDBOX = "sandbox"  # Sandbox/test environment
+    STAGING = "staging"  # Staging environment
+    PRODUCTION = "production"  # Production environment
+
+
+class DeploymentPhase(str, Enum):
+    """Phases of the deployment validation."""
+
+    DOCKER_VALIDATION = "docker_validation"  # Docker image validation
+    KUBERNETES_VALIDATION = "kubernetes_validation"  # Kubernetes manifest validation
+    HEALTH_CHECK = "health_check"  # Health check validation
+    SECURITY_CHECK = "security_check"  # Security validation
+    CONFIGURATION_CHECK = "configuration_check"  # Configuration validation
+    DRY_RUN = "dry_run"  # Dry-run simulation
+    ROLLBACK_VALIDATION = "rollback_validation"  # Rollback procedure validation

@@ -25,6 +25,11 @@ from .enums import (
     ProjectGenerationStatus,
     StackType,
     TemplateFeatureType,
+    DeploymentValidationStatus,
+    ValidationCheckStatus,
+    ChecklistItemStatus,
+    DeploymentEnvironment,
+    DeploymentPhase,
 )
 from .entities import (
     Artifact,
@@ -50,6 +55,11 @@ from .entities import (
     WorkflowStepExecution,
     Secret,
     SecretAudit,
+    DeploymentValidation,
+    ValidationCheckResult,
+    PreDeploymentChecklist,
+    DeploymentSimulation,
+    RollbackPlan,
 )
 
 __all__ = [
@@ -94,4 +104,14 @@ __all__ = [
     "ProjectGenerationStatus",
     "StackType",
     "TemplateFeatureType",
+    "DeploymentValidationStatus",
+    "ValidationCheckStatus",
+    "ChecklistItemStatus",
+    "DeploymentEnvironment",
+    "DeploymentPhase",
+    "DeploymentValidation",
+    "ValidationCheckResult",
+    "PreDeploymentChecklist",
+    "DeploymentSimulation",
+    "RollbackPlan",
 ]
