@@ -70,6 +70,10 @@ from .enums import (
     ChecklistItemStatus,
     DeploymentEnvironment,
     DeploymentPhase,
+    TemplateCategory,
+    PromptOutputFormat,
+    TemplateVisibility,
+    ADRStatus,
 )
 
 

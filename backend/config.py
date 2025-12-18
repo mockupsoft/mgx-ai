@@ -158,6 +158,41 @@ class Settings(BaseSettings):
         description="How long to retain secret audit logs (in days)"
     )
     
+    # LLM Provider Settings
+    llm_default_provider: str = Field(
+        default="openai",
+        description="Default LLM provider: openai | anthropic | mistral | ollama | together"
+    )
+    llm_routing_strategy: str = Field(
+        default="balanced",
+        description="LLM routing strategy: cost_optimized | latency_optimized | quality_optimized | local_first | balanced"
+    )
+    llm_enable_fallback: bool = Field(
+        default=True,
+        description="Enable automatic fallback to alternative providers on failure"
+    )
+    llm_prefer_local: bool = Field(
+        default=False,
+        description="Prefer local models when available"
+    )
+    llm_max_latency_ms: int = Field(
+        default=10000,
+        ge=1000,
+        le=60000,
+        description="Maximum acceptable latency in milliseconds"
+    )
+    
+    # Provider-specific API Keys
+    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
+    openai_organization: Optional[str] = Field(default=None, description="OpenAI organization ID")
+    anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
+    mistral_api_key: Optional[str] = Field(default=None, description="Mistral AI API key")
+    together_api_key: Optional[str] = Field(default=None, description="Together AI API key")
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama server base URL"
+    )
+    
     @property
     def database_url(self) -> str:
         """Generate PostgreSQL connection URL."""
