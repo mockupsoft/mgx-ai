@@ -11,7 +11,7 @@ LLM çağrıları yapan Action sınıfları:
 """
 
 import re
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from metagpt.actions import Action
 from metagpt.logs import logger
