@@ -74,6 +74,11 @@ from .enums import (
     PromptOutputFormat,
     TemplateVisibility,
     ADRStatus,
+    KnowledgeCategory,
+    KnowledgeSourceType,
+    KnowledgeItemStatus,
+    VectorDBProvider,
+    EmbeddingModel,
 )
 
 
@@ -92,6 +97,7 @@ class Workspace(Base, TimestampMixin, SerializationMixin):
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="workspace", cascade="all, delete-orphan")
     generated_projects = relationship("GeneratedProject", back_populates="workspace", cascade="all, delete-orphan")
+    knowledge_items = relationship("KnowledgeItem", back_populates="workspace", cascade="all, delete-orphan")
     budget = relationship("WorkspaceBudget", back_populates="workspace", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -1907,6 +1913,58 @@ class PromptTemplate(Base, TimestampMixin, SerializationMixin):
         return f"<PromptTemplate(id={self.id}, name='{self.name}', category='{self.category.value}')>"
 
 
+class KnowledgeItem(Base, TimestampMixin, SerializationMixin):
+    """Knowledge base item for storing patterns, standards, and best practices."""
+    __tablename__ = "knowledge_items"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    category = Column(SQLEnum(KnowledgeCategory), nullable=False)
+    title = Column(String(500), nullable=False)
+    content = Column(Text, nullable=False)
+    language = Column(String(100), nullable=True)  # Programming language (python, typescript, php, etc.)
+    tags = Column(JSON, nullable=False, server_default="[]")
+    source = Column(SQLEnum(KnowledgeSourceType), nullable=False)
+    author = Column(String(255), nullable=True)
+    status = Column(SQLEnum(KnowledgeItemStatus), nullable=False, default=KnowledgeItemStatus.DRAFT)
+    
+    # Vector database integration
+    embedding_id = Column(String(255), nullable=True)  # ID in vector database
+    embedding_model = Column(SQLEnum(EmbeddingModel), nullable=True)
+    vector_dimension = Column(Integer, nullable=True)
+    
+    # Relevance and usage tracking
+    relevance_score = Column(Float, nullable=False, server_default="0.0")
+    usage_count = Column(Integer, nullable=False, server_default="0")
+    last_accessed = Column(DateTime, nullable=True)
+    
+    # Content metadata
+    file_path = Column(String(1000), nullable=True)  # Original file path if from code
+    line_start = Column(Integer, nullable=True)      # Starting line if from code
+    line_end = Column(Integer, nullable=True)        # Ending line if from code
+    chunk_hash = Column(String(64), nullable=True)   # Hash for deduplication
+    content_hash = Column(String(64), nullable=True) # Hash for change detection
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    
+    __table_args__ = (
+        Index("idx_knowledge_items_workspace", "workspace_id"),
+        Index("idx_knowledge_items_category", "category"),
+        Index("idx_knowledge_items_status", "status"),
+        Index("idx_knowledge_items_language", "language"),
+        Index("idx_knowledge_items_embedding_id", "embedding_id"),
+        Index("idx_knowledge_items_relevance_score", "relevance_score"),
+        Index("idx_knowledge_items_usage_count", "usage_count"),
+        Index("idx_knowledge_items_tags", "tags", postgresql_using="gin"),
+        Index("idx_knowledge_items_created_at", "created_at"),
+        Index("idx_knowledge_items_updated_at", "updated_at"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<KnowledgeItem(id={self.id}, workspace_id='{self.workspace_id}', title='{self.title}', category='{self.category.value}')>"
+
+
 class ADR(Base, TimestampMixin, SerializationMixin):
     """Architecture Decision Record for tracking system design decisions."""
     __tablename__ = "adrs"
@@ -2002,4 +2060,6 @@ __all__ = [
     "Parameter",
     "PromptTemplate",
     "ADR",
+    # Knowledge Base Models
+    "KnowledgeItem",
 ]

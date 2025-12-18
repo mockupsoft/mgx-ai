@@ -2058,6 +2058,323 @@ class MarketplaceResponse(BaseModel):
     total_templates: int
 
 
+# ============================================
+# Knowledge Base & RAG Schemas
+# ============================================
+
+class KnowledgeItemCreate(BaseModel):
+    """Schema for creating a knowledge item."""
+    
+    title: str = Field(..., min_length=1, max_length=500, description="Knowledge item title")
+    content: str = Field(..., min_length=1, description="Knowledge item content")
+    category: str = Field(..., description="Knowledge category")
+    language: Optional[str] = Field(None, description="Programming language")
+    tags: List[str] = Field(default_factory=list, description="Item tags")
+    source: str = Field(..., description="Source type")
+    author: Optional[str] = Field(None, description="Item author")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "title": "JWT Authentication Pattern",
+                "content": "Here's a standard JWT authentication implementation...",
+                "category": "code_pattern",
+                "language": "python",
+                "tags": ["authentication", "jwt", "security"],
+                "source": "manual_entry",
+                "author": "John Doe"
+            }
+        }
+
+
+class KnowledgeItemUpdate(BaseModel):
+    """Schema for updating a knowledge item."""
+    
+    title: Optional[str] = Field(None, min_length=1, max_length=500, description="Knowledge item title")
+    content: Optional[str] = Field(None, min_length=1, description="Knowledge item content")
+    category: Optional[str] = Field(None, description="Knowledge category")
+    language: Optional[str] = Field(None, description="Programming language")
+    tags: Optional[List[str]] = Field(None, description="Item tags")
+    status: Optional[str] = Field(None, description="Item status")
+
+
+class KnowledgeItemResponse(BaseModel):
+    """Schema for knowledge item response."""
+    
+    id: str = Field(..., description="Knowledge item ID")
+    workspace_id: str = Field(..., description="Workspace ID")
+    title: str = Field(..., description="Knowledge item title")
+    content: str = Field(..., description="Knowledge item content")
+    category: str = Field(..., description="Knowledge category")
+    language: Optional[str] = Field(None, description="Programming language")
+    tags: List[str] = Field(..., description="Item tags")
+    source: str = Field(..., description="Source type")
+    author: Optional[str] = Field(None, description="Item author")
+    status: str = Field(..., description="Item status")
+    relevance_score: float = Field(..., description="Relevance score")
+    usage_count: int = Field(..., description="Usage count")
+    embedding_id: Optional[str] = Field(None, description="Vector database embedding ID")
+    file_path: Optional[str] = Field(None, description="Original file path")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Update timestamp")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "workspace_id": "456e7890-e89b-12d3-a456-426614174000",
+                "title": "JWT Authentication Pattern",
+                "content": "Here's a standard JWT authentication implementation...",
+                "category": "code_pattern",
+                "language": "python",
+                "tags": ["authentication", "jwt", "security"],
+                "source": "manual_entry",
+                "author": "John Doe",
+                "status": "active",
+                "relevance_score": 0.95,
+                "usage_count": 15,
+                "embedding_id": "pinecone_abc123",
+                "file_path": "backend/auth/jwt.py",
+                "created_at": "2024-01-01T10:00:00Z",
+                "updated_at": "2024-01-01T10:00:00Z"
+            }
+        }
+
+
+class KnowledgeSearchRequest(BaseModel):
+    """Schema for knowledge search request."""
+    
+    query: str = Field(..., min_length=1, description="Search query")
+    top_k: int = Field(default=5, ge=1, le=100, description="Number of results to return")
+    category_filter: Optional[str] = Field(None, description="Filter by category")
+    language_filter: Optional[str] = Field(None, description="Filter by language")
+    tags_filter: Optional[List[str]] = Field(None, description="Filter by tags")
+    min_relevance_score: float = Field(default=0.3, ge=0.0, le=1.0, description="Minimum relevance score")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "query": "How to implement JWT authentication?",
+                "top_k": 5,
+                "category_filter": "code_pattern",
+                "language_filter": "python",
+                "min_relevance_score": 0.5
+            }
+        }
+
+
+class KnowledgeSearchResult(BaseModel):
+    """Schema for knowledge search result."""
+    
+    id: str = Field(..., description="Knowledge item ID")
+    title: str = Field(..., description="Knowledge item title")
+    content_preview: str = Field(..., description="Content preview")
+    category: str = Field(..., description="Knowledge category")
+    language: Optional[str] = Field(None, description="Programming language")
+    tags: List[str] = Field(..., description="Item tags")
+    author: Optional[str] = Field(None, description="Item author")
+    relevance_score: float = Field(..., description="Relevance score")
+    source: str = Field(..., description="Source type")
+    file_path: Optional[str] = Field(None, description="Original file path")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "title": "JWT Authentication Pattern",
+                "content_preview": "Here's a standard JWT authentication implementation...",
+                "category": "code_pattern",
+                "language": "python",
+                "tags": ["authentication", "jwt", "security"],
+                "author": "John Doe",
+                "relevance_score": 0.95,
+                "source": "manual_entry",
+                "file_path": "backend/auth/jwt.py"
+            }
+        }
+
+
+class KnowledgeSearchResponse(BaseModel):
+    """Schema for knowledge search response."""
+    
+    items: List[KnowledgeSearchResult] = Field(..., description="Search results")
+    total_count: int = Field(..., description="Total number of matching items")
+    search_time_ms: float = Field(..., description="Search time in milliseconds")
+    metadata: Dict[str, Any] = Field(..., description="Search metadata")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "title": "JWT Authentication Pattern",
+                        "content_preview": "Here's a standard JWT authentication implementation...",
+                        "category": "code_pattern",
+                        "language": "python",
+                        "tags": ["authentication", "jwt", "security"],
+                        "author": "John Doe",
+                        "relevance_score": 0.95,
+                        "source": "manual_entry",
+                        "file_path": "backend/auth/jwt.py"
+                    }
+                ],
+                "total_count": 1,
+                "search_time_ms": 45.2,
+                "metadata": {
+                    "query": "JWT authentication",
+                    "vector_results_count": 1,
+                    "final_results": 1
+                }
+            }
+        }
+
+
+class EnhancedPromptRequest(BaseModel):
+    """Schema for enhanced prompt request."""
+    
+    base_prompt: str = Field(..., description="Original prompt to enhance")
+    query: str = Field(..., description="Search query for finding relevant knowledge")
+    num_examples: int = Field(default=3, ge=1, le=10, description="Number of examples to include")
+    category_filter: Optional[str] = Field(None, description="Filter by category")
+    language_filter: Optional[str] = Field(None, description="Filter by language")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "base_prompt": "Write a function to authenticate users",
+                "query": "JWT authentication implementation patterns",
+                "num_examples": 3,
+                "category_filter": "code_pattern",
+                "language_filter": "python"
+            }
+        }
+
+
+class EnhancedPromptResponse(BaseModel):
+    """Schema for enhanced prompt response."""
+    
+    original_prompt: str = Field(..., description="Original prompt")
+    enhanced_prompt: str = Field(..., description="Enhanced prompt with knowledge examples")
+    retrieved_items: List[Dict[str, Any]] = Field(..., description="Retrieved knowledge items")
+    search_metadata: Dict[str, Any] = Field(..., description="Search metadata")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "original_prompt": "Write a function to authenticate users",
+                "enhanced_prompt": "Write a function to authenticate users\n\n## Relevant Knowledge Examples:\n### Example 1: JWT Authentication Pattern\n...",
+                "retrieved_items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "title": "JWT Authentication Pattern",
+                        "category": "code_pattern",
+                        "content_preview": "Here's a standard JWT authentication implementation...",
+                        "relevance_score": 0.95,
+                        "tags": ["authentication", "jwt", "security"],
+                        "author": "John Doe"
+                    }
+                ],
+                "search_metadata": {
+                    "search_time_ms": 45.2,
+                    "total_found": 1,
+                    "num_examples_included": 1
+                }
+            }
+        }
+
+
+class IngestionRequest(BaseModel):
+    """Schema for knowledge ingestion request."""
+    
+    source_type: str = Field(..., description="Type of source to ingest")
+    source_path: str = Field(..., description="Path to the source")
+    auto_update: bool = Field(default=True, description="Whether to auto-update existing items")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "source_type": "documentation",
+                "source_path": "/path/to/documentation",
+                "auto_update": True
+            }
+        }
+
+
+class IngestionResponse(BaseModel):
+    """Schema for ingestion response."""
+    
+    job_id: str = Field(..., description="Ingestion job ID")
+    status: str = Field(..., description="Job status")
+    progress: float = Field(..., description="Job progress (0-1)")
+    items_processed: int = Field(..., description="Number of items processed")
+    items_created: int = Field(..., description="Number of items created")
+    items_updated: int = Field(..., description="Number of items updated")
+    error_message: Optional[str] = Field(None, description="Error message if job failed")
+    created_at: datetime = Field(..., description="Job creation timestamp")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "job_id": "789e1234-e89b-12d3-a456-426614174000",
+                "status": "completed",
+                "progress": 1.0,
+                "items_processed": 10,
+                "items_created": 8,
+                "items_updated": 2,
+                "created_at": "2024-01-01T10:00:00Z"
+            }
+        }
+
+
+class KnowledgeStatsResponse(BaseModel):
+    """Schema for knowledge base statistics response."""
+    
+    total_items: int = Field(..., description="Total number of knowledge items")
+    category_distribution: Dict[str, int] = Field(..., description="Items by category")
+    status_distribution: Dict[str, int] = Field(..., description="Items by status")
+    top_used_items: List[Dict[str, Any]] = Field(..., description="Most used items")
+    recent_items: List[Dict[str, Any]] = Field(..., description="Recently added items")
+    embedding_stats: Dict[str, Any] = Field(..., description="Embedding-related statistics")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "total_items": 150,
+                "category_distribution": {
+                    "code_pattern": 50,
+                    "best_practice": 30,
+                    "standard": 20
+                },
+                "status_distribution": {
+                    "active": 140,
+                    "draft": 10
+                },
+                "top_used_items": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "title": "JWT Authentication Pattern",
+                        "usage_count": 25,
+                        "category": "code_pattern"
+                    }
+                ],
+                "recent_items": [
+                    {
+                        "id": "456e7890-e89b-12d3-a456-426614174000",
+                        "title": "API Rate Limiting",
+                        "created_at": "2024-01-01T10:00:00Z",
+                        "category": "best_practice"
+                    }
+                ],
+                "embedding_stats": {
+                    "items_with_embeddings": 140,
+                    "items_without_embeddings": 10,
+                    "embedding_coverage": 0.93
+                }
+            }
+        }
+
+
 # Update __all__ to include new schemas
 __all__ += [
     'ModuleTemplateCreateRequest',
@@ -2086,4 +2403,16 @@ __all__ += [
     'TemplateEnhancementResponse',
     'MarketplaceTemplate',
     'MarketplaceResponse',
+    # Knowledge Base & RAG Schemas
+    'KnowledgeItemCreate',
+    'KnowledgeItemUpdate', 
+    'KnowledgeItemResponse',
+    'KnowledgeSearchRequest',
+    'KnowledgeSearchResult',
+    'KnowledgeSearchResponse',
+    'EnhancedPromptRequest',
+    'EnhancedPromptResponse',
+    'IngestionRequest',
+    'IngestionResponse',
+    'KnowledgeStatsResponse',
 ]

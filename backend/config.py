@@ -193,6 +193,61 @@ class Settings(BaseSettings):
         description="Ollama server base URL"
     )
     
+    # Knowledge Base & Vector Database Settings
+    vector_db_provider: str = Field(
+        default="chroma",
+        description="Vector database provider: pinecone | weaviate | milvus | qdrant | chroma | elasticsearch | pgvector"
+    )
+    vector_db_enabled: bool = Field(
+        default=True,
+        description="Enable knowledge base and RAG functionality"
+    )
+    embedding_model: str = Field(
+        default="openai-text-embedding-3-small",
+        description="Default embedding model: openai-text-embedding-3-small | openai-text-embedding-3-large | huggingface-all-MiniLM-L6-v2"
+    )
+    knowledge_base_auto_index: bool = Field(
+        default=True,
+        description="Automatically index new knowledge items"
+    )
+    knowledge_base_deduplication: bool = Field(
+        default=True,
+        description="Enable automatic deduplication of knowledge items"
+    )
+    knowledge_base_max_results: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum number of knowledge results to retrieve per query"
+    )
+    knowledge_base_min_relevance_score: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum relevance score for knowledge search results"
+    )
+    
+    # Provider-specific Vector Database Configuration
+    pinecone_api_key: Optional[str] = Field(default=None, description="Pinecone API key")
+    pinecone_environment: str = Field(default="us-west1-gcp", description="Pinecone environment")
+    pinecone_index_name: str = Field(default="knowledge-base", description="Pinecone index name")
+    
+    weaviate_url: str = Field(default="http://localhost:8080", description="Weaviate server URL")
+    weaviate_username: Optional[str] = Field(default=None, description="Weaviate username")
+    weaviate_password: Optional[str] = Field(default=None, description="Weaviate password")
+    weaviate_class_name: str = Field(default="KnowledgeItem", description="Weaviate class name")
+    
+    chromadb_path: str = Field(default="./chromadb", description="ChromaDB persistent storage path")
+    chromadb_collection_name: str = Field(default="knowledge_items", description="ChromaDB collection name")
+    
+    milvus_host: str = Field(default="localhost", description="Milvus server host")
+    milvus_port: int = Field(default=19530, description="Milvus server port")
+    milvus_collection_name: str = Field(default="knowledge_items", description="Milvus collection name")
+    
+    qdrant_host: str = Field(default="localhost", description="Qdrant server host")
+    qdrant_port: int = Field(default=6333, description="Qdrant server port")
+    qdrant_collection_name: str = Field(default="knowledge_items", description="Qdrant collection name")
+    
     @property
     def database_url(self) -> str:
         """Generate PostgreSQL connection URL."""
