@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 
 from backend.db.models import Project
 from backend.routers.deps import WorkspaceContext, get_workspace_context, slugify
-from backend.schemas import ProjectCreate, ProjectListResponse, ProjectResponse
+from backend.schemas import ProjectCreate, ProjectListResponse, ProjectResponse, ProjectUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +92,61 @@ async def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
 
     return ProjectResponse.model_validate(project)
+
+
+@router.put("/{project_id}", response_model=ProjectResponse)
+async def update_project(
+    project_id: str,
+    payload: ProjectUpdate,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> ProjectResponse:
+    session = ctx.session
+
+    result = await session.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == ctx.workspace.id)
+    )
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    update_data = payload.model_dump(exclude_unset=True, by_alias=False)
+
+    if "slug" in update_data and update_data["slug"]:
+        existing = await session.execute(
+            select(Project).where(
+                Project.workspace_id == ctx.workspace.id,
+                Project.slug == update_data["slug"],
+                Project.id != project_id,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=409, detail="Project slug already exists in workspace")
+
+    for field, value in update_data.items():
+        if field == "meta_data" and value is None:
+            continue
+        setattr(project, field, value)
+
+    await session.flush()
+    return ProjectResponse.model_validate(project)
+
+
+@router.delete("/{project_id}")
+async def delete_project(
+    project_id: str,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> dict:
+    session = ctx.session
+
+    result = await session.execute(
+        select(Project).where(Project.id == project_id, Project.workspace_id == ctx.workspace.id)
+    )
+    project = result.scalar_one_or_none()
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    await session.delete(project)
+    return {"status": "deleted", "project_id": project_id}
 
 
 __all__ = ["router"]

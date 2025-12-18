@@ -141,6 +141,17 @@ async def get_task(
     return TaskResponse.model_validate(db_task)
 
 
+@router.put("/{task_id}", response_model=TaskResponse)
+async def replace_task(
+    task_id: str,
+    task_update: TaskUpdate,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> TaskResponse:
+    """Update a task in the active workspace (PUT alias)."""
+
+    return await update_task(task_id=task_id, task_update=task_update, ctx=ctx)
+
+
 @router.patch("/{task_id}", response_model=TaskResponse)
 async def update_task(
     task_id: str,

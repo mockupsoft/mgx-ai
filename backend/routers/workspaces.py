@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.models import Project, Workspace
 from backend.db.session import get_session
 from backend.routers.deps import DEFAULT_PROJECT_NAME, DEFAULT_PROJECT_SLUG, slugify
-from backend.schemas import WorkspaceCreate, WorkspaceListResponse, WorkspaceResponse
+from backend.schemas import WorkspaceCreate, WorkspaceListResponse, WorkspaceResponse, WorkspaceUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,49 @@ async def get_workspace(
         raise HTTPException(status_code=404, detail="Workspace not found")
 
     return WorkspaceResponse.model_validate(workspace)
+
+
+@router.put("/{workspace_id}", response_model=WorkspaceResponse)
+async def update_workspace(
+    workspace_id: str,
+    payload: WorkspaceUpdate,
+    session: AsyncSession = Depends(get_session),
+) -> WorkspaceResponse:
+    result = await session.execute(select(Workspace).where(Workspace.id == workspace_id))
+    workspace = result.scalar_one_or_none()
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    update_data = payload.model_dump(exclude_unset=True, by_alias=False)
+
+    if "slug" in update_data and update_data["slug"]:
+        existing = await session.execute(
+            select(Workspace).where(Workspace.slug == update_data["slug"], Workspace.id != workspace_id)
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=409, detail="Workspace slug already exists")
+
+    for field, value in update_data.items():
+        if field == "meta_data" and value is None:
+            continue
+        setattr(workspace, field, value)
+
+    await session.flush()
+    return WorkspaceResponse.model_validate(workspace)
+
+
+@router.delete("/{workspace_id}")
+async def delete_workspace(
+    workspace_id: str,
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    result = await session.execute(select(Workspace).where(Workspace.id == workspace_id))
+    workspace = result.scalar_one_or_none()
+    if workspace is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    await session.delete(workspace)
+    return {"status": "deleted", "workspace_id": workspace_id}
 
 
 __all__ = ["router"]

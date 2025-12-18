@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.session import get_db
+from backend.db.session import get_session
 from backend.services.cost import (
     get_llm_tracker,
     get_compute_tracker,
@@ -93,7 +93,7 @@ class RecommendationResponse(BaseModel):
 async def get_workspace_costs(
     workspace_id: str,
     period: str = Query(default="month", regex="^(day|week|month|all)$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Get cost summary for a workspace.
@@ -158,7 +158,7 @@ async def get_workspace_costs(
 @router.get("/executions/{execution_id}/costs", response_model=ExecutionCostResponse)
 async def get_execution_costs(
     execution_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Get cost breakdown for a specific execution.
@@ -207,7 +207,7 @@ async def get_execution_costs(
 @router.get("/workspaces/{workspace_id}/budget", response_model=BudgetResponse)
 async def get_workspace_budget(
     workspace_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Get budget information for a workspace.
@@ -249,7 +249,7 @@ async def get_workspace_budget(
 async def create_workspace_budget(
     workspace_id: str,
     request: BudgetCreateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Create or update workspace budget.
@@ -290,7 +290,7 @@ async def create_workspace_budget(
 @router.get("/workspaces/{workspace_id}/budget/status")
 async def check_budget_status(
     workspace_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Check budget status and alert conditions.
@@ -313,7 +313,7 @@ async def create_project_budget(
     project_id: str,
     workspace_id: str = Query(..., description="Workspace ID"),
     request: ProjectBudgetCreateRequest = ...,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Create or update project budget.
@@ -352,7 +352,7 @@ async def create_project_budget(
 async def get_cost_recommendations(
     workspace_id: str,
     period: str = Query(default="month", regex="^(day|week|month)$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Get cost optimization recommendations for a workspace.
@@ -380,7 +380,7 @@ async def get_cost_recommendations(
 @router.get("/workspaces/{workspace_id}/cost-forecast")
 async def get_cost_forecast(
     workspace_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Get cost forecast for end of month.
@@ -401,7 +401,7 @@ async def get_cost_forecast(
 @router.get("/workspaces/{workspace_id}/cost-stats")
 async def get_cost_statistics(
     workspace_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ):
     """
     Get comprehensive cost statistics for a workspace.

@@ -11,7 +11,7 @@ from backend.db.session import get_db
 from backend.services.templates.template_manager import TemplateManager, TemplateEnhancer
 from backend.db.models.enums import TemplateCategory, PromptOutputFormat, TemplateVisibility, ADRStatus
 
-from schemas import (
+from backend.schemas import (
     ModuleTemplateCreateRequest,
     ModuleTemplateResponse,
     ModuleTemplateDetailResponse,
@@ -175,7 +175,7 @@ async def get_module_template(
         # Convert to response format
         file_responses = []
         for file_template in files:
-            from schemas import FileTemplateResponse
+            from backend.schemas import FileTemplateResponse
             file_responses.append(FileTemplateResponse(
                 id=file_template.id,
                 module_id=file_template.module_id,
@@ -191,7 +191,7 @@ async def get_module_template(
         
         param_responses = []
         for param in parameters:
-            from schemas import ParameterResponse
+            from backend.schemas import ParameterResponse
             param_responses.append(ParameterResponse(
                 id=param.id,
                 module_id=param.module_id,

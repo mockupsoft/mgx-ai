@@ -21,7 +21,12 @@ from backend.services.auth.rbac import RBACService, require_permission, get_rbac
 from backend.services.audit.logger import AuditLogger, get_audit_logger
 from backend.services.auth.default_roles import DefaultRolesSetup
 from backend.schemas import (
-    RoleCreate, UserRoleCreate, PermissionCheck, AuditLogCreate
+    RoleCreate,
+    UserRoleCreate,
+    PermissionCheck,
+    AuditLogCreate,
+    AuditLogFilter,
+    AuditLogExportRequest,
 )
 from backend.routers.rbac import router as rbac_router
 from backend.routers.audit import router as audit_router
