@@ -554,3 +554,72 @@ class PromptOutputFormat(str, Enum):
     EXPLANATION = "explanation"  # Generate explanation
     TEST_CASE = "test_case"  # Generate test cases
     CONFIGURATION = "configuration"  # Generate configuration
+
+
+# ============================================
+# Knowledge Base & RAG Enums
+# ============================================
+
+class KnowledgeCategory(str, Enum):
+    """Categories of knowledge items."""
+    
+    CODE_PATTERN = "code_pattern"  # Reusable code patterns and snippets
+    BEST_PRACTICE = "best_practice"  # Best practices and guidelines
+    STANDARD = "standard"  # Company/team standards
+    ARCHITECTURE = "architecture"  # Architecture decisions and patterns
+    TECHNOLOGY_CHOICE = "technology_choice"  # Technology stack decisions
+    API_CONTRACT = "api_contract"  # API definitions and contracts
+    SECURITY_GUIDELINE = "security_guideline"  # Security guidelines and requirements
+    PERFORMANCE_TIP = "performance_tip"  # Performance optimization tips
+    STYLE_GUIDE = "style_guide"  # Code style and formatting guidelines
+    TESTING_STANDARD = "testing_standard"  # Testing patterns and standards
+
+
+class KnowledgeSourceType(str, Enum):
+    """Source types for knowledge items."""
+    
+    INTERNAL_REPOSITORY = "internal_repository"  # From internal code repositories
+    DOCUMENTATION = "documentation"  # From project documentation
+    BEST_PRACTICE_GUIDE = "best_practice_guide"  # From best practice guides
+    ARCHITECTURE_DECISION = "architecture_decision"  # From ADRs
+    CODE_REVIEW = "code_review"  # From code review comments
+    PROJECT_TEMPLATE = "project_template"  # From project templates
+    MANUAL_ENTRY = "manual_entry"  # Manually entered knowledge
+    IMPORTED_CONTENT = "imported_content"  # Imported from external sources
+    TEAM_STANDARD = "team_standard"  # Team-specific standards
+    COMPLIANCE_RULE = "compliance_rule"  # Compliance and regulatory requirements
+
+
+class VectorDBProvider(str, Enum):
+    """Vector database providers."""
+    
+    PINECONE = "pinecone"  # Pinecone cloud vector database
+    WEAVIATE = "weaviate"  # Weaviate (self-hosted or cloud)
+    MILVUS = "milvus"  # Milvus (self-hosted)
+    QDRANT = "qdrant"  # Qdrant (self-hosted or cloud)
+    CHROMA = "chroma"  # Chroma (local/self-hosted)
+    ELASTICSEARCH = "elasticsearch"  # Elasticsearch with vector search
+    PGVECTOR = "pgvector"  # PostgreSQL with pgvector extension
+
+
+class KnowledgeItemStatus(str, Enum):
+    """Status of knowledge items."""
+    
+    ACTIVE = "active"  # Active and searchable
+    DRAFT = "draft"  # Draft version, not yet searchable
+    ARCHIVED = "archived"  # Archived, not searchable
+    DEPRECATED = "deprecated"  # Deprecated but still searchable
+    UNDER_REVIEW = "under_review"  # Under review process
+    VERIFIED = "verified"  # Verified by experts
+
+
+class EmbeddingModel(str, Enum):
+    """Available embedding models."""
+    
+    OPENAI_ADA_002 = "openai-ada-002"
+    OPENAI_TEXT_EMBEDDING_3_SMALL = "openai-text-embedding-3-small"
+    OPENAI_TEXT_EMBEDDING_3_LARGE = "openai-text-embedding-3-large"
+    ANTHROPIC_CLAUDE_EMBEDDINGS = "anthropic-claude-embeddings"
+    HUGGINGFACE_ALL_MINILM_L6_V2 = "huggingface-all-MiniLM-L6-v2"
+    SENTENCE_TRANSFORMERS_ALL_MPNET_BASE_V2 = "sentence-transformers-all-mpnet-base-v2"
+    LOCAL_SENTENCE_TRANSFORMERS = "local-sentence-transformers"
