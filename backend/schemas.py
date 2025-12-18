@@ -1754,3 +1754,336 @@ __all__ += [
     'SecretAuditLogResponse',
     'SecretStatisticsResponse',
 ]
+
+
+# ============================================
+# Template & Prompt Library Schemas
+# ============================================
+
+from datetime import datetime
+from typing import List, Optional, Dict, Any, Union
+from uuid import UUID
+from pydantic import BaseModel, Field
+from backend.db.models.enums import TemplateCategory, PromptOutputFormat, TemplateVisibility, ADRStatus
+
+
+class ModuleTemplateCreateRequest(BaseModel):
+    """Request schema for creating module templates."""
+    name: str = Field(..., min_length=1, max_length=255)
+    category: str = Field(..., description="Template category")
+    description: Optional[str] = None
+    version: str = Field(default="1.0.0", max_length=50)
+    tech_stacks: List[str] = Field(default_factory=list)
+    dependencies: List[str] = Field(default_factory=list)
+    documentation: Optional[str] = None
+    params: List[Dict[str, Any]] = Field(default_factory=list)
+    author: Optional[str] = None
+    visibility: str = Field(default="private")
+    tags: List[str] = Field(default_factory=list)
+    files: Optional[List[Dict[str, Any]]] = None
+    parameters: Optional[List[Dict[str, Any]]] = None
+
+
+class ModuleTemplateResponse(BaseModel):
+    """Response schema for module templates."""
+    id: str
+    name: str
+    category: str
+    description: Optional[str]
+    version: str
+    tech_stacks: List[str]
+    dependencies: List[str]
+    documentation: Optional[str]
+    params: List[Dict[str, Any]]
+    author: Optional[str]
+    usage_count: int
+    rating: float
+    visibility: str
+    is_active: bool
+    tags: List[str]
+    created_at: datetime
+    updated_at: datetime
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FileTemplateResponse(BaseModel):
+    """Response schema for file templates."""
+    id: str
+    module_id: str
+    path: str
+    content: str
+    language: Optional[str]
+    is_test: bool
+    is_config: bool
+    priority: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ParameterResponse(BaseModel):
+    """Response schema for template parameters."""
+    id: str
+    module_id: str
+    name: str
+    param_type: str
+    default_value: Optional[Any]
+    description: Optional[str]
+    required: bool
+    validation_rules: Dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ModuleTemplateDetailResponse(BaseModel):
+    """Response schema for module template details."""
+    module: ModuleTemplateResponse
+    files: List[FileTemplateResponse]
+    parameters: List[ParameterResponse]
+    total_files: int
+    total_parameters: int
+
+
+class ApplyModuleTemplateRequest(BaseModel):
+    """Request schema for applying module templates."""
+    project_id: str = Field(..., min_length=1)
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ApplyModuleTemplateResponse(BaseModel):
+    """Response schema for module template application."""
+    module_name: str
+    files_generated: int
+    files: List[Dict[str, Any]]
+    parameters_used: Dict[str, Any]
+
+
+class PromptTemplateCreateRequest(BaseModel):
+    """Request schema for creating prompt templates."""
+    name: str = Field(..., min_length=1, max_length=255)
+    category: str = Field(..., description="Template category")
+    template: str = Field(..., description="Prompt template with {{variables}}")
+    context_required: List[str] = Field(default_factory=list)
+    output_format: str = Field(..., description="Expected output format")
+    examples: List[str] = Field(default_factory=list)
+    author: Optional[str] = None
+    version: str = Field(default="1.0.0", max_length=50)
+    visibility: str = Field(default="public")
+    tags: List[str] = Field(default_factory=list)
+
+
+class PromptTemplateResponse(BaseModel):
+    """Response schema for prompt templates."""
+    id: str
+    name: str
+    category: str
+    template: str
+    context_required: List[str]
+    output_format: str
+    examples: List[str]
+    created_by: Optional[str]
+    version: str
+    usage_count: int
+    rating: float
+    visibility: str
+    tags: List[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratePromptRequest(BaseModel):
+    """Request schema for generating prompts."""
+    variables: Dict[str, Any] = Field(..., description="Variables for template substitution")
+
+
+class GeneratePromptResponse(BaseModel):
+    """Response schema for prompt generation."""
+    prompt: str
+    template_id: str
+    variables_used: Dict[str, Any]
+
+
+class ADRCreateRequest(BaseModel):
+    """Request schema for creating ADRs."""
+    title: str = Field(..., min_length=1, max_length=500)
+    context: str = Field(..., description="Context of the decision")
+    decision: str = Field(..., description="Decision made")
+    consequences: str = Field(..., description="Consequences of the decision")
+    status: str = Field(default="proposed")
+    alternatives_considered: List[str] = Field(default_factory=list)
+    related_adrs: List[str] = Field(default_factory=list)
+    tags: List[str] = Field(default_factory=list)
+
+
+class ADRResponse(BaseModel):
+    """Response schema for ADRs."""
+    id: str
+    workspace_id: str
+    title: str
+    status: str
+    context: str
+    decision: str
+    consequences: str
+    alternatives_considered: List[str]
+    related_adrs: List[str]
+    tags: List[str]
+    created_by: Optional[str]
+    updated_by: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ADRTimelineItem(BaseModel):
+    """Schema for ADR timeline items."""
+    id: str
+    title: str
+    status: str
+    date: str
+    summary: str
+
+
+class ADRTimelineResponse(BaseModel):
+    """Response schema for ADR timeline."""
+    timeline: List[ADRTimelineItem]
+
+
+class TemplateSearchRequest(BaseModel):
+    """Request schema for template search."""
+    query: str = Field(..., min_length=1)
+    template_type: str = Field(default="all", description="all, module, prompt")
+    category: Optional[str] = None
+    limit: int = Field(default=20, le=100)
+
+
+class TemplateSearchResult(BaseModel):
+    """Schema for template search results."""
+    type: str
+    id: str
+    name: str
+    description: str
+    category: str
+    rating: float
+    usage_count: int
+
+
+class TemplateSearchResponse(BaseModel):
+    """Response schema for template search."""
+    results: List[TemplateSearchResult]
+    total: int
+    query: str
+
+
+class TemplateListResponse(BaseModel):
+    """Response schema for template lists."""
+    items: List[Union[ModuleTemplateResponse, PromptTemplateResponse]]
+    total: int
+    limit: int
+    offset: int
+    template_type: str
+
+
+class RateTemplateRequest(BaseModel):
+    """Request schema for rating templates."""
+    rating: float = Field(..., ge=0, le=5, description="Rating from 0 to 5")
+
+
+class RateTemplateResponse(BaseModel):
+    """Response schema for template rating."""
+    template_id: str
+    template_type: str
+    new_rating: float
+    previous_rating: float
+
+
+# ============================================
+# Template Enhancement Schemas
+# ============================================
+
+class TemplateEnhancementRequest(BaseModel):
+    """Request schema for enhancing projects with templates."""
+    project_id: str = Field(..., min_length=1)
+    modules: List[str] = Field(..., description="List of module template names to apply")
+    parameters: Optional[Dict[str, Dict[str, Any]]] = None
+
+
+class TemplateEnhancementResult(BaseModel):
+    """Schema for template enhancement results."""
+    module: str
+    success: bool
+    files_generated: Optional[int] = None
+    error: Optional[str] = None
+
+
+class TemplateEnhancementResponse(BaseModel):
+    """Response schema for template enhancement."""
+    project_id: str
+    templates_applied: int
+    results: List[TemplateEnhancementResult]
+
+
+class MarketplaceTemplate(BaseModel):
+    """Schema for marketplace templates."""
+    id: str
+    name: str
+    description: str
+    category: str
+    author: Optional[str]
+    version: str
+    rating: float
+    usage_count: int
+    tags: List[str]
+    visibility: str
+
+
+class MarketplaceResponse(BaseModel):
+    """Response schema for template marketplace."""
+    popular_modules: List[MarketplaceTemplate]
+    popular_prompts: List[MarketplaceTemplate]
+    categories: List[str]
+    total_templates: int
+
+
+# Update __all__ to include new schemas
+__all__ += [
+    'ModuleTemplateCreateRequest',
+    'ModuleTemplateResponse',
+    'FileTemplateResponse',
+    'ParameterResponse',
+    'ModuleTemplateDetailResponse',
+    'ApplyModuleTemplateRequest',
+    'ApplyModuleTemplateResponse',
+    'PromptTemplateCreateRequest',
+    'PromptTemplateResponse',
+    'GeneratePromptRequest',
+    'GeneratePromptResponse',
+    'ADRCreateRequest',
+    'ADRResponse',
+    'ADRTimelineItem',
+    'ADRTimelineResponse',
+    'TemplateSearchRequest',
+    'TemplateSearchResult',
+    'TemplateSearchResponse',
+    'TemplateListResponse',
+    'RateTemplateRequest',
+    'RateTemplateResponse',
+    'TemplateEnhancementRequest',
+    'TemplateEnhancementResult',
+    'TemplateEnhancementResponse',
+    'MarketplaceTemplate',
+    'MarketplaceResponse',
+]
