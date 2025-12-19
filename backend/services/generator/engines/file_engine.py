@@ -101,9 +101,9 @@ class FileEngine:
             ]
             
             for auth_import in auth_imports:
-                if f"{{{{#IF_AUTH}}}}}" in content and auth_import not in content:
+                if "{{#IF_AUTH}}" in content and auth_import not in content:
                     content = content.replace(
-                        f"{{{{#IF_AUTH}}}}}" + auth_import + "\n{{{{/IF_AUTH}}}}",
+                        "{{#IF_AUTH}}" + auth_import + "\n{{/IF_AUTH}}",
                         auth_import
                     )
         
@@ -115,9 +115,9 @@ class FileEngine:
             ]
             
             for db_import in db_imports:
-                if f"{{{{#IF_DATABASE}}}}}" in content and db_import not in content:
+                if "{{#IF_DATABASE}}" in content and db_import not in content:
                     content = content.replace(
-                        f"{{{{#IF_DATABASE}}}}}" + db_import + "\n{{{{/IF_DATABASE}}}}",
+                        "{{#IF_DATABASE}}" + db_import + "\n{{/IF_DATABASE}}",
                         db_import
                     )
         
