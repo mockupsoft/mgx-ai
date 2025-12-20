@@ -372,6 +372,10 @@ Orijinal görevi unutma: {instruction}
             logger.error(f"❌ WriteCode hatası: {e}")
             raise
     
+    def _format_output(self, output: str, stack: str, language: str) -> str:
+        """Format the output (placeholder for future implementation)."""
+        return output
+
     async def _execute_sandbox_testing(
         self, 
         generated_code: str, 
