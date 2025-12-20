@@ -11,8 +11,7 @@ import asyncio
 import uuid
 from typing import Optional, Set
 
-from fastapi import APIRouter, WebSocket, status
-from fastapi.exceptions import WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, status, WebSocketDisconnect
 
 from backend.services import get_event_broadcaster
 

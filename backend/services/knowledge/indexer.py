@@ -7,6 +7,7 @@ Handles bulk indexing, deduplication, and optimization tasks.
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +17,7 @@ from sqlalchemy.orm import selectinload
 from backend.db.models.entities import KnowledgeItem, Workspace
 from backend.db.models.enums import KnowledgeItemStatus, EmbeddingModel
 from .vector_db import VectorDB, VectorDBError
-from .rag_service import EmbeddingService
+from .embedding import EmbeddingService
 
 logger = logging.getLogger(__name__)
 

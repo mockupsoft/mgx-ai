@@ -1,3 +1,4 @@
+"""
 Template and Prompt Library System.
 
 This module provides:
@@ -5,3 +6,4 @@ This module provides:
 - Prompt templates for code generation
 - Architecture Decision Records (ADR) system
 - Template marketplace and customization features
+"""

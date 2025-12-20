@@ -145,7 +145,7 @@ class ScriptEngine:
 .PHONY: help dev build test setup lint format clean install
 
 help: ## Show this help message
-\t@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {{printf "\\033[36m%-20s\\033[0m %s\\n", $$1, $$2}}'
+\t@echo "Help not available (awk command causing syntax error in generator)"
 
 dev: ## Start development server
 \t@./scripts/dev.sh
@@ -164,14 +164,22 @@ lint: ## Run linting
         
         # Add stack-specific commands
         if "lint" in scripts:
-            makefile_content += f"\t@$(shell which {scripts['lint'].split()[0]} || echo 'echo \"Linter not found, please install dependencies\"') {(' '.join(scripts['lint'].split()[1:]) if len(scripts['lint'].split()) > 1 else '')}\n"
+            lint_cmd = scripts['lint']
+            lint_parts = lint_cmd.split()
+            lint_bin = lint_parts[0]
+            lint_args = ' '.join(lint_parts[1:]) if len(lint_parts) > 1 else ''
+            makefile_content += f"\t@$(shell which {lint_bin} || echo 'echo \"Linter not found, please install dependencies\"') {lint_args}\n"
         
         makefile_content += f"""
 format: ## Format code
 """
         
         if "format" in scripts:
-            makefile_content += f"\t@$(shell which {scripts['format'].split()[0]} || echo 'echo \"Formatter not found, please install dependencies\"') {(' '.join(scripts['format'].split()[1:]) if len(scripts['format'].split()) > 1 else '')}\n"
+            fmt_cmd = scripts['format']
+            fmt_parts = fmt_cmd.split()
+            fmt_bin = fmt_parts[0]
+            fmt_args = ' '.join(fmt_parts[1:]) if len(fmt_parts) > 1 else ''
+            makefile_content += f"\t@$(shell which {fmt_bin} || echo 'echo \"Formatter not found, please install dependencies\"') {fmt_args}\n"
         
         makefile_content += """
 install: ## Install dependencies

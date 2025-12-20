@@ -13,8 +13,8 @@ from datetime import datetime
 import json
 from dataclasses import asdict
 
-from ..db.models.entities import QualityGate, GateExecution
-from ..db.models.enums import QualityGateType, QualityGateStatus
+from ...db.models.entities import QualityGate, GateExecution
+from ...db.models.enums import QualityGateType, QualityGateStatus
 from .gates.base_gate import GateResult, GateConfiguration, create_gate, gate_registry
 
 

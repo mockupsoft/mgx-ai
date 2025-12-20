@@ -15,29 +15,17 @@ from .knowledge import router as knowledge_router
 from .llm import router as llm_router
 
 # Legacy routers (kept for backwards compatibility)
-try:
-    from .health import router as health_router
-    from .workspaces import router as workspaces_router
-    from .projects import router as projects_router
-    from .repositories import router as repositories_router
-    from .tasks import router as tasks_router
-    from .runs import router as runs_router
-    from .metrics import router as metrics_router
-    from .agents import router as agents_router
-    from .workflows import router as workflows_router
-    from .ws import router as ws_router
-except ImportError:
-    # Fallback if some routers don't exist yet
-    health_router = None
-    workspaces_router = None
-    projects_router = None
-    repositories_router = None
-    tasks_router = None
-    runs_router = None
-    metrics_router = None
-    agents_router = None
-    workflows_router = None
-    ws_router = None
+from .health import router as health_router
+from .workspaces import router as workspaces_router
+from .projects import router as projects_router
+from .repositories import router as repositories_router
+from .tasks import router as tasks_router
+from .runs import router as runs_router
+from .metrics import router as metrics_router
+from .agents import router as agents_router
+from .workflows import router as workflows_router
+from .ws import router as ws_router
+
 
 __all__ = [
     "sandbox", 

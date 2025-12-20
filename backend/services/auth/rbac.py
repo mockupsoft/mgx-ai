@@ -450,7 +450,7 @@ async def get_rbac_service() -> RBACService:
 
 
 # FastAPI dependency for permission checking
-async def require_permission(resource: str, action: str):
+def require_permission(resource: str, action: str):
     """FastAPI dependency to require specific permission.
     
     Usage:
@@ -459,6 +459,9 @@ async def require_permission(resource: str, action: str):
                            user_info = Depends(require_permission("tasks", "read"))):
             # Endpoint logic here
     """
+    from ...db.session import get_session
+    from fastapi import Depends
+
     async def dependency(request: Request, session: AsyncSession = Depends(get_session)):
         # Extract user and workspace from headers or request
         user_id = request.headers.get("X-User-ID")

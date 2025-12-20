@@ -15,7 +15,8 @@ from sqlalchemy.orm import selectinload
 from backend.db.models.entities import KnowledgeItem, Workspace
 from backend.db.models.enums import KnowledgeCategory, KnowledgeItemStatus
 from .vector_db import VectorDB, SearchResult, VectorDBError
-from .rag_service import KnowledgeSearchRequest, KnowledgeSearchResult, EmbeddingService
+from .schemas import KnowledgeSearchRequest, KnowledgeSearchResult
+from .embedding import EmbeddingService
 
 logger = logging.getLogger(__name__)
 

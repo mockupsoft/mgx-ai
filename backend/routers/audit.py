@@ -10,14 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 import logging
 
-from ...db.models.entities import AuditLog, Workspace
-from ...schemas import (
+from ..db.models.entities import AuditLog, Workspace
+from ..schemas import (
     AuditLogResponse, AuditLogListResponse, AuditLogFilter,
     AuditLogExportRequest, AuditLogExportResponse, AuditLogStatistics
 )
-from ...services.audit.logger import get_audit_logger
-from ...services.auth.rbac import require_permission
-from ...db.session import get_session
+from ..services.audit.logger import get_audit_logger
+from ..services.auth.rbac import require_permission
+from ..db.session import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -116,14 +116,14 @@ async def list_audit_logs(
     if count_filters.user_id:
         audit_stmt = audit_stmt.where(AuditLog.user_id == count_filters.user_id)
     if count_filters.action:
-        from ...db.models.enums import AuditAction
+        from ..db.models.enums import AuditAction
         audit_stmt = audit_stmt.where(AuditLog.action == AuditAction(count_filters.action))
     if count_filters.resource_type:
         audit_stmt = audit_stmt.where(AuditLog.resource_type == count_filters.resource_type)
     if count_filters.resource_id:
         audit_stmt = audit_stmt.where(AuditLog.resource_id == count_filters.resource_id)
     if count_filters.status:
-        from ...db.models.enums import AuditLogStatus
+        from ..db.models.enums import AuditLogStatus
         audit_stmt = audit_stmt.where(AuditLog.status == AuditLogStatus(count_filters.status))
     if count_filters.date_from:
         audit_stmt = audit_stmt.where(AuditLog.created_at >= count_filters.date_from)
@@ -224,8 +224,8 @@ async def get_audit_statistics(
 @router.delete("/workspaces/{workspace_id}/audit-logs/cleanup")
 async def cleanup_old_audit_logs(
     workspace_id: str,
-    retention_days: int = Query(365, ge=30, le=3650, description="Retention period in days"),
     request: Request,
+    retention_days: int = Query(365, ge=30, le=3650, description="Retention period in days"),
     session: AsyncSession = Depends(get_session),
     user_context = Depends(require_permission("audit", "manage"))
 ):

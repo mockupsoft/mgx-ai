@@ -16,22 +16,27 @@ import sys
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Generator
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from backend.app.main import create_app
-from backend.db.models import Base
-from backend.db.session import get_db, get_session
-
-
 # ---------------------------------------------------------------------------
 # MetaGPT stubs (shared with root tests)
 # ---------------------------------------------------------------------------
 
+import sys
+from pathlib import Path
+# Ensure project root is first in sys.path to allow importing 'tests' from root
+project_root = str(Path(__file__).parents[2])
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+elif sys.path.index(project_root) > 0:
+    sys.path.remove(project_root)
+    sys.path.insert(0, project_root)
+
+print("SYS PATH:", sys.path)
+if 'tests' in sys.modules and sys.modules['tests'].__file__ != str(Path(project_root) / 'tests' / '__init__.py'):
+    print(f"Removing {sys.modules['tests'].__file__} from sys.modules")
+    del sys.modules['tests']
+
+import tests
+print("TESTS FILE:", tests.__file__)
 from tests.helpers.metagpt_stubs import (  # noqa: E402
     MockAction,
     MockContext,
@@ -95,6 +100,17 @@ sys.modules.setdefault("metagpt.types", MetaGPTTypesStub())
 sys.modules.setdefault("metagpt.schema", MetaGPTSchemaStub())
 sys.modules.setdefault("metagpt.context", MetaGPTContextStub())
 sys.modules.setdefault("metagpt.config", MetaGPTConfigStub())
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from backend.app.main import create_app
+from backend.db.models import Base
+from backend.db.session import get_db, get_session
 
 
 @pytest.fixture(scope="session")
