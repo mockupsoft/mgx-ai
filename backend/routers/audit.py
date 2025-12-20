@@ -224,8 +224,8 @@ async def get_audit_statistics(
 @router.delete("/workspaces/{workspace_id}/audit-logs/cleanup")
 async def cleanup_old_audit_logs(
     workspace_id: str,
-    retention_days: int = Query(365, ge=30, le=3650, description="Retention period in days"),
     request: Request,
+    retention_days: int = Query(365, ge=30, le=3650, description="Retention period in days"),
     session: AsyncSession = Depends(get_session),
     user_context = Depends(require_permission("audit", "manage"))
 ):

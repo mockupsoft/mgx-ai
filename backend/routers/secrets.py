@@ -11,7 +11,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.deps import get_session, require_permission
+from backend.db.session import get_session
+from backend.services.auth.rbac import require_permission
 from backend.db.models.enums import SecretType, SecretRotationPolicy, PermissionResource, PermissionAction
 from backend.schemas import (
     SecretCreateRequest, SecretUpdateRequest, SecretResponse, SecretMetadataResponse,

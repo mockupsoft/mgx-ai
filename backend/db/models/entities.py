@@ -1064,6 +1064,20 @@ class Role(Base, TimestampMixin, SerializationMixin):
         return f"<Role(id={self.id}, workspace_id='{self.workspace_id}', name='{self.name}')>"
 
 
+class User(Base, TimestampMixin, SerializationMixin):
+    """User model."""
+
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    full_name = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True)
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, email='{self.email}')>"
+
+
 class UserRole(Base, TimestampMixin, SerializationMixin):
     """User-role assignments for RBAC system."""
     
