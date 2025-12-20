@@ -11,8 +11,8 @@ import logging
 import asyncio
 from dataclasses import dataclass, asdict
 
-from ...db.models.entities import QualityGate, GateExecution
-from ...db.models.enums import QualityGateType, QualityGateStatus, GateSeverity
+from ....db.models.entities import QualityGate, GateExecution
+from ....db.models.enums import QualityGateType, QualityGateStatus, GateSeverity
 
 
 @dataclass

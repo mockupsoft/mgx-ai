@@ -11,16 +11,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 import logging
 
-from ...db.models.entities import Role, UserRole, Permission, Workspace
-from ...db.models.enums import RoleName
-from ...schemas import (
+from ..db.models.entities import Role, UserRole, Permission, Workspace
+from ..db.models.enums import RoleName
+from ..schemas import (
     RoleCreate, RoleUpdate, RoleResponse, RoleListResponse,
     UserRoleCreate, UserRoleUpdate, UserRoleResponse, UserRoleListResponse,
     PermissionResponse, PermissionListResponse, PermissionCheck, PermissionResult
 )
-from ...services.auth.rbac import require_permission, get_rbac_service
-from ...services.audit.logger import get_audit_logger
-from ...db.session import get_session
+from ..services.auth.rbac import require_permission, get_rbac_service
+from ..services.audit.logger import get_audit_logger
+from ..db.session import get_session
 
 logger = logging.getLogger(__name__)
 

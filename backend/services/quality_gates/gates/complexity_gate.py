@@ -15,7 +15,7 @@ import glob
 from pathlib import Path
 
 from .base_gate import BaseQualityGate, GateResult, GateConfiguration, register_gate
-from ...db.models.enums import QualityGateType, QualityGateStatus, GateSeverity
+from ....db.models.enums import QualityGateType, QualityGateStatus, GateSeverity
 
 
 @register_gate(QualityGateType.COMPLEXITY)
