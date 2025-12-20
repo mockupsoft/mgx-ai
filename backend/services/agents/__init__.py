@@ -12,11 +12,13 @@ from .base import BaseAgent
 from .registry import AgentRegistry
 from .context import SharedContextService
 from .messages import AgentMessageBus, get_agent_message_bus
+from .memory import AgentMemoryService
 
 __all__ = [
     "BaseAgent",
     "AgentRegistry",
     "SharedContextService",
+    "AgentMemoryService",
     "AgentMessageBus",
     "get_agent_message_bus",
 ]

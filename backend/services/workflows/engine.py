@@ -51,6 +51,7 @@ if TYPE_CHECKING:
     from .controller import MultiAgentController
     
 from backend.services.workflows.dependency_resolver import DependencyResolver
+from backend.services.workflows.approval import ApprovalService
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,7 @@ class WorkflowEngine:
         session_factory,
         multi_agent_controller,  # Type will be MultiAgentController at runtime
         dependency_resolver: DependencyResolver,
+        approval_service: Optional[ApprovalService] = None,
     ):
         """
         Initialize the workflow engine.
@@ -144,10 +146,12 @@ class WorkflowEngine:
             session_factory: SQLAlchemy async session factory
             multi_agent_controller: Controller for agent assignments
             dependency_resolver: Service for workflow validation
+            approval_service: Service for approval workflows
         """
         self.session_factory = session_factory
         self.multi_agent_controller = multi_agent_controller
         self.dependency_resolver = dependency_resolver
+        self.approval_service = approval_service or ApprovalService()
         self.active_executions: Dict[str, WorkflowContext] = {}
         self.execution_locks: Dict[str, asyncio.Lock] = {}
         
@@ -381,6 +385,8 @@ class WorkflowEngine:
                 await self._execute_sequential_step(session, execution_id, step, context, step_execution)
             elif step.step_type == WorkflowStepType.AGENT:
                 await self._execute_agent_step(session, execution_id, step, context, step_execution)
+            elif step.step_type == WorkflowStepType.APPROVAL:
+                await self._execute_approval_step(session, execution_id, step, context, step_execution)
             else:
                 raise ValueError(f"Unsupported step type: {step.step_type}")
             
@@ -501,6 +507,85 @@ class WorkflowEngine:
         # TODO: Implement sequential step execution
         # For now, treat as a regular task step
         await self._execute_task_step(session, execution_id, step, context, step_execution)
+    
+    async def _execute_approval_step(
+        self,
+        session: AsyncSession,
+        execution_id: str,
+        step: WorkflowStep,
+        context: WorkflowContext,
+        step_execution: WorkflowStepExecution,
+    ):
+        """Execute an approval step (human-in-the-loop approval gate)."""
+        from backend.db.models import ApprovalStatus
+        
+        # Get input data for the approval
+        input_data = self._resolve_step_inputs(step, context)
+        
+        # Update step execution with input data
+        step_execution.input_data = input_data
+        await session.flush()
+        
+        # Extract approval configuration from step config
+        approval_config = step.config.get("approval", {})
+        title = approval_config.get("title", f"Approval required for step: {step.name}")
+        description = approval_config.get("description")
+        auto_approve_after_seconds = approval_config.get("auto_approve_after_seconds")
+        required_approvers = approval_config.get("required_approvers", [])
+        expires_after_seconds = approval_config.get("expires_after_seconds", 86400)  # 24h default
+        
+        # Create approval request
+        approval = await self.approval_service.create_approval_request(
+            session,
+            step_execution_id=step_execution.id,
+            workflow_execution_id=execution_id,
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            title=title,
+            description=description,
+            approval_data=input_data,
+            auto_approve_after_seconds=auto_approve_after_seconds,
+            required_approvers=required_approvers,
+            expires_after_seconds=expires_after_seconds,
+        )
+        
+        await session.commit()
+        
+        # Wait for approval response
+        approval_status = await self.approval_service.wait_for_approval(
+            session,
+            approval_id=approval.id,
+            timeout_seconds=expires_after_seconds,
+        )
+        
+        # Handle approval result
+        if approval_status == ApprovalStatus.APPROVED:
+            # Approval granted, continue execution
+            output_data = {
+                "result": "approved",
+                "approval_id": approval.id,
+                "approved_by": approval.approved_by,
+                "feedback": approval.feedback,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+            await self._complete_step(session, step_execution, context, output_data)
+            
+        elif approval_status == ApprovalStatus.REJECTED:
+            # Approval rejected, fail the step
+            raise Exception(f"Approval rejected: {approval.feedback}")
+            
+        elif approval_status == ApprovalStatus.REQUEST_CHANGES:
+            # Changes requested, trigger revision loop
+            # For now, fail the step with revision feedback
+            raise Exception(f"Changes requested: {approval.feedback}")
+            
+        elif approval_status == ApprovalStatus.TIMEOUT:
+            # Approval timed out
+            raise Exception(f"Approval request timed out after {expires_after_seconds} seconds")
+            
+        else:
+            # Unknown status
+            raise Exception(f"Unexpected approval status: {approval_status}")
     
     def _resolve_step_inputs(self, step: WorkflowStep, context: WorkflowContext) -> Dict[str, Any]:
         """Resolve input references for a step."""
