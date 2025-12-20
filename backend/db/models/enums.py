@@ -192,6 +192,18 @@ class WorkflowStepType(str, Enum):
     PARALLEL = "parallel"  # Parallel execution
     SEQUENTIAL = "sequential"  # Sequential steps
     AGENT = "agent"  # Agent execution
+    APPROVAL = "approval"  # Human approval gate
+
+
+class ApprovalStatus(str, Enum):
+    """Approval request status."""
+
+    PENDING = "pending"  # Approval is pending
+    APPROVED = "approved"  # Approval was granted
+    REJECTED = "rejected"  # Approval was rejected
+    REQUEST_CHANGES = "request_changes"  # Changes requested
+    CANCELLED = "cancelled"  # Approval was cancelled
+    TIMEOUT = "timeout"  # Approval request timed out
 
 
 class SandboxExecutionStatus(str, Enum):

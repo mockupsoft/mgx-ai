@@ -28,6 +28,7 @@ from backend.schemas import EventPayload, EventTypeEnum
 from backend.services.events import get_event_broadcaster
 from backend.services.agents.registry import AgentRegistry
 from backend.services.agents.context import SharedContextService
+from backend.services.agents.memory import AgentMemoryService
 
 # Import WorkflowContext using TYPE_CHECKING to avoid circular import
 from typing import TYPE_CHECKING
@@ -119,6 +120,7 @@ class MultiAgentController:
         self,
         agent_registry: AgentRegistry,
         context_service: SharedContextService,
+        memory_service: Optional[AgentMemoryService] = None,
     ):
         """
         Initialize the multi-agent controller.
@@ -126,9 +128,11 @@ class MultiAgentController:
         Args:
             agent_registry: Registry for agent definitions and instances
             context_service: Service for shared agent context management
+            memory_service: Service for agent memory persistence
         """
         self.agent_registry = agent_registry
         self.context_service = context_service
+        self.memory_service = memory_service or AgentMemoryService(context_service)
         
         # Assignment tracking
         self.active_assignments: Dict[str, AgentAssignment] = {}
@@ -743,6 +747,80 @@ class MultiAgentController:
             )
         except Exception as e:
             logger.warning(f"Failed to emit agent activity event: {e}")
+    
+    async def handoff_context(
+        self,
+        session: AsyncSession,
+        from_agent_id: str,
+        to_agent_id: str,
+        context: "WorkflowContext",
+        context_keys: Optional[List[str]] = None,
+        handoff_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Handoff context from one agent to another.
+        
+        Args:
+            session: Database session
+            from_agent_id: Source agent instance ID
+            to_agent_id: Target agent instance ID
+            context: Workflow context
+            context_keys: Optional list of context keys to thread
+            handoff_metadata: Optional handoff metadata
+            
+        Returns:
+            Handoff result with threaded context
+        """
+        # Default context keys if not provided
+        if context_keys is None:
+            context_keys = ["workflow_state", "task_history", "decisions"]
+        
+        # Thread context using memory service
+        threaded_context = await self.memory_service.thread_context_between_steps(
+            session,
+            from_agent_id=from_agent_id,
+            to_agent_id=to_agent_id,
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            context_keys=context_keys,
+        )
+        
+        # Store handoff metadata
+        handoff_data = {
+            "from_agent_id": from_agent_id,
+            "to_agent_id": to_agent_id,
+            "context_keys": context_keys,
+            "handoff_timestamp": datetime.utcnow().isoformat(),
+            "metadata": handoff_metadata or {},
+        }
+        
+        await self.memory_service.store_memory(
+            session,
+            agent_instance_id=to_agent_id,
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            memory_key="handoff_history",
+            memory_data=handoff_data,
+        )
+        
+        # Emit handoff event
+        await self._emit_agent_activity_event(
+            session,
+            agent_id=to_agent_id,
+            workspace_id=context.workspace_id,
+            activity_type="context_handoff",
+            data={
+                "from_agent_id": from_agent_id,
+                "context_keys_count": len(threaded_context),
+            },
+        )
+        
+        logger.info(f"Handed off context from agent {from_agent_id} to {to_agent_id}")
+        
+        return {
+            "threaded_context": threaded_context,
+            "handoff_metadata": handoff_data,
+        }
     
     async def cleanup_stale_assignments(self):
         """Clean up stale agent assignments and reservations."""

@@ -9,6 +9,7 @@ Workspace -> Project -> Task -> TaskRun
 MetricSnapshot is scoped to a workspace/project as well.
 """
 
+from datetime import datetime
 from uuid import uuid4
 
 from sqlalchemy import (
@@ -34,6 +35,7 @@ from .base import Base, SerializationMixin, TimestampMixin
 from .enums import (
     AgentMessageDirection,
     AgentStatus,
+    ApprovalStatus,
     ArtifactType,
     ArtifactBuildStatus,
     ContextRollbackState,
@@ -815,6 +817,79 @@ class WorkflowStepExecution(Base, TimestampMixin, SerializationMixin):
     @property
     def is_failed(self) -> bool:
         return self.status == WorkflowStepStatus.FAILED
+
+
+class WorkflowStepApproval(Base, TimestampMixin, SerializationMixin):
+    """Human approval request for workflow steps."""
+
+    __tablename__ = "workflow_step_approvals"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    step_execution_id = Column(String(36), ForeignKey("workflow_step_executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    workflow_execution_id = Column(String(36), ForeignKey("workflow_executions.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+
+    status = Column(SQLEnum(ApprovalStatus), nullable=False, default=ApprovalStatus.PENDING, index=True)
+
+    # Approval request details
+    title = Column(String(500), nullable=False, comment="Approval request title")
+    description = Column(Text, comment="Approval request description")
+    approval_data = Column(JSON, comment="Data to be approved (e.g., plan, changes)")
+    
+    # Approval response
+    approved_by = Column(String(255), comment="User who approved/rejected")
+    feedback = Column(Text, comment="Feedback from approver")
+    response_data = Column(JSON, comment="Additional response data")
+    
+    # Timestamps
+    requested_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow, comment="When approval was requested")
+    responded_at = Column(DateTime(timezone=True), comment="When approval was responded to")
+    expires_at = Column(DateTime(timezone=True), comment="When approval request expires")
+    
+    # Configuration
+    auto_approve_after_seconds = Column(Integer, comment="Auto-approve after N seconds")
+    required_approvers = Column(JSON, comment="List of required approver IDs")
+    approval_metadata = Column(JSON, nullable=False, default=dict, comment="Additional metadata")
+    
+    # Revision tracking
+    revision_count = Column(Integer, default=0, comment="Number of revisions requested")
+    parent_approval_id = Column(String(36), ForeignKey("workflow_step_approvals.id", ondelete="SET NULL"), comment="Parent approval if this is a revision")
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_workflow_step_approvals_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_workflow_step_approvals_step_execution", "step_execution_id"),
+        Index("idx_workflow_step_approvals_workflow_execution", "workflow_execution_id"),
+        Index("idx_workflow_step_approvals_status", "status"),
+        Index("idx_workflow_step_approvals_workspace", "workspace_id"),
+        Index("idx_workflow_step_approvals_requested_at", "requested_at"),
+    )
+
+    workspace = relationship("Workspace")
+    step_execution = relationship("WorkflowStepExecution")
+    workflow_execution = relationship("WorkflowExecution")
+    parent_approval = relationship("WorkflowStepApproval", remote_side=[id])
+
+    def __repr__(self) -> str:
+        return f"<WorkflowStepApproval(id={self.id}, status='{self.status}')>"
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status == ApprovalStatus.PENDING
+
+    @property
+    def is_approved(self) -> bool:
+        return self.status == ApprovalStatus.APPROVED
+
+    @property
+    def is_rejected(self) -> bool:
+        return self.status == ApprovalStatus.REJECTED
 
 
 class SandboxExecution(Base, TimestampMixin, SerializationMixin):

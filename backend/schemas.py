@@ -1266,6 +1266,64 @@ class WorkflowValidationResult(BaseModel):
 
 
 # ============================================
+# Workflow Approval Schemas
+# ============================================
+
+class ApprovalStatusEnum(str, Enum):
+    """Approval request status enum."""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    REQUEST_CHANGES = "request_changes"
+    CANCELLED = "cancelled"
+    TIMEOUT = "timeout"
+
+
+class ApprovalRequest(BaseModel):
+    """Schema for creating an approval request."""
+    title: str = Field(..., min_length=1, max_length=500, description="Approval request title")
+    description: Optional[str] = Field(None, description="Approval request description")
+    approval_data: Dict[str, Any] = Field(default_factory=dict, description="Data to be approved")
+    auto_approve_after_seconds: Optional[int] = Field(None, gt=0, description="Auto-approve after N seconds")
+    required_approvers: List[str] = Field(default_factory=list, description="List of required approver IDs")
+    expires_after_seconds: Optional[int] = Field(86400, gt=0, description="Expiration timeout in seconds")
+
+
+class ApprovalResponse(BaseModel):
+    """Schema for approval response."""
+    approved: bool = Field(..., description="Whether approved or not")
+    feedback: Optional[str] = Field(None, description="Feedback from approver")
+    response_data: Optional[Dict[str, Any]] = Field(None, description="Additional response data")
+
+
+class ApprovalResult(BaseModel):
+    """Schema for approval result."""
+    id: str = Field(..., description="Approval request ID")
+    step_execution_id: str = Field(..., description="Step execution ID")
+    workflow_execution_id: str = Field(..., description="Workflow execution ID")
+    status: ApprovalStatusEnum = Field(..., description="Approval status")
+    title: str = Field(..., description="Approval request title")
+    description: Optional[str] = Field(None, description="Approval request description")
+    approval_data: Dict[str, Any] = Field(default_factory=dict, description="Data that was approved")
+    approved_by: Optional[str] = Field(None, description="User who approved/rejected")
+    feedback: Optional[str] = Field(None, description="Feedback from approver")
+    requested_at: datetime = Field(..., description="When approval was requested")
+    responded_at: Optional[datetime] = Field(None, description="When approval was responded to")
+    expires_at: Optional[datetime] = Field(None, description="When approval request expires")
+    revision_count: int = Field(default=0, description="Number of revisions")
+    parent_approval_id: Optional[str] = Field(None, description="Parent approval if this is a revision")
+
+    class Config:
+        from_attributes = True
+
+
+class ApprovalListResponse(BaseModel):
+    """Schema for list of pending approvals."""
+    approvals: List[ApprovalResult] = Field(default_factory=list, description="List of approvals")
+    total: int = Field(..., ge=0, description="Total number of approvals")
+
+
+# ============================================
 # Workflow Telemetry Schemas
 # ============================================
 
