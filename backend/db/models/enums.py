@@ -261,6 +261,54 @@ class GateSeverity(str, Enum):
     LOW = "low"  # Info level
 
 
+class EvaluationType(str, Enum):
+    """Types of evaluations performed by the AI evaluation framework."""
+
+    LLM_AS_JUDGE = "llm_as_judge"  # LLM-as-a-Judge evaluation
+    REGRESSION_TEST = "regression_test"  # Regression testing
+    DETERMINISM_TEST = "determinism_test"  # Determinism and reliability testing
+    PERFORMANCE_BENCHMARK = "performance_benchmark"  # Performance benchmarking
+    SECURITY_AUDIT = "security_audit"  # Security evaluation
+    BEST_PRACTICES = "best_practices"  # Code best practices evaluation
+    FUNCTIONALITY_TEST = "functionality_test"  # Functionality testing
+    READABILITY_EVAL = "readability_eval"  # Code readability evaluation
+
+
+class EvaluationStatus(str, Enum):
+    """Status of evaluation execution."""
+
+    PENDING = "pending"  # Evaluation is queued for execution
+    RUNNING = "running"  # Evaluation is currently running
+    COMPLETED = "completed"  # Evaluation completed successfully
+    FAILED = "failed"  # Evaluation failed with error
+    CANCELLED = "cancelled"  # Evaluation was cancelled
+    TIMEOUT = "timeout"  # Evaluation timed out
+    ERROR = "error"  # Evaluation encountered an error
+    SKIPPED = "skipped"  # Evaluation was skipped
+
+
+class ComplexityLevel(str, Enum):
+    """Complexity levels for evaluation scenarios."""
+
+    EASY = "easy"  # Simple, straightforward tasks
+    MEDIUM = "medium"  # Moderate complexity
+    HARD = "hard"  # Complex, challenging tasks
+    EXPERT = "expert"  # Expert-level, very complex tasks
+
+
+class RegressionAlertType(str, Enum):
+    """Types of regression alerts."""
+
+    SCORE_DEGRADATION = "score_degradation"  # Quality score degradation
+    CONSISTENCY_DROP = "consistency_drop"  # Consistency/reliability drop
+    FAILURE_RATE_INCREASE = "failure_rate_increase"  # Increased failure rate
+    COST_SPIKE = "cost_spike"  # Unexpected cost increase
+    PATTERN_CHANGE = "pattern_change"  # Unexpected output pattern change
+    PERFORMANCE_DEGRADATION = "performance_degradation"  # Performance regression
+    SECURITY_REGRESSION = "security_regression"  # Security degradation
+    FUNCTIONALITY_BREAK = "functionality_break"  # Functionality regression
+
+
 class RoleName(str, Enum):
     """System-defined role names."""
 

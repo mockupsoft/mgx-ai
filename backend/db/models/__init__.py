@@ -35,6 +35,11 @@ from .enums import (
     EscalationReason,
     EscalationStatus,
     EscalationRuleType,
+    LLMProvider,
+    EvaluationType,
+    EvaluationStatus,
+    ComplexityLevel,
+    RegressionAlertType,
 )
 from .entities import (
     Artifact,
@@ -69,6 +74,14 @@ from .entities import (
     EscalationRule,
     EscalationEvent,
     EscalationMetric,
+    # AI Evaluation Framework
+    EvaluationScenario,
+    EvaluationResult,
+    RegressionTest,
+    PassKMetric,
+    RegressionMetric,
+    EvaluationDashboard,
+    EvaluationAlert,
 )
 
 __all__ = [
@@ -132,4 +145,17 @@ __all__ = [
     "EscalationRule",
     "EscalationEvent",
     "EscalationMetric",
+    # AI Evaluation Framework
+    "LLMProvider",
+    "EvaluationType",
+    "EvaluationStatus",
+    "ComplexityLevel",
+    "RegressionAlertType",
+    "EvaluationScenario",
+    "EvaluationResult",
+    "RegressionTest",
+    "PassKMetric",
+    "RegressionMetric",
+    "EvaluationDashboard",
+    "EvaluationAlert",
 ]

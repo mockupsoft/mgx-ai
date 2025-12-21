@@ -2452,50 +2452,510 @@ class KnowledgeStatsResponse(BaseModel):
                         "id": "456e7890-e89b-12d3-a456-426614174000",
                         "title": "API Rate Limiting",
                         "created_at": "2024-01-01T10:00:00Z",
-                        "category": "best_practice"
+                        "category": "code_pattern"
                     }
                 ],
                 "embedding_stats": {
-                    "items_with_embeddings": 140,
-                    "items_without_embeddings": 10,
-                    "embedding_coverage": 0.93
+                    "model": "text-embedding-ada-002",
+                    "total_embeddings": 150,
+                    "avg_similarity": 0.75
                 }
             }
         }
 
 
-# Update __all__ to include new schemas
-__all__ += [
-    'ModuleTemplateCreateRequest',
-    'ModuleTemplateResponse',
-    'FileTemplateResponse',
-    'ParameterResponse',
-    'ModuleTemplateDetailResponse',
-    'ApplyModuleTemplateRequest',
-    'ApplyModuleTemplateResponse',
-    'PromptTemplateCreateRequest',
-    'PromptTemplateResponse',
-    'GeneratePromptRequest',
-    'GeneratePromptResponse',
-    'ADRCreateRequest',
-    'ADRResponse',
-    'ADRTimelineItem',
-    'ADRTimelineResponse',
-    'TemplateSearchRequest',
-    'TemplateSearchResult',
-    'TemplateSearchResponse',
+# ============================================
+# AI Evaluation Framework Schemas
+# ============================================
+
+class EvaluationCriteria(BaseModel):
+    """Schema for evaluation criteria."""
+    
+    dimension: str = Field(..., description="Evaluation dimension name")
+    weight: float = Field(..., ge=0, le=1, description="Weight of this dimension (0-1)")
+    requirements: List[str] = Field(..., description="Requirements for this dimension")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "dimension": "code_safety",
+                "weight": 0.20,
+                "requirements": [
+                    "Input validation",
+                    "Error handling",
+                    "No hardcoded secrets",
+                    "Proper HTTP status codes"
+                ]
+            }
+        }
+
+
+class ScoreBreakdown(BaseModel):
+    """Schema for score breakdown by dimension."""
+    
+    code_safety: Optional[float] = Field(None, ge=0, le=10)
+    code_quality: Optional[float] = Field(None, ge=0, le=10)
+    best_practices: Optional[float] = Field(None, ge=0, le=10)
+    performance: Optional[float] = Field(None, ge=0, le=10)
+    readability: Optional[float] = Field(None, ge=0, le=10)
+    functionality: Optional[float] = Field(None, ge=0, le=10)
+    security: Optional[float] = Field(None, ge=0, le=10)
+    maintainability: Optional[float] = Field(None, ge=0, le=10)
+    overall_score: float = Field(..., ge=0, le=10)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "code_safety": 8.5,
+                "code_quality": 7.8,
+                "best_practices": 9.2,
+                "performance": 7.0,
+                "readability": 8.0,
+                "functionality": 9.5,
+                "security": 8.8,
+                "maintainability": 7.5,
+                "overall_score": 8.3
+            }
+        }
+
+
+class EvaluationFeedback(BaseModel):
+    """Schema for evaluation feedback."""
+    
+    overall_feedback: str = Field(..., description="Overall assessment")
+    improvement_suggestions: List[str] = Field(default_factory=list)
+    code_violations: List[Dict[str, Any]] = Field(default_factory=list)
+    best_practices_mentioned: List[str] = Field(default_factory=list)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "overall_feedback": "Good implementation with minor areas for improvement.",
+                "improvement_suggestions": [
+                    "Add more comprehensive error handling",
+                    "Improve variable naming consistency"
+                ],
+                "code_violations": [
+                    {
+                        "type": "best_practice",
+                        "description": "Missing input validation",
+                        "severity": "medium",
+                        "line_number": 42
+                    }
+                ],
+                "best_practices_mentioned": [
+                    "DRY principle",
+                    "Error handling",
+                    "Type hints"
+                ]
+            }
+        }
+
+
+class EvaluationScenarioCreate(BaseModel):
+    """Schema for creating evaluation scenarios."""
+    
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(..., min_length=10)
+    category: str = Field(..., description="e.g., api_development, frontend_ui, backend_development")
+    complexity_level: str = Field(..., description="easy, medium, hard, expert")
+    language: Optional[str] = Field(None, description="Programming language")
+    framework: Optional[str] = Field(None, description="Framework or library")
+    prompt: str = Field(..., description="Task prompt for the agent")
+    expected_output: Optional[str] = Field(None, description="Expected output example")
+    evaluation_criteria: Dict[str, Any] = Field(..., description="Evaluation criteria")
+    estimated_duration_minutes: Optional[int] = Field(None, ge=1)
+    tags: Optional[List[str]] = Field(default_factory=list)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "name": "Create Simple FastAPI Endpoint",
+                "description": "Create a basic FastAPI endpoint with proper HTTP methods",
+                "category": "api_development",
+                "complexity_level": "easy",
+                "language": "Python",
+                "framework": "FastAPI",
+                "prompt": "Create a FastAPI endpoint for user authentication...",
+                "evaluation_criteria": {
+                    "code_safety": {
+                        "weight": 0.20,
+                        "requirements": ["Input validation", "Error handling"]
+                    }
+                },
+                "estimated_duration_minutes": 10,
+                "tags": ["fastapi", "authentication", "basic"]
+            }
+        }
+
+
+class EvaluationScenarioResponse(BaseModel):
+    """Schema for evaluation scenario response."""
+    
+    id: str
+    name: str
+    description: str
+    category: str
+    complexity_level: str
+    language: Optional[str]
+    framework: Optional[str]
+    prompt: str
+    expected_output: Optional[str]
+    evaluation_criteria: Dict[str, Any]
+    version: int
+    is_active: bool
+    estimated_duration_minutes: Optional[int]
+    tags: Optional[List[str]]
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class EvaluationRunRequest(BaseModel):
+    """Schema for running evaluation."""
+    
+    scenario_id: str
+    agent_output: str = Field(..., description="Code/content produced by agent")
+    judge_config: Dict[str, Any] = Field(..., description="Judge LLM configuration")
+    context: Optional[Dict[str, Any]] = Field(None, description="Additional context")
+    commit_hash: Optional[str] = Field(None, description="Git commit hash")
+    branch_name: Optional[str] = Field(None, description="Git branch name")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "scenario_id": "123e4567-e89b-12d3-a456-426614174000",
+                "agent_output": "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/')\ndef hello():\n    return {'message': 'Hello World'}",
+                "judge_config": {
+                    "model": "gpt-4o",
+                    "provider": "openai",
+                    "temperature": 0.1,
+                    "max_tokens": 2000
+                },
+                "commit_hash": "abc123def456",
+                "branch_name": "main"
+            }
+        }
+
+
+class EvaluationRunResponse(BaseModel):
+    """Schema for evaluation run response."""
+    
+    evaluation_id: str
+    scenario_id: str
+    status: str
+    overall_score: float
+    score_breakdown: ScoreBreakdown
+    feedback: EvaluationFeedback
+    execution_time_ms: int
+    judge_model: str
+    judge_provider: str
+    created_at: datetime
+    completed_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+
+class EvaluationResultResponse(BaseModel):
+    """Schema for evaluation result response."""
+    
+    id: str
+    scenario_id: str
+    status: str
+    overall_score: Optional[float]
+    weighted_score: Optional[float]
+    score_breakdown: ScoreBreakdown
+    feedback: EvaluationFeedback
+    similarity_score: Optional[float]
+    semantic_similarity: Optional[float]
+    judge_feedback: Optional[str]
+    execution_time_ms: Optional[int]
+    judge_model: str
+    judge_provider: str
+    judge_tokens_used: Optional[int]
+    judge_cost_usd: Optional[float]
+    error_message: Optional[str]
+    created_at: datetime
+    completed_at: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+
+class RegressionTestRequest(BaseModel):
+    """Schema for regression test request."""
+    
+    scenario_id: str
+    current_agent_output: str
+    judge_config: Dict[str, Any]
+    commit_hash: str
+    branch_name: str
+    threshold_degradation: float = Field(default=5.0, ge=0, le=100, description="Percentage threshold")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "scenario_id": "123e4567-e89b-12d3-a456-426614174000",
+                "current_agent_output": "New implementation...",
+                "judge_config": {"model": "gpt-4o", "temperature": 0.1},
+                "commit_hash": "def456789",
+                "branch_name": "feature/update",
+                "threshold_degradation": 5.0
+            }
+        }
+
+
+class RegressionTestResponse(BaseModel):
+    """Schema for regression test response."""
+    
+    id: str
+    scenario_id: str
+    commit_hash: str
+    branch_name: str
+    baseline_score: Optional[float]
+    current_score: Optional[float]
+    score_change: Optional[float]
+    score_change_percentage: Optional[float]
+    alert_triggered: bool
+    alert_message: Optional[str]
+    status: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class DeterminismTestRequest(BaseModel):
+    """Schema for determinism test request."""
+    
+    scenario_id: str
+    agent_output_provider: Dict[str, Any] = Field(..., description="Function to generate outputs")
+    judge_config: Dict[str, Any]
+    k_values: Optional[List[int]] = Field(None, description="k values to test")
+    success_threshold: float = Field(default=7.0, ge=0, le=10, description="Minimum score for success")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "scenario_id": "123e4567-e89b-12d3-a456-426614174000",
+                "agent_output_provider": {
+                    "type": "function",
+                    "description": "Function that generates different outputs for determinism testing"
+                },
+                "judge_config": {"model": "gpt-4o", "temperature": 0.1},
+                "k_values": [1, 5, 10, 20],
+                "success_threshold": 7.0
+            }
+        }
+
+
+class DeterminismTestResponse(BaseModel):
+    """Schema for determinism test response."""
+    
+    test_id: str
+    scenario_id: str
+    pass_k_metrics: List[PassKMetricResponse]
+    reliability_grade: str
+    consistency_score: float
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class PassKMetricResponse(BaseModel):
+    """Schema for Pass@k metric response."""
+    
+    id: str
+    scenario_id: str
+    k_value: int
+    total_runs: int
+    successful_runs: int
+    pass_at_k: float
+    confidence_interval_lower: Optional[float]
+    confidence_interval_upper: Optional[float]
+    success_threshold: float
+    score_variance: Optional[float]
+    score_std_deviation: Optional[float]
+    score_range_min: Optional[float]
+    score_range_max: Optional[float]
+    consistency_score: Optional[float]
+    reliability_grade: Optional[str]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class EvaluationDashboardRequest(BaseModel):
+    """Schema for evaluation dashboard request."""
+    
+    scenario_ids: Optional[List[str]] = None
+    time_range_days: int = Field(default=30, ge=1, le=365)
+    metrics: Optional[List[str]] = None
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "scenario_ids": ["123e4567-e89b-12d3-a456-426614174000"],
+                "time_range_days": 30,
+                "metrics": ["overall_score", "pass_at_10", "reliability_grade"]
+            }
+        }
+
+
+class EvaluationDashboardResponse(BaseModel):
+    """Schema for evaluation dashboard response."""
+    
+    summary: Dict[str, Any]
+    score_trends: List[Dict[str, Any]]
+    dimension_breakdown: Dict[str, float]
+    regression_alerts: List[Dict[str, Any]]
+    reliability_metrics: Dict[str, Any]
+    cost_analysis: Dict[str, Any]
+    scenario_performance: List[Dict[str, Any]]
+    generated_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class EvaluationAlertResponse(BaseModel):
+    """Schema for evaluation alert response."""
+    
+    id: str
+    alert_type: str
+    severity: str
+    scenario_id: Optional[str]
+    title: str
+    description: str
+    metric_name: Optional[str]
+    metric_value: Optional[float]
+    threshold_value: Optional[float]
+    status: str
+    acknowledged_by: Optional[str]
+    acknowledged_at: Optional[datetime]
+    resolved_at: Optional[datetime]
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+__all__ = [
+    'WorkspaceCreate',
+    'WorkspaceResponse',
+    'ProjectCreate',
+    'ProjectResponse',
+    'TaskCreate',
+    'TaskResponse',
+    'TaskUpdate',
+    'RunCreate',
+    'RunResponse',
+    'RunUpdate',
+    'RunLogResponse',
+    'MetricCreate',
+    'MetricResponse',
+    'ApprovalCreate',
+    'ApprovalResponse',
+    'ApprovalUpdate',
+    'EventResponse',
+    'TaskSummaryResponse',
+    'TaskDetailResponse',
+    'RunSummaryResponse',
+    'RunDetailResponse',
+    'DashboardResponse',
+    'ProjectSummaryResponse',
+    'ProjectDetailResponse',
+    'WorkspaceSummaryResponse',
+    'WorkspaceDetailResponse',
+    'WebhookEvent',
+    'WebhookResponse',
+    'ChatMessage',
+    'ChatRequest',
+    'ChatResponse',
+    'AgentCreate',
+    'AgentResponse',
+    'AgentUpdate',
+    'AgentMessageCreate',
+    'AgentMessageResponse',
+    'AgentContextCreate',
+    'AgentContextResponse',
+    'AgentContextVersionCreate',
+    'AgentContextVersionResponse',
+    'AgentMetricsResponse',
+    'AgentHealthResponse',
+    'ArtifactCreate',
+    'ArtifactResponse',
+    'ArtifactListResponse',
+    'ArtifactSearchRequest',
+    'ArtifactSearchResult',
+    'ArtifactSearchResponse',
+    'BuildCreate',
+    'BuildResponse',
+    'BuildLogResponse',
+    'GenerateProjectRequest',
+    'GenerateProjectResponse',
+    'TemplateCreate',
+    'TemplateResponse',
     'TemplateListResponse',
-    'RateTemplateRequest',
-    'RateTemplateResponse',
-    'TemplateEnhancementRequest',
-    'TemplateEnhancementResult',
-    'TemplateEnhancementResponse',
-    'MarketplaceTemplate',
-    'MarketplaceResponse',
-    # Knowledge Base & RAG Schemas
-    'KnowledgeItemCreate',
-    'KnowledgeItemUpdate', 
-    'KnowledgeItemResponse',
+    'TemplateSearchRequest',
+    'TemplateSearchResponse',
+    'TemplateSearchResult',
+    'TemplateCategoryResponse',
+    'RepositoryCreate',
+    'RepositoryResponse',
+    'RepositoryDetailResponse',
+    'RepositoryStatsResponse',
+    'WorkflowCreate',
+    'WorkflowResponse',
+    'WorkflowUpdate',
+    'WorkflowExecutionCreate',
+    'WorkflowExecutionResponse',
+    'WorkflowStepCreate',
+    'WorkflowStepResponse',
+    'WorkflowStepExecutionCreate',
+    'WorkflowStepExecutionResponse',
+    'WorkflowStepApprovalCreate',
+    'WorkflowStepApprovalResponse',
+    'WorkflowVariableCreate',
+    'WorkflowVariableResponse',
+    'WorkflowMetricsResponse',
+    'WorkflowEvent',
+    'WorkflowEventResponse',
+    'SecretCreate',
+    'SecretResponse',
+    'SecretUpdate',
+    'SecretListResponse',
+    'SecretRotateRequest',
+    'SecretRotateResponse',
+    'SecretAuditResponse',
+    'DeploymentValidationCreate',
+    'DeploymentValidationResponse',
+    'ValidationCheckResultCreate',
+    'ValidationCheckResultResponse',
+    'PreDeploymentChecklistCreate',
+    'PreDeploymentChecklistResponse',
+    'DeploymentSimulationCreate',
+    'DeploymentSimulationResponse',
+    'RollbackPlanCreate',
+    'RollbackPlanResponse',
+    'EscalationRuleCreate',
+    'EscalationRuleResponse',
+    'EscalationEventCreate',
+    'EscalationEventResponse',
+    'EscalationMetricResponse',
+    'AlertRuleCreate',
+    'AlertRuleResponse',
+    'AlertCreate',
+    'AlertResponse',
+    'KnowledgeCreate',
+    'KnowledgeResponse',
+    'KnowledgeUpdate',
+    'KnowledgeListResponse',
     'KnowledgeSearchRequest',
     'KnowledgeSearchResult',
     'KnowledgeSearchResponse',
@@ -2504,4 +2964,21 @@ __all__ += [
     'IngestionRequest',
     'IngestionResponse',
     'KnowledgeStatsResponse',
+    # AI Evaluation Framework Schemas
+    'EvaluationScenarioCreate',
+    'EvaluationScenarioResponse',
+    'EvaluationRunRequest',
+    'EvaluationRunResponse',
+    'EvaluationResultResponse',
+    'RegressionTestRequest',
+    'RegressionTestResponse',
+    'DeterminismTestRequest',
+    'DeterminismTestResponse',
+    'PassKMetricResponse',
+    'EvaluationDashboardRequest',
+    'EvaluationDashboardResponse',
+    'EvaluationAlertResponse',
+    'EvaluationCriteria',
+    'ScoreBreakdown',
+    'EvaluationFeedback',
 ]
