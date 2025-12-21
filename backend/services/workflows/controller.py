@@ -29,6 +29,7 @@ from backend.services.events import get_event_broadcaster
 from backend.services.agents.registry import AgentRegistry
 from backend.services.agents.context import SharedContextService
 from backend.services.agents.memory import AgentMemoryService
+from backend.services.agents.escalation import EscalationService, RuleEvaluationContext
 
 # Import WorkflowContext using TYPE_CHECKING to avoid circular import
 from typing import TYPE_CHECKING
@@ -121,6 +122,7 @@ class MultiAgentController:
         agent_registry: AgentRegistry,
         context_service: SharedContextService,
         memory_service: Optional[AgentMemoryService] = None,
+        escalation_service: Optional[EscalationService] = None,
     ):
         """
         Initialize the multi-agent controller.
@@ -129,10 +131,12 @@ class MultiAgentController:
             agent_registry: Registry for agent definitions and instances
             context_service: Service for shared agent context management
             memory_service: Service for agent memory persistence
+            escalation_service: Service for escalation logic
         """
         self.agent_registry = agent_registry
         self.context_service = context_service
         self.memory_service = memory_service or AgentMemoryService(context_service)
+        self.escalation_service = escalation_service or EscalationService()
         
         # Assignment tracking
         self.active_assignments: Dict[str, AgentAssignment] = {}
@@ -856,6 +860,72 @@ class MultiAgentController:
             "failover_records": len(self.failover_records),
             "round_robin_counters": len(self.round_robin_counters),
         }
+    
+    async def check_and_escalate(
+        self,
+        session: AsyncSession,
+        context: "WorkflowContext",
+        step: WorkflowStep,
+        step_execution_id: str,
+        error_count: int = 0,
+        retry_count: int = 0,
+        execution_duration_seconds: int = 0,
+        resource_usage: Optional[Dict[str, Any]] = None,
+        custom_metrics: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Any]:
+        """
+        Check if current execution should be escalated.
+        
+        Args:
+            session: Database session
+            context: Workflow context
+            step: Workflow step
+            step_execution_id: Step execution ID
+            error_count: Number of errors
+            retry_count: Number of retries
+            execution_duration_seconds: Execution duration
+            resource_usage: Resource usage data
+            custom_metrics: Custom metrics data
+            
+        Returns:
+            Escalation event if escalated, None otherwise
+        """
+        # Calculate error rate
+        error_rate = error_count / max(retry_count + 1, 1) if error_count > 0 else 0.0
+        
+        # Create evaluation context
+        eval_context = RuleEvaluationContext(
+            workspace_id=context.workspace_id,
+            project_id=context.project_id,
+            workflow_execution_id=context.workflow_execution_id,
+            workflow_step_execution_id=step_execution_id,
+            complexity_score=0.0,  # Can be calculated if needed
+            error_count=error_count,
+            error_rate=error_rate,
+            resource_usage=resource_usage or {},
+            execution_duration_seconds=execution_duration_seconds,
+            retry_count=retry_count,
+            custom_metrics=custom_metrics or {},
+        )
+        
+        # Check for escalation
+        try:
+            escalation_event = await self.escalation_service.check_escalation(
+                session, eval_context
+            )
+            
+            if escalation_event:
+                logger.info(
+                    f"Step {step.name} escalated: "
+                    f"severity={escalation_event.severity.value}, "
+                    f"reason={escalation_event.reason.value}"
+                )
+            
+            return escalation_event
+            
+        except Exception as e:
+            logger.error(f"Error checking escalation: {str(e)}")
+            return None
 
 
 __all__ = [

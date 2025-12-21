@@ -45,6 +45,7 @@ from backend.routers import (
     templates_router,
     knowledge_router,
     llm_router,
+    escalation_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -302,6 +303,9 @@ def create_app() -> FastAPI:
 
     app.include_router(llm_router)
     logger.info("✓ Registered: llm_router")
+    
+    app.include_router(escalation_router)
+    logger.info("✓ Registered: escalation_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])
