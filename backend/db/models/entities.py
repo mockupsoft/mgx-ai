@@ -36,6 +36,7 @@ from .enums import (
     AgentMessageDirection,
     AgentStatus,
     ApprovalStatus,
+    FileApprovalStatus,
     ArtifactType,
     ArtifactBuildStatus,
     ContextRollbackState,
@@ -879,6 +880,11 @@ class WorkflowStepApproval(Base, TimestampMixin, SerializationMixin):
     step_execution = relationship("WorkflowStepExecution")
     workflow_execution = relationship("WorkflowExecution")
     parent_approval = relationship("WorkflowStepApproval", remote_side=[id])
+    
+    # File-level approval relationships
+    file_changes = relationship("FileChange", back_populates="approval", cascade="all, delete-orphan")
+    file_approvals = relationship("FileApproval", back_populates="approval", cascade="all, delete-orphan")
+    approval_history = relationship("ApprovalHistory", back_populates="workflow_approval", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<WorkflowStepApproval(id={self.id}, status='{self.status}')>"
@@ -2238,6 +2244,161 @@ class EscalationMetric(Base, TimestampMixin, SerializationMixin):
         return f"<EscalationMetric(id={self.id}, name='{self.metric_name}', value={self.metric_value})>"
 
 
+class FileChange(Base, TimestampMixin, SerializationMixin):
+    """Tracks file changes for granular approval workflows."""
+    
+    __tablename__ = "file_changes"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    
+    # Link to parent approval
+    workflow_step_approval_id = Column(String(36), ForeignKey("workflow_step_approvals.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+    
+    # File information
+    file_path = Column(String(500), nullable=False, comment="Relative path to the file")
+    file_name = Column(String(255), nullable=False, comment="File name")
+    file_type = Column(String(100), comment="File type/extension")
+    
+    # Change details
+    change_type = Column(String(50), nullable=False, comment="Type of change: created, modified, deleted, renamed")
+    is_new_file = Column(Boolean, default=False, comment="Whether this is a new file")
+    is_binary = Column(Boolean, default=False, comment="Whether file is binary")
+    
+    # Diff information
+    original_content = Column(Text, comment="Original file content")
+    new_content = Column(Text, comment="New file content")
+    diff_summary = Column(JSON, comment="Summary of changes (additions, deletions)")
+    line_changes = Column(JSON, comment="Detailed line-by-line changes")
+    
+    # Status tracking
+    change_status = Column(String(50), default="pending", comment="Status of the change")
+    
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_file_changes_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_file_changes_approval", "workflow_step_approval_id"),
+        Index("idx_file_changes_workspace", "workspace_id"),
+        Index("idx_file_changes_file_path", "file_path"),
+        Index("idx_file_changes_change_type", "change_type"),
+        Index("idx_file_changes_status", "change_status"),
+    )
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    approval = relationship("WorkflowStepApproval", back_populates="file_changes")
+    file_approvals = relationship("FileApproval", back_populates="file_change", cascade="all, delete-orphan")
+    
+    def __repr__(self) -> str:
+        return f"<FileChange(id={self.id}, file_path='{self.file_path}', change_type='{self.change_type}')>"
+
+
+class FileApproval(Base, TimestampMixin, SerializationMixin):
+    """Granular file-level approval tracking."""
+    
+    __tablename__ = "file_approvals"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    
+    # Link to file change and approval
+    file_change_id = Column(String(36), ForeignKey("file_changes.id", ondelete="CASCADE"), nullable=False, index=True)
+    workflow_step_approval_id = Column(String(36), ForeignKey("workflow_step_approvals.id", ondelete="CASCADE"), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+    
+    # Approval details
+    status = Column(SQLEnum(FileApprovalStatus), nullable=False, default=FileApprovalStatus.PENDING, index=True)
+    approved_by = Column(String(255), comment="User who approved/rejected")
+    reviewer_comment = Column(Text, comment="Reviewer's comment")
+    
+    # Inline comments on specific lines
+    inline_comments = Column(JSON, nullable=False, default=list, comment="List of inline comments with line numbers")
+    
+    # Timestamps
+    reviewed_at = Column(DateTime(timezone=True), comment="When file was reviewed")
+    
+    # Metadata
+    review_metadata = Column(JSON, nullable=False, default=dict, comment="Additional review metadata")
+    
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_file_approvals_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_file_approvals_file_change", "file_change_id"),
+        Index("idx_file_approvals_workflow_approval", "workflow_step_approval_id"),
+        Index("idx_file_approvals_status", "status"),
+        Index("idx_file_approvals_workspace", "workspace_id"),
+        Index("idx_file_approvals_reviewed_at", "reviewed_at"),
+    )
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    approval = relationship("WorkflowStepApproval", back_populates="file_approvals")
+    file_change = relationship("FileChange", back_populates="file_approvals")
+    
+    def __repr__(self) -> str:
+        return f"<FileApproval(id={self.id}, file_change_id='{self.file_change_id}', status='{self.status.value}')>"
+
+
+class ApprovalHistory(Base, TimestampMixin, SerializationMixin):
+    """Complete audit trail for approval workflows."""
+    
+    __tablename__ = "approval_history"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    
+    # Link to approval
+    workflow_step_approval_id = Column(String(36), ForeignKey("workflow_step_approvals.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_approval_id = Column(String(36), ForeignKey("file_approvals.id", ondelete="CASCADE"), nullable=True, index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    project_id = Column(String(36), nullable=False, index=True)
+    
+    # Action details
+    action_type = Column(String(50), nullable=False, comment="Type of action: approve, reject, request_changes, comment")
+    actor_id = Column(String(255), nullable=False, comment="User who performed the action")
+    actor_name = Column(String(255), comment="Display name of actor")
+    
+    # Action data
+    old_status = Column(String(50), comment="Previous status")
+    new_status = Column(String(50), nullable=False, comment="New status after action")
+    action_comment = Column(Text, comment="Comment from actor")
+    action_data = Column(JSON, comment="Additional action metadata")
+    
+    # Context
+    context_info = Column(JSON, comment="Context information for the action")
+    
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["workspace_id", "project_id"],
+            ["projects.workspace_id", "projects.id"],
+            name="fk_approval_history_project_in_workspace",
+            ondelete="RESTRICT",
+        ),
+        Index("idx_approval_history_workflow_approval", "workflow_step_approval_id"),
+        Index("idx_approval_history_file_approval", "file_approval_id"),
+        Index("idx_approval_history_workspace", "workspace_id"),
+        Index("idx_approval_history_action_type", "action_type"),
+        Index("idx_approval_history_actor", "actor_id"),
+        Index("idx_approval_history_created_at", "created_at"),
+    )
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    workflow_approval = relationship("WorkflowStepApproval", back_populates="approval_history")
+    file_approval = relationship("FileApproval")
+    
+    def __repr__(self) -> str:
+        return f"<ApprovalHistory(id={self.id}, action_type='{self.action_type}', new_status='{self.new_status}')>"
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -2307,4 +2468,8 @@ __all__ = [
     "EscalationRule",
     "EscalationEvent",
     "EscalationMetric",
+    # File-level Approval Models
+    "FileChange",
+    "FileApproval",
+    "ApprovalHistory",
 ]

@@ -88,6 +88,13 @@ class EventTypeEnum(str, Enum):
     ESCALATION_ASSIGNED = "escalation_assigned"
     ESCALATION_RESOLVED = "escalation_resolved"
     ESCALATION_FAILED = "escalation_failed"
+    
+    # File-level approval events
+    FILE_APPROVED = "file_approved"
+    FILE_REJECTED = "file_rejected"
+    FILE_CHANGES_REQUESTED = "file_changes_requested"
+    FILE_COMMENT_ADDED = "file_comment_added"
+    FILE_APPROVAL_ROLLED_BACK = "file_approval_rolled_back"
 
 
 # ============================================
@@ -1327,6 +1334,112 @@ class ApprovalListResponse(BaseModel):
     """Schema for list of pending approvals."""
     approvals: List[ApprovalResult] = Field(default_factory=list, description="List of approvals")
     total: int = Field(..., ge=0, description="Total number of approvals")
+
+
+# ============================================
+# File-level Approval Schemas
+# ============================================
+
+class FileChangeResponse(BaseModel):
+    """Schema for file change response."""
+    id: str = Field(..., description="File change ID")
+    file_path: str = Field(..., description="Relative path to the file")
+    file_name: str = Field(..., description="File name")
+    file_type: Optional[str] = Field(None, description="File type/extension")
+    change_type: str = Field(..., description="Type of change: created, modified, deleted, renamed")
+    is_new_file: bool = Field(default=False, description="Whether this is a new file")
+    is_binary: bool = Field(default=False, description="Whether file is binary")
+    original_content: Optional[str] = Field(None, description="Original file content")
+    new_content: Optional[str] = Field(None, description="New file content")
+    diff_summary: Dict[str, Any] = Field(default_factory=dict, description="Summary of changes")
+    line_changes: List[Dict[str, Any]] = Field(default_factory=list, description="Detailed line changes")
+    change_status: str = Field(..., description="Status of the change")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    class Config:
+        from_attributes = True
+
+
+class FileApprovalResponse(BaseModel):
+    """Schema for file approval response."""
+    id: str = Field(..., description="File approval ID")
+    file_change_id: str = Field(..., description="Associated file change ID")
+    workflow_step_approval_id: str = Field(..., description="Parent workflow approval ID")
+    status: str = Field(..., description="File approval status")
+    approved_by: Optional[str] = Field(None, description="User who approved/rejected")
+    reviewer_comment: Optional[str] = Field(None, description="Reviewer's comment")
+    inline_comments: List[Dict[str, Any]] = Field(default_factory=list, description="Inline comments")
+    reviewed_at: Optional[datetime] = Field(None, description="When file was reviewed")
+    review_metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional review metadata")
+    file_change: Optional[FileChangeResponse] = Field(None, description="Associated file change")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    class Config:
+        from_attributes = True
+
+
+class FileApprovalCreate(BaseModel):
+    """Schema for creating file approval."""
+    file_path: str = Field(..., description="Relative path to the file")
+    file_name: str = Field(..., description="File name")
+    file_type: Optional[str] = Field(None, description="File type/extension")
+    change_type: str = Field(default="modified", description="Type of change")
+    is_new_file: bool = Field(default=False, description="Whether this is a new file")
+    is_binary: bool = Field(default=False, description="Whether file is binary")
+    original_content: Optional[str] = Field(None, description="Original file content")
+    new_content: Optional[str] = Field(None, description="New file content")
+    diff_summary: Optional[Dict[str, Any]] = Field(None, description="Summary of changes")
+    line_changes: Optional[List[Dict[str, Any]]] = Field(None, description="Detailed line changes")
+
+
+class FileApprovalUpdate(BaseModel):
+    """Schema for updating file approval."""
+    status: str = Field(..., description="File approval status")
+    reviewer_comment: Optional[str] = Field(None, description="Reviewer's comment")
+    review_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional review metadata")
+
+
+class InlineCommentRequest(BaseModel):
+    """Schema for adding inline comment."""
+    line_number: int = Field(..., ge=1, description="Line number to comment on")
+    comment_text: str = Field(..., min_length=1, description="Comment text")
+
+
+class ApprovalHistoryResponse(BaseModel):
+    """Schema for approval history response."""
+    id: str = Field(..., description="History record ID")
+    workflow_step_approval_id: str = Field(..., description="Parent workflow approval ID")
+    file_approval_id: Optional[str] = Field(None, description="Associated file approval ID")
+    action_type: str = Field(..., description="Type of action performed")
+    actor_id: str = Field(..., description="User who performed the action")
+    actor_name: Optional[str] = Field(None, description="Display name of actor")
+    old_status: Optional[str] = Field(None, description="Previous status")
+    new_status: str = Field(..., description="New status after action")
+    action_comment: Optional[str] = Field(None, description="Comment from actor")
+    action_data: Dict[str, Any] = Field(default_factory=dict, description="Additional action metadata")
+    context_info: Dict[str, Any] = Field(default_factory=dict, description="Context information")
+    created_at: datetime = Field(..., description="Action timestamp")
+
+    class Config:
+        from_attributes = True
+
+
+class FileApprovalsListResponse(BaseModel):
+    """Schema for list of file approvals."""
+    items: List[FileApprovalResponse] = Field(..., description="List of file approvals")
+    total: int = Field(..., ge=0, description="Total number of file approvals")
+    pending_count: int = Field(..., ge=0, description="Number of pending approvals")
+    approved_count: int = Field(..., ge=0, description="Number of approved files")
+    rejected_count: int = Field(..., ge=0, description="Number of rejected files")
+    changes_requested_count: int = Field(..., ge=0, description="Number of files with changes requested")
+
+
+class ApprovalHistoryListResponse(BaseModel):
+    """Schema for list of approval history."""
+    items: List[ApprovalHistoryResponse] = Field(..., description="List of history records")
+    total: int = Field(..., ge=0, description="Total number of history records")
 
 
 # ============================================
@@ -2981,4 +3094,13 @@ __all__ = [
     'EvaluationCriteria',
     'ScoreBreakdown',
     'EvaluationFeedback',
+    # File-level Approval Schemas
+    'FileChangeResponse',
+    'FileApprovalResponse',
+    'FileApprovalCreate',
+    'FileApprovalUpdate',
+    'InlineCommentRequest',
+    'ApprovalHistoryResponse',
+    'FileApprovalsListResponse',
+    'ApprovalHistoryListResponse',
 ]

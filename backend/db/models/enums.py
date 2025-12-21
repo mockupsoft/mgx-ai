@@ -206,6 +206,16 @@ class ApprovalStatus(str, Enum):
     TIMEOUT = "timeout"  # Approval request timed out
 
 
+class FileApprovalStatus(str, Enum):
+    """File-level approval status."""
+
+    PENDING = "pending"  # File approval is pending
+    APPROVED = "approved"  # File was approved
+    REJECTED = "rejected"  # File was rejected
+    CHANGES_REQUESTED = "changes_requested"  # Changes requested for this file
+    REVIEWED = "reviewed"  # File has been reviewed (neutral state)
+
+
 class SandboxExecutionStatus(str, Enum):
     """Sandbox execution status."""
 
