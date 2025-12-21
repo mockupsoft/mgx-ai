@@ -2,9 +2,9 @@ name: Test Suite
 
 on:
   push:
-    branches: [ main, test-cli-workflows-coverage-ci-docs, final-test-and-status-report-phase1-3-coverage-ci ]
+    branches: [ main, test-cli-workflows-coverage-ci-docs, final-test-and-status-report-phase1-3-coverage-ci, fix/tests-workflow-debug ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, fix/tests-workflow-debug ]
   workflow_dispatch:
   schedule:
     # Nightly performance/regression run (UTC)
@@ -171,7 +171,7 @@ jobs:
   coverage-report:
     runs-on: ubuntu-latest
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/fix/tests-workflow-debug')
     
     steps:
     - name: Checkout code
