@@ -108,6 +108,36 @@ class Settings(BaseSettings):
     # Application Settings
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
+
+    # Observability Settings
+    otel_enabled: bool = Field(default=False, description="Enable OpenTelemetry tracing")
+    otel_service_name: str = Field(default="mgx-agent", description="OpenTelemetry service name")
+    otel_otlp_endpoint: Optional[str] = Field(
+        default=None,
+        description="OTLP collector endpoint (e.g. http://localhost:4318/v1/traces)",
+    )
+    otel_otlp_protocol: str = Field(
+        default="http/protobuf",
+        description="OTLP protocol: http/protobuf | grpc",
+    )
+    otel_otlp_headers: Optional[str] = Field(
+        default=None,
+        description="Optional OTLP headers (e.g. Authorization=Bearer ...)",
+    )
+    otel_sample_ratio: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling ratio (0..1)",
+    )
+
+    langsmith_enabled: bool = Field(default=False, description="Enable LangSmith run logging")
+    langsmith_api_key: Optional[str] = Field(default=None, description="LangSmith API key")
+    langsmith_project: str = Field(default="mgx-agent", description="LangSmith project name")
+    langsmith_endpoint: Optional[str] = Field(default=None, description="Custom LangSmith API endpoint")
+
+    phoenix_enabled: bool = Field(default=False, description="Enable Arize Phoenix integration")
+    phoenix_endpoint: Optional[str] = Field(default=None, description="Phoenix OTLP endpoint")
     
     # Secret Management Settings
     secret_encryption_backend: str = Field(
