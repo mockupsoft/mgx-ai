@@ -10,11 +10,22 @@ LLM çağrıları yapan Action sınıfları:
 - ReviewCode: Kod inceleme
 """
 
+import os
 import re
+from datetime import datetime, timezone
 from typing import List, Tuple, Optional
+
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from metagpt.actions import Action
 from metagpt.logs import logger
+
+from mgx_observability import (
+    ObservabilityConfig,
+    get_langsmith_logger,
+    record_exception,
+    set_span_attributes,
+    start_span,
+)
 
 
 def llm_retry():
@@ -60,6 +71,64 @@ def print_phase_header(phase: str, emoji: str = "🔄"):
     print(f"{'='*60}")
 
 
+def _env_flag(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+async def aask_with_observability(action: Action, prompt: str) -> str:
+    action_name = getattr(action, "name", action.__class__.__name__)
+
+    cfg = ObservabilityConfig(
+        langsmith_enabled=_env_flag("LANGSMITH_ENABLED"),
+        langsmith_api_key=os.getenv("LANGSMITH_API_KEY") or os.getenv("LANGCHAIN_API_KEY"),
+        langsmith_project=os.getenv("LANGSMITH_PROJECT") or "mgx-agent",
+        langsmith_endpoint=os.getenv("LANGSMITH_ENDPOINT"),
+    )
+    langsmith_logger = get_langsmith_logger(cfg)
+
+    started_at = datetime.now(timezone.utc)
+
+    async with start_span(
+        "mgx.aask",
+        attributes={
+            "mgx.action": action_name,
+            "prompt.length": len(prompt),
+        },
+    ) as span:
+        try:
+            rsp = await action._aask(prompt)
+            set_span_attributes(span, {"output.length": len(rsp) if rsp is not None else 0})
+        except Exception as e:
+            record_exception(span, e)
+            if langsmith_logger is not None:
+                await langsmith_logger.log_llm_call(
+                    name=f"mgx.{action_name}",
+                    provider="metagpt",
+                    model="unknown",
+                    prompt=prompt,
+                    output="",
+                    error=str(e),
+                    start_time=started_at,
+                    end_time=datetime.now(timezone.utc),
+                    metadata={"action": action_name},
+                )
+            raise
+
+    if langsmith_logger is not None:
+        await langsmith_logger.log_llm_call(
+            name=f"mgx.{action_name}",
+            provider="metagpt",
+            model="unknown",
+            prompt=prompt,
+            output=rsp or "",
+            start_time=started_at,
+            end_time=datetime.now(timezone.utc),
+            metadata={"action": action_name},
+        )
+
+    return rsp
+
+
 class AnalyzeTask(Action):
     """Görevi analiz et (stack-aware)"""
     
@@ -102,7 +171,7 @@ Kurallar:
                 stack_context=stack_context,
                 available_stacks=available_stacks
             )
-            rsp = await self._aask(prompt)
+            rsp = await aask_with_observability(self, prompt)
             return rsp
         except Exception as e:
             logger.error(f"❌ AnalyzeTask hatası: {e}")
@@ -153,7 +222,7 @@ Açıklama veya detay YAZMA. SADECE numaralı listeyi yaz."""
                 stack_name=stack_name,
                 test_framework=test_framework
             )
-            rsp = await self._aask(prompt)
+            rsp = await aask_with_observability(self, prompt)
             return rsp
         except Exception as e:
             logger.error(f"❌ DraftPlan hatası: {e}")
@@ -306,7 +375,7 @@ Orijinal görevi unutma: {instruction}
                     file_format_instructions=file_format_instructions,
                     revision_instructions=revision_instructions
                 )
-                rsp = await self._aask(prompt)
+                rsp = await aask_with_observability(self, prompt)
                 
                 # Parse output based on mode
                 if strict_mode:
@@ -1009,7 +1078,7 @@ class MyTest extends TestCase
                 language=language,
                 test_template=test_template
             )
-            rsp = await self._aask(prompt)
+            rsp = await aask_with_observability(self, prompt)
             raw_code = self._parse_code(rsp, language)
             # Post-process: Test sayısını k ile sınırla (LLM daha fazla yazsa bile)
             limited_code = self._limit_tests(raw_code, k)

@@ -36,6 +36,15 @@ GitPython>=3.1.40
 # Utilities
 pyyaml>=6.0
 
+# Observability
+opentelemetry-api>=1.25.0
+opentelemetry-sdk>=1.25.0
+opentelemetry-exporter-otlp>=1.25.0
+opentelemetry-instrumentation-fastapi>=0.46b0
+opentelemetry-instrumentation-sqlalchemy>=0.46b0
+opentelemetry-instrumentation-httpx>=0.46b0
+langsmith>=0.1.0
+
 # Type hints
 types-PyYAML>=6.0.0
 

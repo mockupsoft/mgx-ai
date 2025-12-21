@@ -2,11 +2,22 @@
 """Main LLM service integrating providers, routing, and cost tracking."""
 
 import logging
+from datetime import datetime, timezone
 from typing import AsyncIterator, Dict, List, Optional
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.services.cost.llm_tracker import LLMCostTracker
+
+from mgx_observability import (
+    ObservabilityConfig,
+    get_langsmith_logger,
+    observability_context,
+    record_exception,
+    set_span_attributes,
+    start_span,
+)
 
 from .provider import LLMProvider, LLMResponse, AllProvidersFailedError, ProviderError
 from .router import LLMRouter, RoutingStrategy
@@ -108,6 +119,8 @@ class LLMService:
         self,
         prompt: str,
         workspace_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
         execution_id: Optional[str] = None,
         provider: Optional[str] = None,
         model: Optional[str] = None,
@@ -157,8 +170,10 @@ class LLMService:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 workspace_id=workspace_id,
+                project_id=project_id,
+                agent_id=agent_id,
                 execution_id=execution_id,
-                **kwargs
+                **kwargs,
             )
         
         # Otherwise, use router to select provider
@@ -178,8 +193,10 @@ class LLMService:
                 temperature=temperature,
                 max_tokens=max_tokens,
                 workspace_id=workspace_id,
+                project_id=project_id,
+                agent_id=agent_id,
                 execution_id=execution_id,
-                **kwargs
+                **kwargs,
             )
         except ProviderError as e:
             logger.warning(f"Primary provider {provider}/{model} failed: {e}")
@@ -208,8 +225,10 @@ class LLMService:
                         temperature=temperature,
                         max_tokens=max_tokens,
                         workspace_id=workspace_id,
+                        project_id=project_id,
+                        agent_id=agent_id,
                         execution_id=execution_id,
-                        **kwargs
+                        **kwargs,
                     )
                 except ProviderError as fallback_error:
                     logger.warning(
@@ -231,8 +250,10 @@ class LLMService:
         temperature: float,
         max_tokens: int,
         workspace_id: Optional[str],
+        project_id: Optional[str],
+        agent_id: Optional[str],
         execution_id: Optional[str],
-        **kwargs
+        **kwargs,
     ) -> LLMResponse:
         """Generate with a specific provider and track metrics."""
         provider_instance = self.providers.get(provider)
@@ -240,60 +261,143 @@ class LLMService:
         if not provider_instance:
             raise ProviderError(f"Provider not available: {provider}")
         
-        try:
-            response = await provider_instance.generate(
-                prompt=prompt,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
-            )
-            
-            # Track usage
-            self.router.track_usage(
-                provider=provider,
-                model=model,
-                success=True,
-                latency_ms=response.latency_ms,
-                cost_usd=response.cost_usd,
-            )
-            
-            # Log cost to database
-            if self.cost_tracker and workspace_id and execution_id:
-                await self.cost_tracker.log_llm_call(
-                    workspace_id=workspace_id,
-                    execution_id=execution_id,
+        obs_cfg = ObservabilityConfig(
+            langsmith_enabled=settings.langsmith_enabled,
+            langsmith_api_key=settings.langsmith_api_key,
+            langsmith_project=settings.langsmith_project,
+            langsmith_endpoint=settings.langsmith_endpoint,
+        )
+        langsmith_logger = get_langsmith_logger(obs_cfg)
+
+        with observability_context(
+            workspace_id=workspace_id,
+            project_id=project_id,
+            agent_id=agent_id,
+            execution_id=execution_id,
+        ):
+            async with start_span(
+                "llm.generate",
+                attributes={
+                    "llm.provider": provider,
+                    "llm.model": model,
+                    "llm.temperature": temperature,
+                    "llm.max_tokens": max_tokens,
+                },
+            ) as span:
+                started_at = datetime.now(timezone.utc)
+
+                try:
+                    response = await provider_instance.generate(
+                        prompt=prompt,
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        **kwargs,
+                    )
+                except Exception as e:
+                    # Track failure
+                    self.router.track_usage(
+                        provider=provider,
+                        model=model,
+                        success=False,
+                        latency_ms=0,
+                        cost_usd=0.0,
+                    )
+
+                    record_exception(span, e)
+                    set_span_attributes(span, {"llm.success": False})
+
+                    if langsmith_logger is not None:
+                        await langsmith_logger.log_llm_call(
+                            name="llm.generate",
+                            provider=provider,
+                            model=model,
+                            prompt=prompt,
+                            output="",
+                            error=str(e),
+                            metadata={
+                                "workspace_id": workspace_id,
+                                "project_id": project_id,
+                                "agent_id": agent_id,
+                                "execution_id": execution_id,
+                            },
+                            start_time=started_at,
+                            end_time=datetime.now(timezone.utc),
+                        )
+
+                    raise
+
+                completed_at = datetime.now(timezone.utc)
+
+                # Track usage
+                self.router.track_usage(
                     provider=provider,
                     model=model,
-                    tokens_prompt=response.tokens_prompt,
-                    tokens_completion=response.tokens_completion,
+                    success=True,
                     latency_ms=response.latency_ms,
-                    metadata={
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        **response.metadata,
+                    cost_usd=response.cost_usd,
+                )
+
+                set_span_attributes(
+                    span,
+                    {
+                        "llm.success": True,
+                        "llm.tokens.prompt": response.tokens_prompt,
+                        "llm.tokens.completion": response.tokens_completion,
+                        "llm.tokens.total": response.tokens_total,
+                        "llm.cost.usd": response.cost_usd,
+                        "llm.latency.ms": response.latency_ms,
                     },
                 )
-            
-            logger.info(
-                f"LLM generation successful - {provider}/{model}: "
-                f"{response.tokens_total} tokens, ${response.cost_usd:.4f}, "
-                f"{response.latency_ms}ms"
-            )
-            
-            return response
-            
-        except Exception as e:
-            # Track failure
-            self.router.track_usage(
-                provider=provider,
-                model=model,
-                success=False,
-                latency_ms=0,
-                cost_usd=0.0,
-            )
-            
-            raise
+
+                # Log cost to database
+                if self.cost_tracker and workspace_id and execution_id:
+                    await self.cost_tracker.log_llm_call(
+                        workspace_id=workspace_id,
+                        execution_id=execution_id,
+                        provider=provider,
+                        model=model,
+                        tokens_prompt=response.tokens_prompt,
+                        tokens_completion=response.tokens_completion,
+                        latency_ms=response.latency_ms,
+                        project_id=project_id,
+                        agent_id=agent_id,
+                        metadata={
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                            **response.metadata,
+                        },
+                    )
+
+                if langsmith_logger is not None:
+                    await langsmith_logger.log_llm_call(
+                        name="llm.generate",
+                        provider=provider,
+                        model=model,
+                        prompt=prompt,
+                        output=response.content,
+                        metadata={
+                            "workspace_id": workspace_id,
+                            "project_id": project_id,
+                            "agent_id": agent_id,
+                            "execution_id": execution_id,
+                            "tokens_prompt": response.tokens_prompt,
+                            "tokens_completion": response.tokens_completion,
+                            "tokens_total": response.tokens_total,
+                            "cost_usd": response.cost_usd,
+                            "latency_ms": response.latency_ms,
+                        },
+                        start_time=started_at,
+                        end_time=completed_at,
+                    )
+
+                logger.info(
+                    f"LLM generation successful - {provider}/{model}: "
+                    f"{response.tokens_total} tokens, ${response.cost_usd:.4f}, "
+                    f"{response.latency_ms}ms"
+                )
+
+                return response
     
     async def stream_generate(
         self,

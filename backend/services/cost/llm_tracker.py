@@ -136,6 +136,8 @@ class LLMCostTracker:
         tokens_completion: int,
         latency_ms: Optional[int] = None,
         metadata: Optional[Dict] = None,
+        project_id: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> LLMCall:
         """
         Log an LLM API call with cost calculation.
@@ -155,7 +157,13 @@ class LLMCostTracker:
         """
         tokens_total = tokens_prompt + tokens_completion
         cost_usd = self.calculate_cost(provider, model, tokens_prompt, tokens_completion)
-        
+
+        call_metadata = dict(metadata or {})
+        if project_id is not None:
+            call_metadata.setdefault("project_id", project_id)
+        if agent_id is not None:
+            call_metadata.setdefault("agent_id", agent_id)
+
         llm_call = LLMCall(
             workspace_id=workspace_id,
             execution_id=execution_id,
@@ -166,7 +174,7 @@ class LLMCostTracker:
             tokens_total=tokens_total,
             cost_usd=cost_usd,
             latency_ms=latency_ms,
-            call_metadata=metadata or {},
+            call_metadata=call_metadata,
         )
         
         self.session.add(llm_call)

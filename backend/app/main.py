@@ -17,6 +17,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
+from backend.middleware.observability import ObservabilityContextMiddleware
+
+from mgx_observability import ObservabilityConfig, initialize_otel, get_langsmith_logger
 from backend.services import (
     MGXTeamProvider,
     get_task_runner,
@@ -46,6 +49,7 @@ from backend.routers import (
     knowledge_router,
     llm_router,
     escalation_router,
+    observability_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -86,7 +90,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.info("FastAPI Application Startup")
     logger.info("=" * 60)
     logger.info(f"Settings: {settings}")
-    
+
+    # Initialize observability (OpenTelemetry + LangSmith) early to capture startup spans
+    obs_config = ObservabilityConfig(
+        otel_enabled=settings.otel_enabled,
+        service_name=settings.otel_service_name,
+        otlp_endpoint=settings.otel_otlp_endpoint,
+        otlp_protocol=settings.otel_otlp_protocol,
+        otlp_headers=settings.otel_otlp_headers,
+        sample_ratio=settings.otel_sample_ratio,
+        langsmith_enabled=settings.langsmith_enabled,
+        langsmith_api_key=settings.langsmith_api_key,
+        langsmith_project=settings.langsmith_project,
+        langsmith_endpoint=settings.langsmith_endpoint,
+        phoenix_enabled=settings.phoenix_enabled,
+        phoenix_endpoint=settings.phoenix_endpoint,
+    )
+
+    engine_for_otel = None
+    try:
+        session_factory = await get_session_factory()
+        engine = getattr(session_factory, "bind", None)
+        if engine is not None and hasattr(engine, "sync_engine"):
+            engine_for_otel = engine.sync_engine
+    except Exception as e:
+        logger.debug(f"Observability: failed to resolve engine for SQL instrumentation: {e}")
+
+    initialize_otel(obs_config, fastapi_app=app, sqlalchemy_engine=engine_for_otel)
+    app.state.observability_config = obs_config
+    app.state.langsmith_logger = get_langsmith_logger(obs_config)
+
     # Initialize team provider
     team_provider = MGXTeamProvider(config=None)  # Uses default config
     app.state.team_provider = team_provider
@@ -239,7 +272,10 @@ def create_app() -> FastAPI:
     )
     
     logger.info("CORS middleware configured")
-    
+
+    # Add middleware that enriches traces with workspace/project context.
+    app.add_middleware(ObservabilityContextMiddleware)
+
     # ========== Router Registration ==========
     app.include_router(health_router)
     logger.info("✓ Registered: health_router")
@@ -306,6 +342,9 @@ def create_app() -> FastAPI:
     
     app.include_router(escalation_router)
     logger.info("✓ Registered: escalation_router")
+
+    app.include_router(observability_router)
+    logger.info("✓ Registered: observability_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])
