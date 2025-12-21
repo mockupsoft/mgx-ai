@@ -12,6 +12,7 @@ from backend.services.cost.llm_tracker import LLMCostTracker
 
 from mgx_observability import (
     ObservabilityConfig,
+    get_current_context,
     get_langsmith_logger,
     observability_context,
     record_exception,
@@ -155,6 +156,12 @@ class LLMService:
         Raises:
             AllProvidersFailedError: If all providers in fallback chain fail
         """
+        ctx = get_current_context()
+        workspace_id = workspace_id or ctx.workspace_id
+        project_id = project_id or ctx.project_id
+        agent_id = agent_id or ctx.agent_id
+        execution_id = execution_id or ctx.execution_id or ctx.run_id
+
         enable_fallback = (
             enable_fallback
             if enable_fallback is not None

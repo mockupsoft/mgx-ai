@@ -66,6 +66,8 @@ from mgx_agent.performance.async_tools import (
     PhaseTimings,
 )
 
+from mgx_observability import start_span, set_span_attributes
+
 
 # ============================================
 # GÖREV KARMAŞIKLIK DEĞERLENDİRME
@@ -923,14 +925,27 @@ class MGXStyleTeam:
         
         # Mike analiz etsin (with timing and timeout)
         async with AsyncTimer("analyze_and_plan", log_on_exit=True) as timer:
-            try:
-                analysis = await asyncio.wait_for(
-                    mike.analyze_task(task),
-                    timeout=120.0  # 2 minute timeout for analysis
-                )
-            except asyncio.TimeoutError:
-                logger.error("⏱️  Analysis timeout (120s) exceeded")
-                raise
+            async with start_span(
+                "mgx.team.analyze_and_plan",
+                attributes={
+                    "task.length": len(task),
+                    "mgx.cache.enabled": bool(getattr(self.config, "enable_caching", True)),
+                },
+            ) as span:
+                try:
+                    analysis = await asyncio.wait_for(
+                        mike.analyze_task(task),
+                        timeout=120.0  # 2 minute timeout for analysis
+                    )
+                    set_span_attributes(
+                        span,
+                        {
+                            "analysis.content.length": len(getattr(analysis, "content", str(analysis))),
+                        },
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("⏱️  Analysis timeout (120s) exceeded")
+                    raise
         
         # Record timing
         self.phase_timings.analysis_duration = timer.duration
@@ -1115,12 +1130,26 @@ class MGXStyleTeam:
             
             # Wrap main execution with timer
             async with AsyncTimer("main_development_round", log_on_exit=True) as exec_timer:
-                await self.team.run(n_round=n_round)
-                
-                # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
-                # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
-                logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
-                await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
+                async with start_span(
+                    "mgx.team.main_development",
+                    attributes={
+                        "mgx.n_round": n_round,
+                        "mgx.phase": "main_development",
+                    },
+                ) as span:
+                    await self.team.run(n_round=n_round)
+
+                    # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
+                    # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
+                    logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
+                    await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
+
+                    set_span_attributes(
+                        span,
+                        {
+                            "mgx.exec.rounds": int(n_round),
+                        },
+                    )
             
             # Record execution timing
             self.phase_timings.execution_duration = exec_timer.duration

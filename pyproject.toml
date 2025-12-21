@@ -28,4 +28,4 @@ dependencies = [
 mgx = "mgx_cli.main:cli"
 
 [tool.setuptools.packages.find]
-include = ["mgx_cli*", "mgx_agent*"]
+include = ["mgx_cli*", "mgx_agent*", "mgx_observability*"]

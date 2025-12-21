@@ -1203,7 +1203,7 @@ Kontrol listesi (Vue-Vite):
                 stack_name=stack_name,
                 stack_specific_checks=stack_specific_checks
             )
-            rsp = await self._aask(prompt)
+            rsp = await aask_with_observability(self, prompt)
             return rsp
         except Exception as e:
             logger.error(f"❌ ReviewCode hatası: {e}")

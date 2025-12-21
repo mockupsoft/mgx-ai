@@ -70,10 +70,17 @@ def _ns_to_iso(ns: int) -> str:
     return dt.isoformat()
 
 
-class InMemorySpanExporter:
-    """Best-effort span exporter storing spans in memory for debugging APIs."""
+try:
+    from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
+except Exception:  # pragma: no cover
+    SpanExporter = object  # type: ignore
+    SpanExportResult = None  # type: ignore
 
-    def export(self, spans) -> None:  # signature matches SpanExporter.export
+
+class InMemorySpanExporter(SpanExporter):
+    """Span exporter storing spans in memory for debugging APIs."""
+
+    def export(self, spans):
         store = get_span_store()
 
         for span in spans:
@@ -119,7 +126,11 @@ class InMemorySpanExporter:
             except Exception:
                 continue
 
-    def shutdown(self) -> None:
+        if SpanExportResult is None:  # pragma: no cover
+            return None
+        return SpanExportResult.SUCCESS
+
+    def shutdown(self):
         return None
 
     def force_flush(self, timeout_millis: int = 30000) -> bool:
