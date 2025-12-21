@@ -41,6 +41,23 @@ class RunStatusEnum(str, Enum):
     TIMEOUT = "timeout"
 
 
+# ============================================
+# Base Response Schemas
+# ============================================
+
+class BaseResponse(BaseModel):
+    """Base response schema with common fields."""
+    success: bool = True
+    message: Optional[str] = None
+
+
+class ErrorResponse(BaseModel):
+    """Error response schema."""
+    success: bool = False
+    error: str
+    detail: Optional[str] = None
+
+
 class EventTypeEnum(str, Enum):
     """Types of events that can be broadcast."""
     ANALYSIS_START = "analysis_start"
@@ -2863,20 +2880,6 @@ class DeterminismTestRequest(BaseModel):
                 "success_threshold": 7.0
             }
         }
-
-
-class DeterminismTestResponse(BaseModel):
-    """Schema for determinism test response."""
-    
-    test_id: str
-    scenario_id: str
-    pass_k_metrics: List[PassKMetricResponse]
-    reliability_grade: str
-    consistency_score: float
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class PassKMetricResponse(BaseModel):

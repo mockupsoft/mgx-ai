@@ -11,6 +11,7 @@ from .enums import (
     AgentMessageDirection,
     AgentStatus,
     ApprovalStatus,
+    FileApprovalStatus,
     ArtifactType,
     ArtifactBuildStatus,
     ContextRollbackState,
@@ -60,6 +61,9 @@ from .entities import (
     Workspace,
     WorkflowDefinition,
     WorkflowStep,
+    FileChange,
+    FileApproval,
+    ApprovalHistory,
     WorkflowVariable,
     WorkflowExecution,
     WorkflowStepExecution,
@@ -74,7 +78,9 @@ from .entities import (
     EscalationRule,
     EscalationEvent,
     EscalationMetric,
-    # AI Evaluation Framework
+)
+# AI Evaluation Framework - import from entities_evaluation
+from .entities_evaluation import (
     EvaluationScenario,
     EvaluationResult,
     RegressionTest,
@@ -158,4 +164,8 @@ __all__ = [
     "RegressionMetric",
     "EvaluationDashboard",
     "EvaluationAlert",
+    # File-level Approval Models
+    "FileChange",
+    "FileApproval",
+    "ApprovalHistory",
 ]
