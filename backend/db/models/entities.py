@@ -81,6 +81,10 @@ from .enums import (
     KnowledgeItemStatus,
     VectorDBProvider,
     EmbeddingModel,
+    EscalationSeverity,
+    EscalationReason,
+    EscalationStatus,
+    EscalationRuleType,
 )
 
 
@@ -2086,6 +2090,154 @@ class ADR(Base, TimestampMixin, SerializationMixin):
         return f"<ADR(id={self.id}, workspace_id='{self.workspace_id}', title='{self.title}', status='{self.status.value}')>"
 
 
+class EscalationRule(Base, TimestampMixin, SerializationMixin):
+    """Escalation rule definition for detecting and routing complex tasks."""
+    __tablename__ = "escalation_rules"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    rule_type = Column(SQLEnum(EscalationRuleType), nullable=False)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    priority = Column(Integer, nullable=False, default=0, comment="Higher priority rules evaluated first")
+    
+    # Rule condition (JSON-based rule expression)
+    condition = Column(JSON, nullable=False, comment="Rule condition logic")
+    
+    # Escalation configuration
+    severity = Column(SQLEnum(EscalationSeverity), nullable=False)
+    reason = Column(SQLEnum(EscalationReason), nullable=False)
+    target_agent_type = Column(String(100), nullable=True, comment="Target supervisor/manager agent type")
+    auto_assign = Column(Boolean, nullable=False, default=True, comment="Auto-assign to supervisor")
+    
+    # Notification configuration
+    notify_websocket = Column(Boolean, nullable=False, default=True)
+    notify_email = Column(Boolean, nullable=False, default=False)
+    notify_slack = Column(Boolean, nullable=False, default=False)
+    notification_config = Column(JSON, nullable=False, default=dict, comment="Additional notification settings")
+    
+    # Metadata
+    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    escalation_events = relationship("EscalationEvent", back_populates="rule", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index("idx_escalation_rules_workspace", "workspace_id"),
+        Index("idx_escalation_rules_project", "project_id"),
+        Index("idx_escalation_rules_is_enabled", "is_enabled"),
+        Index("idx_escalation_rules_priority", "priority"),
+        Index("idx_escalation_rules_severity", "severity"),
+        Index("idx_escalation_rules_reason", "reason"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<EscalationRule(id={self.id}, name='{self.name}', severity='{self.severity.value}', reason='{self.reason.value}')>"
+
+
+class EscalationEvent(Base, TimestampMixin, SerializationMixin):
+    """Tracks escalation events and their resolution."""
+    __tablename__ = "escalation_events"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)
+    
+    # Rule that triggered the escalation
+    rule_id = Column(String(36), ForeignKey("escalation_rules.id", ondelete="SET NULL"), nullable=True)
+    
+    # Context references
+    task_id = Column(String(36), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    task_run_id = Column(String(36), ForeignKey("task_runs.id", ondelete="SET NULL"), nullable=True)
+    workflow_execution_id = Column(String(36), ForeignKey("workflow_executions.id", ondelete="SET NULL"), nullable=True)
+    workflow_step_execution_id = Column(String(36), ForeignKey("workflow_step_executions.id", ondelete="SET NULL"), nullable=True)
+    
+    # Agent assignments
+    source_agent_id = Column(String(36), nullable=True, comment="Original agent that triggered escalation")
+    target_agent_id = Column(String(36), nullable=True, comment="Supervisor/manager agent assigned")
+    
+    # Escalation details
+    severity = Column(SQLEnum(EscalationSeverity), nullable=False)
+    reason = Column(SQLEnum(EscalationReason), nullable=False)
+    status = Column(SQLEnum(EscalationStatus), nullable=False, default=EscalationStatus.PENDING)
+    
+    # Escalation data
+    trigger_data = Column(JSON, nullable=False, default=dict, comment="Data that triggered the escalation")
+    context_data = Column(JSON, nullable=False, default=dict, comment="Additional context for resolution")
+    resolution_data = Column(JSON, nullable=True, comment="Resolution details")
+    
+    # Timestamps
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Performance tracking
+    time_to_assign_seconds = Column(Integer, nullable=True, comment="Time from creation to assignment")
+    time_to_resolve_seconds = Column(Integer, nullable=True, comment="Time from creation to resolution")
+    
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+    rule = relationship("EscalationRule", back_populates="escalation_events")
+    task = relationship("Task")
+    task_run = relationship("TaskRun")
+    workflow_execution = relationship("WorkflowExecution")
+    workflow_step_execution = relationship("WorkflowStepExecution")
+    metrics = relationship("EscalationMetric", back_populates="escalation_event", cascade="all, delete-orphan")
+    
+    __table_args__ = (
+        Index("idx_escalation_events_workspace", "workspace_id"),
+        Index("idx_escalation_events_project", "project_id"),
+        Index("idx_escalation_events_rule", "rule_id"),
+        Index("idx_escalation_events_task", "task_id"),
+        Index("idx_escalation_events_task_run", "task_run_id"),
+        Index("idx_escalation_events_workflow_execution", "workflow_execution_id"),
+        Index("idx_escalation_events_workflow_step_execution", "workflow_step_execution_id"),
+        Index("idx_escalation_events_severity", "severity"),
+        Index("idx_escalation_events_reason", "reason"),
+        Index("idx_escalation_events_status", "status"),
+        Index("idx_escalation_events_created_at", "created_at"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<EscalationEvent(id={self.id}, severity='{self.severity.value}', reason='{self.reason.value}', status='{self.status.value}')>"
+
+
+class EscalationMetric(Base, TimestampMixin, SerializationMixin):
+    """Performance metrics for escalation tracking and analysis."""
+    __tablename__ = "escalation_metrics"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    escalation_event_id = Column(String(36), ForeignKey("escalation_events.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False)
+    
+    metric_name = Column(String(255), nullable=False)
+    metric_value = Column(Float, nullable=False)
+    metric_unit = Column(String(50), nullable=True)
+    metric_tags = Column(JSON, nullable=False, default=dict)
+    
+    # Relationships
+    workspace = relationship("Workspace")
+    escalation_event = relationship("EscalationEvent", back_populates="metrics")
+    
+    __table_args__ = (
+        Index("idx_escalation_metrics_event", "escalation_event_id"),
+        Index("idx_escalation_metrics_workspace", "workspace_id"),
+        Index("idx_escalation_metrics_name", "metric_name"),
+        Index("idx_escalation_metrics_created_at", "created_at"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<EscalationMetric(id={self.id}, name='{self.metric_name}', value={self.metric_value})>"
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -2151,4 +2303,8 @@ __all__ = [
     "ADR",
     # Knowledge Base Models
     "KnowledgeItem",
+    # Escalation Models
+    "EscalationRule",
+    "EscalationEvent",
+    "EscalationMetric",
 ]

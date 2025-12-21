@@ -82,6 +82,12 @@ class EventTypeEnum(str, Enum):
     SANDBOX_EXECUTION_COMPLETED = "sandbox_execution_completed"
     SANDBOX_EXECUTION_FAILED = "sandbox_execution_failed"
     SANDBOX_EXECUTION_LOGS = "sandbox_execution_logs"
+    
+    # Escalation events
+    ESCALATION_CREATED = "escalation_created"
+    ESCALATION_ASSIGNED = "escalation_assigned"
+    ESCALATION_RESOLVED = "escalation_resolved"
+    ESCALATION_FAILED = "escalation_failed"
 
 
 # ============================================

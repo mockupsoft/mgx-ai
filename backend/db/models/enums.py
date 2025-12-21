@@ -635,3 +635,48 @@ class EmbeddingModel(str, Enum):
     HUGGINGFACE_ALL_MINILM_L6_V2 = "huggingface-all-MiniLM-L6-v2"
     SENTENCE_TRANSFORMERS_ALL_MPNET_BASE_V2 = "sentence-transformers-all-mpnet-base-v2"
     LOCAL_SENTENCE_TRANSFORMERS = "local-sentence-transformers"
+
+
+class EscalationSeverity(str, Enum):
+    """Severity levels for escalations."""
+
+    LOW = "low"  # Minor issues, informational escalations
+    MEDIUM = "medium"  # Moderate complexity or issues
+    HIGH = "high"  # Important issues requiring supervisor attention
+    CRITICAL = "critical"  # Critical issues requiring immediate action
+
+
+class EscalationReason(str, Enum):
+    """Reasons for task escalation."""
+
+    COMPLEXITY = "complexity"  # Task complexity exceeds threshold
+    ERROR_RATE = "error_rate"  # High error rate detected
+    RESOURCE_LIMIT = "resource_limit"  # Resource requirements exceed limits
+    TIMEOUT = "timeout"  # Task execution timeout
+    MANUAL = "manual"  # Manually triggered escalation
+    RETRY_EXHAUSTED = "retry_exhausted"  # Maximum retries exceeded
+    QUALITY_GATE_FAILED = "quality_gate_failed"  # Quality gate failure
+    SECURITY_VIOLATION = "security_violation"  # Security policy violation
+    POLICY_VIOLATION = "policy_violation"  # Business policy violation
+
+
+class EscalationStatus(str, Enum):
+    """Status of an escalation."""
+
+    PENDING = "pending"  # Escalation created, awaiting assignment
+    ASSIGNED = "assigned"  # Assigned to supervisor/manager agent
+    IN_PROGRESS = "in_progress"  # Escalation being handled
+    RESOLVED = "resolved"  # Escalation successfully resolved
+    FAILED = "failed"  # Escalation resolution failed
+    CANCELLED = "cancelled"  # Escalation cancelled
+    TIMEOUT = "timeout"  # Escalation timed out
+
+
+class EscalationRuleType(str, Enum):
+    """Types of escalation rules."""
+
+    THRESHOLD = "threshold"  # Threshold-based rule (e.g., complexity > 0.8)
+    PATTERN = "pattern"  # Pattern matching rule (e.g., error patterns)
+    TIME_BASED = "time_based"  # Time-based rule (e.g., duration > 1h)
+    RESOURCE_BASED = "resource_based"  # Resource-based rule (e.g., memory > 4GB)
+    COMPOSITE = "composite"  # Combination of multiple rules

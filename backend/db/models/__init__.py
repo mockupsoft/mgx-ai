@@ -31,6 +31,10 @@ from .enums import (
     ChecklistItemStatus,
     DeploymentEnvironment,
     DeploymentPhase,
+    EscalationSeverity,
+    EscalationReason,
+    EscalationStatus,
+    EscalationRuleType,
 )
 from .entities import (
     Artifact,
@@ -62,6 +66,9 @@ from .entities import (
     PreDeploymentChecklist,
     DeploymentSimulation,
     RollbackPlan,
+    EscalationRule,
+    EscalationEvent,
+    EscalationMetric,
 )
 
 __all__ = [
@@ -118,4 +125,11 @@ __all__ = [
     "PreDeploymentChecklist",
     "DeploymentSimulation",
     "RollbackPlan",
+    "EscalationSeverity",
+    "EscalationReason",
+    "EscalationStatus",
+    "EscalationRuleType",
+    "EscalationRule",
+    "EscalationEvent",
+    "EscalationMetric",
 ]
