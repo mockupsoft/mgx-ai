@@ -1,0 +1,112 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.cursor/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage*.txt
+coverage*.xml
+missing_*.txt
+
+# Logging
+*.log
+logs/
+
+# Output files
+output/
+results/
+
+# Performance reports (generated artifacts)
+perf_reports/latest.json
+perf_reports/before_after.md
+
+# Temporary files
+*.tmp
+*.bak
+*.bak_*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Config secrets
+config_*.yaml
+*.key
+*.pem
+
+# Environment files (never commit .env with secrets)
+.env
+.env.local
+.env.*.local
+.env.*.secret
+!.env.example
+
+# Docker volumes and artifacts
+minio_data/
+kafka_data/
+zookeeper_data/
+
+# Project specific
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage*
+htmlcov/
+coverage.xml
+dist/
+build/
+*.egg-info/
+
+# Node.js
+node_modules/
+npm-debug.log
+
+# CLI Config
+.mgx/
+
+# Frontend build
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/test-results/
+frontend/playwright-report/
+
