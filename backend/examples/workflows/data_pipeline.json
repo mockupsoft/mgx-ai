@@ -1,0 +1,139 @@
+{
+  "name": "Data Pipeline Workflow",
+  "description": "A workflow for data extraction, transformation, and loading (ETL)",
+  "config": {
+    "pipeline_type": "etl",
+    "error_handling": "continue_on_error"
+  },
+  "timeout_seconds": 7200,
+  "max_retries": 5,
+  "variables": [
+    {
+      "name": "source_url",
+      "data_type": "string",
+      "is_required": true,
+      "description": "URL of the data source",
+      "metadata": {}
+    },
+    {
+      "name": "destination_table",
+      "data_type": "string",
+      "is_required": true,
+      "description": "Target table name in the data warehouse",
+      "metadata": {}
+    },
+    {
+      "name": "batch_size",
+      "data_type": "int",
+      "is_required": false,
+      "default_value": 1000,
+      "description": "Batch size for processing",
+      "metadata": {}
+    },
+    {
+      "name": "transformations",
+      "data_type": "json",
+      "is_required": false,
+      "description": "Data transformation rules",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "validate_source",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 600,
+      "config": {
+        "description": "Validate data source availability and connectivity"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "category": "validation"
+      }
+    },
+    {
+      "name": "extract_data",
+      "step_type": "task",
+      "step_order": 2,
+      "timeout_seconds": 3600,
+      "config": {
+        "description": "Extract data from source",
+        "streaming": true
+      },
+      "depends_on_steps": ["validate_source"],
+      "metadata": {
+        "category": "extraction"
+      }
+    },
+    {
+      "name": "transform_data",
+      "step_type": "task",
+      "step_order": 3,
+      "timeout_seconds": 3600,
+      "config": {
+        "description": "Apply transformations to extracted data",
+        "processing_type": "data_transformation"
+      },
+      "depends_on_steps": ["extract_data"],
+      "metadata": {
+        "category": "transformation"
+      }
+    },
+    {
+      "name": "validate_transformation",
+      "step_type": "condition",
+      "step_order": 4,
+      "timeout_seconds": 600,
+      "config": {
+        "description": "Validate transformed data quality (placeholder)"
+      },
+      "depends_on_steps": ["transform_data"],
+      "metadata": {
+        "category": "quality_check"
+      }
+    },
+    {
+      "name": "load_data",
+      "step_type": "task",
+      "step_order": 5,
+      "timeout_seconds": 3600,
+      "config": {
+        "description": "Load transformed data into destination"
+      },
+      "depends_on_steps": ["validate_transformation"],
+      "metadata": {
+        "category": "loading"
+      }
+    },
+    {
+      "name": "post_load_validation",
+      "step_type": "task",
+      "step_order": 6,
+      "timeout_seconds": 600,
+      "config": {
+        "description": "Validate loaded data integrity"
+      },
+      "depends_on_steps": ["load_data"],
+      "metadata": {
+        "category": "validation"
+      }
+    },
+    {
+      "name": "cleanup",
+      "step_type": "task",
+      "step_order": 7,
+      "timeout_seconds": 300,
+      "config": {
+        "description": "Clean up temporary resources"
+      },
+      "depends_on_steps": ["post_load_validation"],
+      "metadata": {
+        "category": "cleanup"
+      }
+    }
+  ],
+  "metadata": {
+    "template": "data_pipeline"
+  }
+}

@@ -1,0 +1,304 @@
+# LLM Fallback Chain Configurations
+# Define fallback chains for different scenarios
+
+chains:
+  # High quality chain - best models, highest cost
+  high_quality:
+    - provider: openai
+      model: gpt-4
+      description: "Highest quality reasoning and code generation"
+    - provider: anthropic
+      model: claude-3-opus
+      description: "High quality with long context support"
+    - provider: mistral
+      model: mistral-large
+      description: "High quality multilingual support"
+    - provider: together
+      model: meta-llama/Llama-2-70b-chat-hf
+      description: "High quality open-source"
+
+  # Cost optimized chain - cheapest models
+  cost_optimized:
+    - provider: openai
+      model: gpt-3.5-turbo
+      description: "Fast and cost-effective"
+    - provider: anthropic
+      model: claude-3-haiku
+      description: "Very cost-effective with good quality"
+    - provider: mistral
+      model: mistral-tiny
+      description: "Extremely cost-effective"
+    - provider: together
+      model: mistralai/Mistral-7B-Instruct-v0.2
+      description: "Cost-effective open-source"
+    - provider: ollama
+      model: mistral
+      description: "Free local execution"
+
+  # Fast latency chain - fastest response times
+  fast_latency:
+    - provider: openai
+      model: gpt-3.5-turbo
+      description: "Very fast response (500ms)"
+    - provider: anthropic
+      model: claude-3-haiku
+      description: "Fast response (500ms)"
+    - provider: mistral
+      model: mistral-small
+      description: "Fast response (800ms)"
+    - provider: ollama
+      model: mistral
+      description: "Local execution (4000ms)"
+
+  # Local only chain - privacy-focused
+  local_only:
+    - provider: ollama
+      model: mistral
+      description: "Local Mistral model"
+    - provider: ollama
+      model: llama2
+      description: "Local Llama 2 model"
+    - provider: ollama
+      model: codellama
+      description: "Local code-specialized model"
+    - provider: ollama
+      model: llama2:13b
+      description: "Larger Llama 2 variant"
+
+  # Code generation chain - optimized for coding tasks
+  code_generation:
+    - provider: openai
+      model: gpt-4
+      description: "Best for complex code generation"
+    - provider: anthropic
+      model: claude-3-sonnet
+      description: "Excellent code understanding"
+    - provider: together
+      model: codellama/CodeLlama-34b-Instruct-hf
+      description: "Specialized for code"
+    - provider: ollama
+      model: codellama
+      description: "Local code model"
+
+  # Long context chain - for large documents
+  long_context:
+    - provider: anthropic
+      model: claude-3-sonnet
+      description: "200K token context window"
+    - provider: anthropic
+      model: claude-3-haiku
+      description: "200K token context window"
+    - provider: openai
+      model: gpt-4-turbo
+      description: "128K token context window"
+    - provider: mistral
+      model: mistral-medium
+      description: "32K token context window"
+
+  # Balanced chain - good mix of quality, cost, and latency
+  balanced:
+    - provider: openai
+      model: gpt-3.5-turbo
+      description: "Good balance of all factors"
+    - provider: anthropic
+      model: claude-3-sonnet
+      description: "High quality at reasonable cost"
+    - provider: mistral
+      model: mistral-medium
+      description: "Good performance and value"
+    - provider: together
+      model: mistralai/Mistral-7B-Instruct-v0.2
+      description: "Cost-effective option"
+    - provider: ollama
+      model: mistral
+      description: "Free fallback"
+
+  # Analysis chain - optimized for reasoning and analysis
+  analysis:
+    - provider: openai
+      model: gpt-4
+      description: "Best reasoning capabilities"
+    - provider: anthropic
+      model: claude-3-opus
+      description: "Excellent analysis and reasoning"
+    - provider: anthropic
+      model: claude-3-sonnet
+      description: "Good analysis at lower cost"
+    - provider: mistral
+      model: mistral-large
+      description: "Strong analytical capabilities"
+
+  # Simple tasks chain - optimized for basic operations
+  simple_tasks:
+    - provider: anthropic
+      model: claude-3-haiku
+      description: "Fast and cheap"
+    - provider: openai
+      model: gpt-3.5-turbo
+      description: "Quick responses"
+    - provider: mistral
+      model: mistral-tiny
+      description: "Very economical"
+    - provider: ollama
+      model: llama2
+      description: "Free local option"
+
+# Provider-specific settings
+providers:
+  openai:
+    timeout_seconds: 60
+    max_retries: 3
+    retry_delay_seconds: 2
+    models:
+      - gpt-4
+      - gpt-4-turbo
+      - gpt-3.5-turbo
+
+  anthropic:
+    timeout_seconds: 90
+    max_retries: 3
+    retry_delay_seconds: 2
+    models:
+      - claude-3-opus
+      - claude-3-sonnet
+      - claude-3-haiku
+
+  mistral:
+    timeout_seconds: 60
+    max_retries: 3
+    retry_delay_seconds: 2
+    models:
+      - mistral-large
+      - mistral-medium
+      - mistral-small
+      - mistral-tiny
+
+  ollama:
+    timeout_seconds: 300
+    max_retries: 2
+    retry_delay_seconds: 5
+    connection_check: true
+    models:
+      - mistral
+      - llama2
+      - llama2:13b
+      - llama2:70b
+      - codellama
+      - codellama:13b
+
+  together:
+    timeout_seconds: 120
+    max_retries: 3
+    retry_delay_seconds: 2
+    models:
+      - mistralai/Mistral-7B-Instruct-v0.2
+      - codellama/CodeLlama-34b-Instruct-hf
+      - meta-llama/Llama-2-70b-chat-hf
+
+# Routing strategies configuration
+routing:
+  default_strategy: balanced
+  
+  strategies:
+    cost_optimized:
+      prefer_chain: cost_optimized
+      max_cost_per_1k: 0.01
+      exclude_expensive: true
+    
+    latency_optimized:
+      prefer_chain: fast_latency
+      max_latency_ms: 3000
+      prefer_streaming: true
+    
+    quality_optimized:
+      prefer_chain: high_quality
+      min_context_window: 8000
+      prefer_reasoning: true
+    
+    local_first:
+      prefer_chain: local_only
+      fallback_to_cloud: true
+      privacy_mode: true
+    
+    balanced:
+      prefer_chain: balanced
+      cost_weight: 0.33
+      latency_weight: 0.33
+      quality_weight: 0.34
+
+# Capability-based routing
+capabilities:
+  code_generation:
+    required_capabilities:
+      - code
+    preferred_chain: code_generation
+    temperature: 0.5
+  
+  analysis:
+    required_capabilities:
+      - reasoning
+      - analysis
+    preferred_chain: analysis
+    temperature: 0.7
+  
+  long_documents:
+    required_capabilities:
+      - long_context
+    preferred_chain: long_context
+    min_context_window: 32000
+  
+  simple_tasks:
+    preferred_chain: simple_tasks
+    max_tokens: 500
+    temperature: 0.8
+
+# Budget management
+budget:
+  enable_tracking: true
+  alert_thresholds:
+    - 0.5  # 50%
+    - 0.8  # 80%
+    - 0.9  # 90%
+  
+  auto_downgrade:
+    enabled: true
+    threshold: 0.9  # Switch to cheaper models at 90% budget
+    fallback_chain: cost_optimized
+  
+  block_on_exceeded:
+    enabled: false
+    allow_local: true  # Still allow local models even if budget exceeded
+
+# Monitoring and metrics
+monitoring:
+  track_usage: true
+  track_latency: true
+  track_costs: true
+  track_errors: true
+  
+  retention_days:
+    usage_stats: 90
+    error_logs: 30
+    performance_metrics: 60
+  
+  alerts:
+    high_error_rate:
+      threshold: 0.1  # 10%
+      window_minutes: 15
+    
+    high_latency:
+      threshold_ms: 5000
+      window_minutes: 15
+    
+    provider_down:
+      consecutive_failures: 3
+      notify: true
+
+# Feature flags
+features:
+  enable_fallback: true
+  enable_streaming: true
+  enable_caching: false  # Response caching
+  enable_retry: true
+  enable_budget_enforcement: true
+  enable_local_models: true

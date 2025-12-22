@@ -1,0 +1,64 @@
+import { Router, Request, Response } from 'express';
+
+const router = Router();
+
+/**
+ * @route GET /health
+ * @desc Health check endpoint
+ * @access Public
+ */
+router.get('/', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: process.env.npm_package_version || '1.0.0',
+    memory: process.memoryUsage(),
+    cpu: process.cpuUsage()
+  });
+});
+
+/**
+ * @route GET /health/ready
+ * @desc Readiness probe endpoint
+ * @access Public
+ */
+router.get('/ready', async (req: Request, res: Response) => {
+  const checks = {
+    database: true, // Add actual DB health check
+    cache: true, // Add actual cache health check
+    external_services: true // Add external service health checks
+  };
+
+  const allReady = Object.values(checks).every(check => check === true);
+
+  if (allReady) {
+    res.status(200).json({
+      status: 'READY',
+      timestamp: new Date().toISOString(),
+      checks
+    });
+  } else {
+    res.status(503).json({
+      status: 'NOT_READY',
+      timestamp: new Date().toISOString(),
+      checks
+    });
+  }
+});
+
+/**
+ * @route GET /health/live
+ * @desc Liveness probe endpoint
+ * @access Public
+ */
+router.get('/live', (req: Request, res: Response) => {
+  res.status(200).json({
+    status: 'ALIVE',
+    timestamp: new Date().toISOString(),
+    pid: process.pid
+  });
+});
+
+export default router;

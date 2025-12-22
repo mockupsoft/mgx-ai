@@ -1,0 +1,67 @@
+{
+  "name": "Multi-Agent Chain",
+  "description": "A sequential chain of agent steps using different assignment strategies",
+  "config": {},
+  "timeout_seconds": 5400,
+  "max_retries": 2,
+  "variables": [
+    {
+      "name": "input",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Initial input payload",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "agent_step_1",
+      "step_type": "agent",
+      "step_order": 1,
+      "timeout_seconds": 900,
+      "max_retries": 1,
+      "config": {
+        "description": "First agent step",
+        "assignment_strategy": "round_robin"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "stage": 1
+      }
+    },
+    {
+      "name": "agent_step_2",
+      "step_type": "agent",
+      "step_order": 2,
+      "timeout_seconds": 900,
+      "max_retries": 1,
+      "config": {
+        "description": "Second agent step",
+        "assignment_strategy": "least_loaded"
+      },
+      "depends_on_steps": ["agent_step_1"],
+      "metadata": {
+        "stage": 2
+      }
+    },
+    {
+      "name": "agent_step_3",
+      "step_type": "agent",
+      "step_order": 3,
+      "timeout_seconds": 900,
+      "max_retries": 1,
+      "config": {
+        "description": "Third agent step",
+        "assignment_strategy": "capability_match",
+        "required_capabilities": ["analysis"]
+      },
+      "depends_on_steps": ["agent_step_2"],
+      "metadata": {
+        "stage": 3
+      }
+    }
+  ],
+  "metadata": {
+    "template": "multi_agent_chain"
+  }
+}

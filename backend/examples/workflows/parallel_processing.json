@@ -1,0 +1,94 @@
+{
+  "name": "Parallel Processing Workflow",
+  "description": "A workflow that processes data in parallel branches before merging results",
+  "config": {},
+  "timeout_seconds": 5400,
+  "max_retries": 2,
+  "variables": [
+    {
+      "name": "input_data",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input data to be processed in parallel",
+      "metadata": {}
+    },
+    {
+      "name": "num_workers",
+      "data_type": "int",
+      "is_required": false,
+      "default_value": 3,
+      "description": "Number of parallel branches",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "data_preparation",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 300,
+      "config": {
+        "description": "Prepare and split data for parallel processing"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "category": "preparation"
+      }
+    },
+    {
+      "name": "branch_a",
+      "step_type": "parallel",
+      "step_order": 2,
+      "timeout_seconds": 1800,
+      "config": {
+        "description": "Process first branch of data"
+      },
+      "depends_on_steps": ["data_preparation"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "branch_b",
+      "step_type": "parallel",
+      "step_order": 2,
+      "timeout_seconds": 1800,
+      "config": {
+        "description": "Process second branch of data"
+      },
+      "depends_on_steps": ["data_preparation"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "branch_c",
+      "step_type": "parallel",
+      "step_order": 2,
+      "timeout_seconds": 1800,
+      "config": {
+        "description": "Process third branch of data"
+      },
+      "depends_on_steps": ["data_preparation"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "merge_results",
+      "step_type": "task",
+      "step_order": 3,
+      "timeout_seconds": 600,
+      "config": {
+        "description": "Merge results from all parallel branches"
+      },
+      "depends_on_steps": ["branch_a", "branch_b", "branch_c"],
+      "metadata": {
+        "category": "aggregation"
+      }
+    }
+  ],
+  "metadata": {
+    "template": "parallel_processing"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "task": "Create Docker and docker-compose setup for a Node.js API with PostgreSQL database",
+  "target_stack": "devops-docker",
+  "project_type": "devops",
+  "output_mode": "generate_new",
+  "constraints": [
+    "Multi-stage Dockerfile for Node.js",
+    "PostgreSQL service in docker-compose",
+    "Health checks for services",
+    "Volume mounts for persistence"
+  ],
+  "strict_requirements": false
+}

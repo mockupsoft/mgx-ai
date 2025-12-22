@@ -1,0 +1,72 @@
+{
+  "name": "Basic Sequence Workflow",
+  "description": "A simple sequential workflow demonstrating three steps in order",
+  "config": {},
+  "timeout_seconds": 3600,
+  "max_retries": 3,
+  "variables": [
+    {
+      "name": "input_data",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input data for the workflow",
+      "metadata": {}
+    },
+    {
+      "name": "processing_mode",
+      "data_type": "string",
+      "is_required": false,
+      "default_value": "standard",
+      "description": "Processing mode: standard, fast, or thorough",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "initialize",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 300,
+      "max_retries": 0,
+      "config": {
+        "description": "Initialize the workflow and validate inputs"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "category": "setup"
+      }
+    },
+    {
+      "name": "process",
+      "step_type": "task",
+      "step_order": 2,
+      "timeout_seconds": 1800,
+      "max_retries": 2,
+      "config": {
+        "description": "Main processing step",
+        "processing_type": "data_transformation"
+      },
+      "depends_on_steps": ["initialize"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "finalize",
+      "step_type": "task",
+      "step_order": 3,
+      "timeout_seconds": 300,
+      "max_retries": 0,
+      "config": {
+        "description": "Finalize and output results"
+      },
+      "depends_on_steps": ["process"],
+      "metadata": {
+        "category": "cleanup"
+      }
+    }
+  ],
+  "metadata": {
+    "template": "basic_sequence"
+  }
+}

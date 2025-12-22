@@ -1,0 +1,551 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.0, pytest-9.0.2, pluggy-1.6.0 -- C:\laragon\bin\python\python-3.13\python.exe
+cachedir: .pytest_cache
+rootdir: C:\laragon\www\ai-team\backend
+configfile: pytest.ini
+plugins: asyncio-1.3.0, cov-7.0.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 291 items
+
+tests/integration/test_team.py::TestTaskSpecManagement::test_set_task_spec PASSED [  0%]
+tests/integration/test_team.py::TestTaskSpecManagement::test_get_task_spec_empty PASSED [  0%]
+tests/integration/test_team.py::TestTaskSpecManagement::test_set_task_spec_revision_mode PASSED [  1%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_xs PASSED [  1%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_s PASSED [  1%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_m PASSED [  2%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_l PASSED [  2%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_xl PASSED [  2%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_unknown_defaults_to_xs PASSED [  3%]
+tests/integration/test_team.py::TestBudgetTuning::test_tune_budget_respects_multiplier PASSED [  3%]
+tests/integration/test_team.py::TestComplexityParsing::test_get_complexity_from_json PASSED [  3%]
+tests/integration/test_team.py::TestComplexityParsing::test_get_complexity_defaults_to_m PASSED [  4%]
+tests/integration/test_team.py::TestComplexityParsing::test_get_complexity_from_plan_content PASSED [  4%]
+tests/integration/test_team.py::TestMemoryCleanup::test_cleanup_memory_trims_memory_log PASSED [  4%]
+tests/integration/test_team.py::TestMemoryCleanup::test_cleanup_memory_trims_progress PASSED [  5%]
+tests/integration/test_team.py::TestMemoryCleanup::test_cleanup_memory_delegates_to_adapter PASSED [  5%]
+tests/integration/test_team.py::TestMemoryCleanup::test_cleanup_memory_respects_config_flag PASSED [  5%]
+tests/integration/test_team.py::TestTokenUsageCalculation::test_calculate_token_usage_basic PASSED [  6%]
+tests/integration/test_team.py::TestTokenUsageCalculation::test_calculate_token_usage_no_cost_manager PASSED [  6%]
+tests/integration/test_team.py::TestTokenUsageCalculation::test_calculate_token_usage_missing_attributes PASSED [  6%]
+tests/integration/test_team.py::TestResultsCollectionAndSaving::test_collect_raw_results_basic PASSED [  7%]
+tests/integration/test_team.py::TestResultsCollectionAndSaving::test_save_results_to_file PASSED [  7%]
+tests/integration/test_team.py::TestResultsCollectionAndSaving::test_save_results_creates_backup PASSED [  7%]
+tests/integration/test_team.py::TestResultsCollectionAndSaving::test_save_results_with_metrics PASSED [  8%]
+tests/integration/test_team.py::TestUserFacingHelpers::test_show_memory_log PASSED [  8%]
+tests/integration/test_team.py::TestUserFacingHelpers::test_show_memory_log_empty PASSED [  8%]
+tests/integration/test_team.py::TestUserFacingHelpers::test_get_progress PASSED [  9%]
+tests/integration/test_team.py::TestUserFacingHelpers::test_get_progress_empty PASSED [  9%]
+tests/integration/test_team.py::TestUserFacingHelpers::test_get_metrics_summary PASSED [  9%]
+tests/integration/test_team.py::TestUserFacingHelpers::test_get_metrics_summary_disabled PASSED [ 10%]
+tests/integration/test_team.py::TestAnalyzeAndPlanWorkflow::test_analyze_and_plan_basic PASSED [ 10%]
+tests/integration/test_team.py::TestAnalyzeAndPlanWorkflow::test_analyze_and_plan_sets_current_task PASSED [ 10%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_requires_plan_approval PASSED [ 11%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_basic_workflow PASSED [ 11%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_revision_loop_on_review_failure PASSED [ 12%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_exceeds_max_revision_rounds PASSED [ 12%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_without_plan_approval_auto_approve PASSED [ 12%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_revision_loop_review_approved PASSED [ 13%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_revision_loop_duplicate_hash PASSED [ 13%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_team_run_exception PASSED [ 13%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_with_profiler_enabled PASSED [ 14%]
+tests/integration/test_team.py::TestExecuteWorkflow::test_execute_with_metrics_disabled PASSED [ 14%]
+tests/integration/test_team.py::TestIncrementalExecution::test_run_incremental_basic PASSED [ 14%]
+tests/integration/test_team.py::TestIncrementalExecution::test_run_incremental_bug_fix_mode PASSED [ 15%]
+tests/integration/test_team.py::TestIncrementalExecution::test_run_incremental_cancelled_by_user PASSED [ 15%]
+tests/integration/test_team.py::TestConfigManagement::test_get_config PASSED [ 15%]
+tests/integration/test_team.py::TestConfigManagement::test_update_config PASSED [ 16%]
+tests/integration/test_team.py::TestConfigManagement::test_update_config_invalid_key PASSED [ 16%]
+tests/integration/test_team.py::TestTeamNegativeCases::test_execute_without_task PASSED [ 16%]
+tests/integration/test_team.py::TestTeamNegativeCases::test_save_results_with_io_error PASSED [ 17%]
+tests/integration/test_team.py::TestTeamNegativeCases::test_cleanup_memory_with_invalid_roles PASSED [ 17%]
+tests/integration/test_team.py::TestConcurrencyBehavior::test_analyze_and_plan_concurrent_calls PASSED [ 17%]
+tests/integration/test_team.py::TestConcurrencyBehavior::test_execute_async_exception_handling PASSED [ 18%]
+tests/integration/test_team.py::TestMemoryTrimmingEdgeCases::test_cleanup_memory_exactly_at_limit PASSED [ 18%]
+tests/integration/test_team.py::TestMemoryTrimmingEdgeCases::test_cleanup_memory_empty_log PASSED [ 18%]
+tests/integration/test_team.py::TestCacheOperations::test_cache_clear PASSED [ 19%]
+tests/integration/test_team.py::TestCacheOperations::test_clear_cache_alias PASSED [ 19%]
+tests/integration/test_team.py::TestCacheOperations::test_cache_inspect PASSED [ 19%]
+tests/integration/test_team.py::TestCacheOperations::test_inspect_cache_alias PASSED [ 20%]
+tests/integration/test_team.py::TestCacheOperations::test_cache_warm PASSED [ 20%]
+tests/integration/test_team.py::TestCacheOperations::test_warm_cache_alias PASSED [ 20%]
+tests/integration/test_team.py::TestCacheOperations::test_cache_warm_disabled_cache PASSED [ 21%]
+tests/integration/test_team.py::TestConfigSerialization::test_config_to_dict PASSED [ 21%]
+tests/integration/test_team.py::TestConfigSerialization::test_config_from_dict PASSED [ 21%]
+tests/integration/test_team.py::TestConfigSerialization::test_config_from_yaml PASSED [ 22%]
+tests/integration/test_team.py::TestConfigSerialization::test_config_save_yaml PASSED [ 22%]
+tests/integration/test_team.py::TestMetricsMethods::test_get_all_metrics_empty PASSED [ 23%]
+tests/integration/test_team.py::TestMetricsMethods::test_get_all_metrics_with_data PASSED [ 23%]
+tests/integration/test_team.py::TestMetricsMethods::test_get_metrics_summary_no_metrics PASSED [ 23%]
+tests/integration/test_team.py::TestMetricsMethods::test_get_metrics_summary_with_metrics PASSED [ 24%]
+tests/integration/test_team.py::TestMetricsMethods::test_get_phase_timings PASSED [ 24%]
+tests/integration/test_team.py::TestMetricsMethods::test_show_phase_timings PASSED [ 24%]
+tests/integration/test_team.py::TestFileOperations::test_safe_write_file_creates_directory PASSED [ 25%]
+tests/integration/test_team.py::TestFileOperations::test_safe_write_file_creates_backup PASSED [ 25%]
+tests/integration/test_team.py::TestFileOperations::test_save_results_creates_files PASSED [ 25%]
+tests/integration/test_team.py::TestProjectOperations::test_list_project_files PASSED [ 26%]
+tests/integration/test_team.py::TestProjectOperations::test_list_project_files_nonexistent PASSED [ 26%]
+tests/integration/test_team.py::TestProjectOperations::test_get_project_summary PASSED [ 26%]
+tests/integration/test_team.py::TestProgressAndMemory::test_get_progress PASSED [ 27%]
+tests/integration/test_team.py::TestProgressAndMemory::test_get_progress_empty PASSED [ 27%]
+tests/integration/test_team.py::TestProgressAndMemory::test_show_memory_log PASSED [ 27%]
+tests/integration/test_team.py::TestProgressAndMemory::test_show_memory_log_empty PASSED [ 28%]
+tests/integration/test_team.py::TestProfilerMethods::test_start_profiler PASSED [ 28%]
+tests/integration/test_team.py::TestProfilerMethods::test_end_profiler PASSED [ 28%]
+tests/integration/test_team.py::TestMultiLLMVerification::test_verify_multi_llm_setup_same_models PASSED [ 29%]
+tests/integration/test_team.py::TestTaskMetricsMethods::test_task_metrics_duration_seconds PASSED [ 29%]
+tests/integration/test_team.py::TestTaskMetricsMethods::test_task_metrics_duration_formatted PASSED [ 29%]
+tests/integration/test_team.py::TestTaskMetricsMethods::test_task_metrics_to_dict PASSED [ 30%]
+tests/integration/test_team.py::TestCachedLLMCall::test_cached_llm_call_cache_hit PASSED [ 30%]
+tests/integration/test_team.py::TestCachedLLMCall::test_cached_llm_call_cache_miss PASSED [ 30%]
+tests/integration/test_team.py::TestCachedLLMCall::test_cached_llm_call_bypass_cache PASSED [ 31%]
+tests/integration/test_team.py::TestCachedLLMCall::test_cached_llm_call_with_encode_decode PASSED [ 31%]
+tests/integration/test_team.py::TestCachedLLMCall::test_cached_llm_call_human_reviewer_bypass PASSED [ 31%]
+tests/integration/test_team.py::TestCachedLLMCall::test_cached_llm_call_cache_exception PASSED [ 32%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_without_plan_approval PASSED [ 32%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_with_auto_approve_plan PASSED [ 32%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_with_custom_n_round PASSED [ 33%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_revision_loop_limit PASSED [ 33%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_with_empty_review PASSED [ 34%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_with_duplicate_review_hash PASSED [ 34%]
+tests/integration/test_team.py::TestExecuteEdgeCases::test_execute_error_handling PASSED [ 34%]
+tests/integration/test_team.py::TestRunIncremental::test_run_incremental_feature_add PASSED [ 35%]
+tests/integration/test_team.py::TestRunIncremental::test_run_incremental_bug_fix PASSED [ 35%]
+tests/integration/test_team.py::TestRunIncremental::test_run_incremental_non_interactive PASSED [ 35%]
+tests/integration/test_team.py::TestRunIncremental::test_run_incremental_with_project_path PASSED [ 36%]
+tests/integration/test_team.py::TestRunIncremental::test_run_incremental_user_cancellation PASSED [ 36%]
+tests/integration/test_team.py::TestRunIncremental::test_add_feature_wrapper PASSED [ 36%]
+tests/integration/test_team.py::TestRunIncremental::test_fix_bug_wrapper PASSED [ 37%]
+tests/integration/test_team.py::TestSyncTaskSpec::test_sync_task_spec_from_plan_json_parsing PASSED [ 37%]
+tests/integration/test_team.py::TestSyncTaskSpec::test_sync_task_spec_from_plan_fallback PASSED [ 37%]
+tests/integration/test_team.py::TestSyncTaskSpec::test_sync_task_spec_from_plan_with_plan_section PASSED [ 38%]
+tests/integration/test_team.py::TestCacheBackends::test_init_cache_disabled PASSED [ 38%]
+tests/integration/test_team.py::TestCacheBackends::test_init_cache_global_cache PASSED [ 38%]
+tests/integration/test_team.py::TestCacheBackends::test_init_cache_redis_backend PASSED [ 39%]
+tests/integration/test_team.py::TestCacheBackends::test_init_cache_redis_no_url PASSED [ 39%]
+tests/integration/test_team.py::TestCollectResults::test_collect_raw_results_with_all_roles PASSED [ 39%]
+tests/integration/test_team.py::TestCollectResults::test_collect_raw_results_with_missing_roles PASSED [ 40%]
+tests/integration/test_team.py::TestCollectResults::test_collect_raw_results_empty_messages PASSED [ 40%]
+tests/integration/test_team.py::TestMetricsReporting::test_show_metrics_report_formatting PASSED [ 40%]
+tests/integration/test_team.py::TestMetricsReporting::test_show_metrics_report_with_error PASSED [ 41%]
+tests/integration/test_team.py::TestMetricsReporting::test_show_metrics_report_with_cache_stats PASSED [ 41%]
+tests/integration/test_team.py::TestHelperMethods::test_collect_results_basic PASSED [ 41%]
+tests/integration/test_team.py::TestHelperMethods::test_collect_results_empty PASSED [ 42%]
+tests/integration/test_team.py::TestHelperMethods::test_log_config_verbose PASSED [ 42%]
+tests/integration/test_team.py::TestHelperMethods::test_log_config_non_verbose PASSED [ 42%]
+tests/integration/test_team.py::TestLogMethod::test_log_method_info_level PASSED [ 43%]
+tests/integration/test_team.py::TestLogMethod::test_log_method_debug_level_verbose PASSED [ 43%]
+tests/integration/test_team.py::TestLogMethod::test_log_method_debug_level_non_verbose PASSED [ 43%]
+tests/integration/test_team.py::TestLogMethod::test_log_method_warning_level PASSED [ 44%]
+tests/integration/test_team.py::TestLogMethod::test_log_method_error_level PASSED [ 44%]
+tests/integration/test_team.py::TestPrintProgress::test_print_progress_disabled PASSED [ 45%]
+tests/integration/test_team.py::TestPrintProgress::test_print_progress_enabled PASSED [ 45%]
+tests/integration/test_team.py::TestPrintProgress::test_print_progress_completion PASSED [ 45%]
+tests/integration/test_team.py::TestMultiLLMLogging::test_multi_llm_logging_with_human_reviewer PASSED [ 46%]
+tests/integration/test_team.py::TestMultiLLMLogging::test_multi_llm_logging_without_human_reviewer PASSED [ 46%]
+tests/integration/test_team.py::TestMultiLLMLogging::test_multi_llm_config_exception_handling PASSED [ 46%]
+tests/integration/test_team.py::TestAnalyzeAndPlanCacheHit::test_analyze_and_plan_cache_hit_with_profiler PASSED [ 47%]
+tests/integration/test_team.py::TestAnalyzeAndPlanCacheHit::test_analyze_and_plan_cache_hit_profiler_exception PASSED [ 47%]
+tests/integration/test_team.py::TestAnalyzeAndPlanCacheHit::test_analyze_and_plan_cache_hit_dict_format PASSED [ 47%]
+tests/integration/test_team.py::TestAnalyzeAndPlanCacheHit::test_analyze_and_plan_cache_hit_string_format PASSED [ 48%]
+tests/integration/test_team.py::TestAnalyzeAndPlanCacheHit::test_analyze_and_plan_cache_hit_auto_approve PASSED [ 48%]
+tests/integration/test_team.py::TestAnalyzeAndPlanCacheHit::test_analyze_and_plan_cache_hit_no_auto_approve PASSED [ 48%]
+tests/integration/test_team.py::TestVerifyMultiLLMLLMInfoExtraction::test_verify_multi_llm_llm_info_model_name PASSED [ 49%]
+tests/integration/test_team.py::TestVerifyMultiLLMLLMInfoExtraction::test_verify_multi_llm_llm_info_class_name PASSED [ 49%]
+tests/integration/test_team.py::TestVerifyMultiLLMLLMInfoExtraction::test_verify_multi_llm_llm_info_unknown PASSED [ 49%]
+tests/integration/test_team.py::TestMainFunctions::test_main_function_basic PASSED [ 50%]
+tests/integration/test_team.py::TestMainFunctions::test_main_function_human_reviewer PASSED [ 50%]
+tests/integration/test_team.py::TestMainFunctions::test_main_function_custom_task PASSED [ 50%]
+tests/integration/test_team.py::TestMainFunctions::test_incremental_main_basic PASSED [ 51%]
+tests/integration/test_team.py::TestMainFunctions::test_incremental_main_fix_bug PASSED [ 51%]
+tests/integration/test_team.py::TestMainFunctions::test_incremental_main_project_path PASSED [ 51%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_add_feature_with_project_path PASSED [ 52%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_add_feature_with_no_confirm PASSED [ 52%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_fix_bug_with_project_path PASSED [ 52%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_fix_bug_with_no_confirm PASSED [ 53%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_with_human PASSED [ 53%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_with_task PASSED [ 53%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_with_human_and_task PASSED [ 54%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_no_args PASSED [ 54%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_asyncio_run_calls PASSED [ 54%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_print_messages PASSED [ 55%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_argument_parser_setup PASSED [ 55%]
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations PASSED [ 56%]
+tests/integration/test_team.py::TestHelperFunctions::test_print_step_progress_with_team_ref PASSED [ 56%]
+tests/integration/test_team.py::TestHelperFunctions::test_print_step_progress_fallback PASSED [ 56%]
+tests/integration/test_team.py::TestHelperFunctions::test_print_step_progress_complete PASSED [ 57%]
+tests/integration/test_team.py::TestTeamInitializationEdgeCases::test_team_init_with_roles_override PASSED [ 57%]
+tests/integration/test_team.py::TestTeamInitializationEdgeCases::test_team_init_role_setup_exception_handling PASSED [ 57%]
+tests/integration/test_team.py::TestTeamInitializationEdgeCases::test_team_init_roles_list_edge_cases PASSED [ 58%]
+tests/integration/test_team.py::TestTeamInitializationEdgeCases::test_team_init_multi_llm_exception_handling PASSED [ 58%]
+tests/integration/test_team.py::TestTeamTaskMetrics::test_task_metrics_duration_formatted_seconds PASSED [ 58%]
+tests/integration/test_team.py::TestTeamTaskMetrics::test_task_metrics_duration_formatted_minutes PASSED [ 59%]
+tests/integration/test_team.py::TestTeamTaskMetrics::test_task_metrics_duration_formatted_hours PASSED [ 59%]
+tests/integration/test_team.py::test_integration_team_assertion_count PASSED [ 59%]
+tests/integration/test_roles.py::TestRelevantMemoryMixin::test_get_relevant_memories_with_filter PASSED [ 60%]
+tests/integration/test_roles.py::TestRelevantMemoryMixin::test_get_relevant_memories_with_limit PASSED [ 60%]
+tests/integration/test_roles.py::TestRelevantMemoryMixin::test_get_relevant_memories_no_memory_store PASSED [ 60%]
+tests/integration/test_roles.py::TestRelevantMemoryMixin::test_get_last_by_role_and_action PASSED [ 61%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_initialization PASSED [ 61%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_complete_planning PASSED [ 61%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_act_after_planning_complete PASSED [ 62%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_observe_after_planning_complete PASSED [ 62%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_observe_planning_phase_false PASSED [ 62%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_analyze_task_with_cache PASSED [ 63%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_analyze_task_json_format PASSED [ 63%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_analyze_task_compute_without_team_ref PASSED [ 63%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_analyze_task_compute_calls_actions PASSED [ 64%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_analyze_task_sets_task_spec PASSED [ 64%]
+tests/integration/test_roles.py::TestMikeRole::test_mike_analyze_task_sync_task_spec_exception PASSED [ 64%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_initialization PASSED [ 65%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_uses_team_ref_for_task_spec PASSED [ 65%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_memory_fallback PASSED [ 65%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_revision_detection PASSED [ 66%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_fallback_to_memory_scan PASSED [ 66%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_fallback_plain_text_plan PASSED [ 67%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_revision_from_improvement_message PASSED [ 67%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_revision_from_improvement_message_asil_is PASSED [ 67%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_json_parse_exception PASSED [ 68%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_edge_cases PASSED [ 68%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_multiple_separators PASSED [ 68%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_task_at_different_positions PASSED [ 69%]
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_task_with_separator_chars PASSED [ 69%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_duration_seconds_with_end_time PASSED [ 69%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_duration_seconds_without_end_time PASSED [ 70%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_duration_formatted_seconds PASSED [ 70%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_duration_formatted_minutes PASSED [ 70%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_duration_formatted_hours PASSED [ 71%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_to_dict_all_fields PASSED [ 71%]
+tests/integration/test_roles.py::TestTaskMetrics::test_task_metrics_to_dict_with_error PASSED [ 71%]
+tests/integration/test_roles.py::TestBobRole::test_bob_initialization PASSED [ 72%]
+tests/integration/test_roles.py::TestBobRole::test_bob_gets_code_from_alex PASSED [ 72%]
+tests/integration/test_roles.py::TestBobRole::test_bob_act_memory_fallback_no_code PASSED [ 72%]
+tests/integration/test_roles.py::TestBobRole::test_bob_act_cached_llm_call PASSED [ 73%]
+tests/integration/test_roles.py::TestBobRole::test_bob_act_direct_compute_no_cache PASSED [ 73%]
+tests/integration/test_roles.py::TestBobRole::test_bob_test_limit_enforcement PASSED [ 73%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_initialization_llm_mode PASSED [ 74%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_initialization_human_mode PASSED [ 74%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_llm_review_mode PASSED [ 74%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_human_mode_with_input PASSED [ 75%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_human_mode_empty_input PASSED [ 75%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_human_mode_long_code_truncation PASSED [ 75%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_human_mode_eof_error PASSED [ 76%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_human_mode_keyboard_interrupt PASSED [ 76%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_human_mode_missing_result_format PASSED [ 76%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_llm_mode_cached_call PASSED [ 77%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_act_fallback_memory_scan PASSED [ 77%]
+tests/integration/test_roles.py::TestCharlieRole::test_charlie_observe_debug_logging FAILED [ 78%]
+
+================================== FAILURES ===================================
+_____________ TestCharlieRole.test_charlie_observe_debug_logging ______________
+tests\integration\test_roles.py:1502: in test_charlie_observe_debug_logging
+    return result
+           ^^^^^^
+E   UnboundLocalError: cannot access local variable 'result' where it is not associated with a value
+----------------------------- Captured log setup ------------------------------
+DEBUG    asyncio:proactor_events.py:631 Using proactor: IocpProactor
+============================== warnings summary ===============================
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_add_feature_with_no_confirm
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_with_task
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object AsyncMockMixin._execute_mock_call at 0x00000183412F1A40>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_with_task
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x00000183413349D0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_normal_mode_with_task
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341335E00>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_print_messages
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object AsyncMockMixin._execute_mock_call at 0x00000183412F3140>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_print_messages
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object AsyncMockMixin._execute_mock_call at 0x00000183412F1840>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_print_messages
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object AsyncMockMixin._execute_mock_call at 0x00000183412F1E40>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_print_messages
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object AsyncMockMixin._execute_mock_call at 0x00000183412F1D40>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341334BF0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341337120>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341335360>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341335580>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341335BE0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341336350>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object main at 0x000001834130A6B0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object main at 0x0000018341308C70>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object main at 0x000001834130A890>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object main at 0x0000018340B757B0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object main at 0x0000018341308310>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object main at 0x00000183413097B0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_team.py::TestTeamCLIMain::test_cli_main_all_argument_combinations
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x00000183413358B0>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_multiple_separators
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341336F00>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_multiple_separators
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object AsyncMockMixin._execute_mock_call at 0x00000183412F1540>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+tests/integration/test_roles.py::TestAlexRole::test_alex_act_improvement_message_multiple_separators
+  C:\laragon\bin\python\python-3.13\Lib\site-packages\_pytest\unraisableexception.py:67: PytestUnraisableExceptionWarning: Exception ignored in: <coroutine object incremental_main at 0x0000018341336130>
+  
+  Traceback (most recent call last):
+    File "C:\laragon\bin\python\python-3.13\Lib\warnings.py", line 692, in _warn_unawaited_coroutine
+      warn(msg, category=RuntimeWarning, stacklevel=2, source=coro)
+      ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  RuntimeWarning: coroutine 'incremental_main' was never awaited
+  
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+    warnings.warn(pytest.PytestUnraisableExceptionWarning(msg))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/integration/test_roles.py::TestCharlieRole::test_charlie_observe_debug_logging
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+================= 1 failed, 226 passed, 24 warnings in 3.56s ==================

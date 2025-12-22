@@ -1,0 +1,13 @@
+{
+  "task": "Create a simple Express TypeScript REST API with user CRUD endpoints",
+  "target_stack": "express-ts",
+  "project_type": "api",
+  "output_mode": "generate_new",
+  "constraints": [
+    "Use TypeScript",
+    "Include error handling middleware",
+    "Add input validation",
+    "Include .env configuration"
+  ],
+  "strict_requirements": false
+}

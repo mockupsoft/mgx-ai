@@ -1,0 +1,50 @@
+# Pre-commit hooks configuration for PHP projects (Laravel)
+#
+# Installation:
+#   composer require --dev friendsofphp/php-cs-fixer
+#   composer require --dev phpstan/phpstan
+#   pre-commit install
+#   pre-commit run --all-files
+#
+# Or use Husky + Composer scripts:
+#   composer require --dev husky
+#   vendor/bin/husky install
+#   vendor/bin/husky add .husky/pre-commit "composer run lint"
+
+repos:
+  # PHP formatting with Pint (Laravel preset)
+  - repo: https://github.com/laravel-pint/laravel-pint
+    rev: 'v1.13.0'
+    hooks:
+      - id: pint
+        args: ['--preset=laravel']
+
+  # Static analysis with PHPStan (optional)
+  - repo: https://github.com/phpstan/phpstan-pre-commit
+    rev: '1.10.46'
+    hooks:
+      - id: phpstan
+        args: ['analyse', '--level=8']
+
+  # General checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 'v4.5.0'
+    hooks:
+      - id: trailing-whitespace
+        types: [php]
+      - id: end-of-file-fixer
+        types: [php]
+      - id: check-yaml
+      - id: check-json
+      - id: check-merge-conflict
+
+# Exclude patterns
+exclude: |
+  (?x)^(
+    vendor/|
+    node_modules/|
+    build/|
+    dist/|
+    storage/|
+    bootstrap/cache/
+  )

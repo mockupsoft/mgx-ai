@@ -1,0 +1,31 @@
+{
+  "generated_at_s": 0,
+  "results": {
+    "cache": {
+      "hit_rate": 1.0,
+      "hits": 10,
+      "misses": 0
+    },
+    "latency_s": {
+      "max": 1.2,
+      "mean": 0.5,
+      "p50": 0.5,
+      "p95": 1.0
+    },
+    "memory_kb": {
+      "tracemalloc_peak_kb_max": 40000.0,
+      "tracemalloc_peak_kb_p95": 30000.0
+    },
+    "top_timers": [],
+    "total_runs": 10,
+    "throughput_runs_per_s": 10.0,
+    "wall_time_s": 1.0
+  },
+  "scenario": {
+    "concurrency": 5,
+    "llm_latency_s": 0.01,
+    "runs": 10,
+    "task": "Write a tiny pure function and unit tests"
+  },
+  "schema_version": 1
+}
