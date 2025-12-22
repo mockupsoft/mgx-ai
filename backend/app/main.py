@@ -51,6 +51,12 @@ from backend.routers import (
     escalation_router,
     observability_router,
     file_approvals_router,
+    webhooks_router,
+    pull_requests_router,
+    issues_router,
+    activity_router,
+    branches_router,
+    diffs_router,
 )
 
 # Import database session factory and workflow engine integration
@@ -349,6 +355,24 @@ def create_app() -> FastAPI:
     
     app.include_router(file_approvals_router)
     logger.info("✓ Registered: file_approvals_router")
+    
+    app.include_router(webhooks_router)
+    logger.info("✓ Registered: webhooks_router")
+    
+    app.include_router(pull_requests_router)
+    logger.info("✓ Registered: pull_requests_router")
+    
+    app.include_router(issues_router)
+    logger.info("✓ Registered: issues_router")
+    
+    app.include_router(activity_router)
+    logger.info("✓ Registered: activity_router")
+    
+    app.include_router(branches_router)
+    logger.info("✓ Registered: branches_router")
+    
+    app.include_router(diffs_router)
+    logger.info("✓ Registered: diffs_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])

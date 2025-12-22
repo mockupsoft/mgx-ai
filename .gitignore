@@ -25,7 +25,8 @@ wheels/
 venv/
 ENV/
 env/
-.venv
+.venv/
+.venv_new/
 
 # IDE
 .vscode/
@@ -38,8 +39,10 @@ env/
 # Testing
 .pytest_cache/
 .coverage
+.coverage
 htmlcov/
 coverage*.txt
+coverage.xml
 coverage*.xml
 missing_*.txt
 

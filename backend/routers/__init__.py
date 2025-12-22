@@ -29,6 +29,14 @@ from .agents import router as agents_router
 from .workflows import router as workflows_router
 from .ws import router as ws_router
 
+# GitHub integration routers
+from .webhooks import router as webhooks_router
+from .pull_requests import router as pull_requests_router
+from .issues import router as issues_router
+from .activity import router as activity_router
+from .branches import router as branches_router
+from .diffs import router as diffs_router
+
 
 __all__ = [
     "sandbox", 
@@ -56,4 +64,10 @@ __all__ = [
     "agents_router",
     "workflows_router",
     "ws_router",
+    "webhooks_router",
+    "pull_requests_router",
+    "issues_router",
+    "activity_router",
+    "branches_router",
+    "diffs_router",
 ]

@@ -2399,6 +2399,89 @@ class ApprovalHistory(Base, TimestampMixin, SerializationMixin):
         return f"<ApprovalHistory(id={self.id}, action_type='{self.action_type}', new_status='{self.new_status}')>"
 
 
+class GitHubWebhookEvent(Base, TimestampMixin, SerializationMixin):
+    """GitHub webhook event storage for audit and replay."""
+
+    __tablename__ = "github_webhook_events"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+
+    delivery_id = Column(
+        String(255),
+        nullable=False,
+        unique=True,
+        index=True,
+        comment="GitHub delivery ID (unique per webhook delivery)",
+    )
+
+    event_type = Column(
+        String(100),
+        nullable=False,
+        index=True,
+        comment="GitHub event type (push, pull_request, issues, etc.)",
+    )
+
+    repository_id = Column(
+        String(36),
+        ForeignKey("repository_links.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Linked repository link ID (if matched)",
+    )
+
+    repo_full_name = Column(
+        String(255),
+        nullable=True,
+        index=True,
+        comment="Repository full name from webhook payload",
+    )
+
+    payload = Column(
+        JSON,
+        nullable=False,
+        comment="Full webhook payload (JSON)",
+    )
+
+    parsed_data = Column(
+        JSON,
+        nullable=True,
+        comment="Parsed event data (extracted fields)",
+    )
+
+    processed = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+        comment="Whether event was successfully processed",
+    )
+
+    processed_at = Column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When event was processed",
+    )
+
+    error_message = Column(
+        Text,
+        nullable=True,
+        comment="Error message if processing failed",
+    )
+
+    __table_args__ = (
+        Index("idx_webhook_events_delivery_id", "delivery_id"),
+        Index("idx_webhook_events_event_type", "event_type"),
+        Index("idx_webhook_events_repo_full_name", "repo_full_name"),
+        Index("idx_webhook_events_created_at", "created_at"),
+        Index("idx_webhook_events_processed", "processed"),
+    )
+
+    repository_link = relationship("RepositoryLink", foreign_keys=[repository_id])
+
+    def __repr__(self) -> str:
+        return f"<GitHubWebhookEvent(id={self.id}, delivery_id='{self.delivery_id}', event_type='{self.event_type}')>"
+
+
 __all__ = [
     "Workspace",
     "Project",
@@ -2472,4 +2555,6 @@ __all__ = [
     "FileChange",
     "FileApproval",
     "ApprovalHistory",
+    # GitHub Integration Models
+    "GitHubWebhookEvent",
 ]
