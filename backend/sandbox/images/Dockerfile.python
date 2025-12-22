@@ -1,0 +1,38 @@
+# Python 3.10 sandbox base image with security hardening
+FROM python:3.10-slim
+
+# Install essential packages and security updates
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    wget \
+    git \
+    build-essential \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create sandbox user with non-root privileges
+RUN groupadd -g 1000 sandbox && \
+    useradd -m -u 1000 -g sandbox sandbox
+
+# Set working directory
+WORKDIR /workspace
+
+# Switch to non-root user
+USER sandbox
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install common Python testing frameworks
+RUN pip install --user pytest pytest-cov pytest-xdist \
+    unittest-xml-reporting \
+    coverage \
+    flake8 \
+    black \
+    mypy
+
+# Default command
+CMD ["python", "main.py"]

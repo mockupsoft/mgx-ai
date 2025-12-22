@@ -1,263 +1,407 @@
 # -*- coding: utf-8 -*-
-"""Backend test configuration.
+"""
+Pytest Configuration and Global Fixtures
 
-The upstream project test suite under ``backend/tests`` is intended to be runnable
-without external services (Postgres, Docker daemon, hosted LLMs, GitHub).
-
-This conftest provides:
-- MetaGPT stubs (so importing ``mgx_agent`` does not require the real metagpt pkg)
-- In-memory SQLite database fixtures for both async and sync SQLAlchemy
-- A FastAPI TestClient with dependency overrides
+This conftest.py file provides:
+- Global test configuration
+- MetaGPT stub registration in sys.modules
+- Reusable fixtures for tests
+- Event loop setup for async tests
+- Logging configuration
 """
 
-from __future__ import annotations
-
 import sys
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from pathlib import Path
 from typing import AsyncGenerator, Generator
 
-# ---------------------------------------------------------------------------
-# MetaGPT stubs (shared with root tests)
-# ---------------------------------------------------------------------------
+import pytest
 
-import sys
-from pathlib import Path
-# Ensure project root is first in sys.path to allow importing 'tests' from root
-project_root = str(Path(__file__).parents[2])
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
-elif sys.path.index(project_root) > 0:
-    sys.path.remove(project_root)
-    sys.path.insert(0, project_root)
+# ============================================
+# Register MetaGPT Stubs in sys.modules
+# ============================================
+# This allows tests to import MetaGPT components without the real package
 
-print("SYS PATH:", sys.path)
-if 'tests' in sys.modules and sys.modules['tests'].__file__ != str(Path(project_root) / 'tests' / '__init__.py'):
-    print(f"Removing {sys.modules['tests'].__file__} from sys.modules")
-    del sys.modules['tests']
-
-import tests
-print("TESTS FILE:", tests.__file__)
-from tests.helpers.metagpt_stubs import (  # noqa: E402
+from tests.helpers.metagpt_stubs import (
     MockAction,
-    MockContext,
-    MockMessage,
-    MockMemory,
     MockRole,
     MockTeam,
+    MockMessage,
     mock_logger,
+    MockMemory,
+    MockContext,
+    MockLLMResponse,
+    MessageRole,
 )
 
-
+# Create stub modules
 class MetaGPTStub:
+    """Stub for metagpt module."""
     Action = MockAction
     Role = MockRole
     Team = MockTeam
 
 
 class MetaGPTActionsStub:
+    """Stub for metagpt.actions module."""
     Action = MockAction
 
 
 class MetaGPTRolesStub:
+    """Stub for metagpt.roles module."""
     Role = MockRole
 
 
 class MetaGPTTeamStub:
+    """Stub for metagpt.team module."""
+    
     Team = MockTeam
 
 
 class MetaGPTLogsStub:
+    """Stub for metagpt.logs module."""
     logger = mock_logger
 
 
 class MetaGPTTypesStub:
+    """Stub for metagpt.types module."""
     Message = MockMessage
 
 
 class MetaGPTSchemaStub:
+    """Stub for metagpt.schema module."""
     Message = MockMessage
 
 
 class MetaGPTContextStub:
+    """Stub for metagpt.context module."""
+    
     Context = MockContext
 
 
 class MetaGPTConfigStub:
+    """Stub for metagpt.config module."""
+    
     class Config:
+        """Stub Config class for MetaGPT."""
+        
         @staticmethod
         def from_home(filename: str):
+            """Mock from_home method."""
             mock_config = MockContext()
             mock_config.model = f"mock-model-{filename}"
             return mock_config
 
 
-sys.modules.setdefault("metagpt", MetaGPTStub())
-sys.modules.setdefault("metagpt.actions", MetaGPTActionsStub())
-sys.modules.setdefault("metagpt.roles", MetaGPTRolesStub())
-sys.modules.setdefault("metagpt.team", MetaGPTTeamStub())
-sys.modules.setdefault("metagpt.logs", MetaGPTLogsStub())
-sys.modules.setdefault("metagpt.types", MetaGPTTypesStub())
-sys.modules.setdefault("metagpt.schema", MetaGPTSchemaStub())
-sys.modules.setdefault("metagpt.context", MetaGPTContextStub())
-sys.modules.setdefault("metagpt.config", MetaGPTConfigStub())
+# Register stubs before any imports that might use MetaGPT
+sys.modules['metagpt'] = MetaGPTStub()
+sys.modules['metagpt.actions'] = MetaGPTActionsStub()
+sys.modules['metagpt.roles'] = MetaGPTRolesStub()
+sys.modules['metagpt.team'] = MetaGPTTeamStub()
+sys.modules['metagpt.logs'] = MetaGPTLogsStub()
+sys.modules['metagpt.types'] = MetaGPTTypesStub()
+sys.modules['metagpt.schema'] = MetaGPTSchemaStub()
+sys.modules['metagpt.context'] = MetaGPTContextStub()
+sys.modules['metagpt.config'] = MetaGPTConfigStub()
 
-# Stub pydantic_settings if missing
-try:
-    import pydantic_settings
-except ImportError:
-    from pydantic import BaseModel
-    class MockBaseSettings(BaseModel):
-        pass
-        
-    class MockPydanticSettings:
-        BaseSettings = MockBaseSettings
-        
-    sys.modules.setdefault("pydantic_settings", MockPydanticSettings())
 
-import pytest
-try:
-    from fastapi.testclient import TestClient
-    from backend.app.main import create_app
-except ImportError:
-    TestClient = None
-    create_app = None
-    print("WARNING: FastAPI not found, skipping API tests configuration")
-
-import inspect
-import asyncio
-
-# Simple async test runner if pytest-asyncio is missing
-try:
-    import pytest_asyncio
-except ImportError:
-    def pytest_pyfunc_call(pyfuncitem):
-        if inspect.iscoroutinefunction(pyfuncitem.obj):
-            funcargs = pyfuncitem.funcargs
-            testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}
-            asyncio.run(pyfuncitem.obj(**testargs))
-            return True
-        return None
-
-from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from backend.db.models import Base
-from backend.db.session import get_db, get_session
-
+# ============================================
+# Logging Configuration
+# ============================================
 
 @pytest.fixture(scope="session")
-def sync_engine():
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
+def setup_logging():
+    """Configure logging for test session."""
+    # Create tests directory if it doesn't exist
+    tests_dir = Path(__file__).parent
+    logs_dir = tests_dir / "logs"
+    logs_dir.mkdir(exist_ok=True)
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s [%(levelname)8s] %(name)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
     )
-    Base.metadata.create_all(engine)
-    return engine
+    
+    # Create file handler for test logs
+    log_file = logs_dir / "pytest.log"
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)8s] %(name)s - %(message)s'
+    )
+    file_handler.setFormatter(formatter)
+    
+    logging.getLogger().addHandler(file_handler)
+    
+    yield
+    
+    # Cleanup
+    file_handler.close()
 
 
-@pytest.fixture(scope="session")
-def sync_session_factory(sync_engine) -> sessionmaker[Session]:
-    return sessionmaker(bind=sync_engine, autoflush=False, autocommit=False)
-
+# ============================================
+# Event Loop Fixtures
+# ============================================
 
 @pytest.fixture(scope="function")
-def sync_db(sync_session_factory) -> Generator[Session, None, None]:
-    session = sync_session_factory()
-    try:
-        yield session
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+def event_loop() -> Generator:
+    """
+    Create an event loop for async tests.
+    
+    This fixture ensures each test gets its own isolated event loop,
+    preventing issues with event loop state between tests.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    yield loop
+    
+    # Cleanup pending tasks
+    pending = asyncio.all_tasks(loop)
+    for task in pending:
+        task.cancel()
+    
+    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    loop.close()
 
 
-@pytest.fixture(scope="session")
-def async_engine():
-    try:
-        engine = create_async_engine(
-            "sqlite+aiosqlite:///:memory:",
-            connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
+# ============================================
+# Team and Role Fixtures
+# ============================================
+
+@pytest.fixture
+def fake_team():
+    """
+    Provide a fake team for testing.
+    
+    Returns a MockTeam instance with 4 default roles.
+    """
+    from tests.helpers.factories import create_fake_team
+    return create_fake_team(num_roles=4)
+
+
+@pytest.fixture
+def fake_team_with_custom_roles():
+    """
+    Factory fixture for creating fake teams with custom roles.
+    
+    Usage:
+        def test_something(fake_team_with_custom_roles):
+            team = fake_team_with_custom_roles(
+                role_names=["Engineer", "Tester", "Reviewer"]
+            )
+    """
+    from tests.helpers.factories import create_fake_team
+    
+    def _create_team(
+        name: str = "TestTeam",
+        role_names: list = None,
+        num_roles: int = 4,
+    ):
+        return create_fake_team(
+            name=name,
+            num_roles=num_roles,
+            role_names=role_names,
         )
-        return engine
-    except ImportError:
-        return None
+    
+    return _create_team
 
 
-@pytest.fixture(scope="session", autouse=True)
-async def _create_async_schema(async_engine):
-    if async_engine is None:
-        return
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+@pytest.fixture
+def fake_role():
+    """
+    Provide a fake role for testing.
+    
+    Returns a MockRole instance with 2 default actions.
+    """
+    from tests.helpers.factories import create_fake_role
+    return create_fake_role(num_actions=2)
 
 
-@pytest.fixture(scope="session")
-def async_session_factory(async_engine) -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(bind=async_engine, expire_on_commit=False, autoflush=True)
+# ============================================
+# Memory and Message Fixtures
+# ============================================
+
+@pytest.fixture
+def fake_memory():
+    """
+    Provide a fake memory store for testing.
+    
+    Returns an empty MockMemory instance.
+    """
+    from tests.helpers.factories import create_fake_memory_store
+    return create_fake_memory_store()
 
 
-@pytest.fixture(scope="function")
-async def db_session(async_session_factory) -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+@pytest.fixture
+def fake_memory_with_data():
+    """
+    Provide a fake memory store with initial data.
+    
+    Returns a MockMemory with sample data and messages.
+    """
+    from tests.helpers.factories import (
+        create_fake_memory_store,
+        create_fake_message,
+    )
+    
+    messages = [
+        create_fake_message(role="user", content="Hello"),
+        create_fake_message(role="assistant", content="Hi there"),
+    ]
+    
+    return create_fake_memory_store(
+        initial_data={
+            "task": "Test Task",
+            "status": "in_progress",
+            "iterations": 0,
+        },
+        initial_messages=messages,
+    )
 
 
-@pytest.fixture(scope="function")
-async def test_db_session(db_session: AsyncSession) -> AsyncSession:
-    return db_session
+@pytest.fixture
+def fake_message():
+    """
+    Provide a factory for creating fake messages.
+    
+    Usage:
+        def test_something(fake_message):
+            msg = fake_message(role="user", content="Test")
+    """
+    from tests.helpers.factories import create_fake_message
+    return create_fake_message
 
 
-@pytest.fixture(scope="function")
-def app(sync_session_factory, async_session_factory):
-    if create_app is None:
-        pytest.skip("FastAPI not installed")
-    app = create_app()
+# ============================================
+# LLM Response Fixtures
+# ============================================
 
-    @asynccontextmanager
-    async def _no_lifespan(_app):
-        yield
-
-    # Disable lifespan side-effects (background workers, etc.) for unit/integration tests.
-    app.router.lifespan_context = _no_lifespan
-
-    async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-        async with async_session_factory() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
-    def override_get_db() -> Generator[Session, None, None]:
-        session = sync_session_factory()
-        try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            session.close()
-
-    app.dependency_overrides[get_session] = override_get_session
-    app.dependency_overrides[get_db] = override_get_db
-
-    return app
+@pytest.fixture
+def fake_llm_response():
+    """
+    Provide a factory for creating fake LLM responses.
+    
+    Usage:
+        def test_something(fake_llm_response):
+            response = fake_llm_response(content="Generated code")
+    """
+    from tests.helpers.factories import create_fake_llm_response
+    return create_fake_llm_response
 
 
-@pytest.fixture(scope="function")
-def client(app):
-    with TestClient(app) as client:
-        yield client
+@pytest.fixture
+def async_mock_llm():
+    """
+    Provide a factory for creating async mock LLM callables.
+    
+    Usage:
+        def test_something(async_mock_llm):
+            mock = async_mock_llm(responses=["Response 1", "Response 2"])
+            result = await mock("prompt")
+    """
+    from tests.helpers.factories import create_async_mock_llm
+    return create_async_mock_llm
+
+
+# ============================================
+# Output Directory Fixtures
+# ============================================
+
+@pytest.fixture
+def tmp_output_dir(tmp_path):
+    """
+    Provide a temporary output directory for tests.
+    
+    Cleans up automatically after test.
+    """
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+    return output_dir
+
+
+@pytest.fixture
+def tmp_logs_dir(tmp_path):
+    """
+    Provide a temporary logs directory for tests.
+    
+    Cleans up automatically after test.
+    """
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    return logs_dir
+
+
+# ============================================
+# Caplog Configuration
+# ============================================
+
+@pytest.fixture
+def caplog_setup(caplog):
+    """
+    Configure caplog with appropriate settings.
+    
+    Sets log level to DEBUG to capture all messages.
+    """
+    caplog.set_level(logging.DEBUG)
+    return caplog
+
+
+# ============================================
+# Pytest Hooks
+# ============================================
+
+def pytest_configure(config):
+    """
+    Pytest hook for initial configuration.
+    
+    Adds custom markers and initializes test environment.
+    """
+    # Ensure logs directory exists
+    logs_dir = Path(__file__).parent / "logs"
+    logs_dir.mkdir(exist_ok=True)
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Pytest hook for modifying collected items.
+    
+    Automatically marks asyncio tests.
+    """
+    for item in items:
+        # Check if test is async
+        if asyncio.iscoroutinefunction(item.function):
+            item.add_marker(pytest.mark.asyncio)
+
+
+@pytest.fixture(autouse=True)
+def reset_mock_logger():
+    """
+    Automatically reset mock logger before each test.
+    
+    Prevents test isolation issues.
+    """
+    mock_logger.clear()
+    yield
+    mock_logger.clear()
+
+
+__all__ = [
+    # Fixtures
+    'setup_logging',
+    'event_loop',
+    'fake_team',
+    'fake_team_with_custom_roles',
+    'fake_role',
+    'fake_memory',
+    'fake_memory_with_data',
+    'fake_message',
+    'fake_llm_response',
+    'async_mock_llm',
+    'tmp_output_dir',
+    'tmp_logs_dir',
+    'caplog_setup',
+]

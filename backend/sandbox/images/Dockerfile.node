@@ -1,0 +1,41 @@
+# Node.js 18 sandbox base image with security hardening
+FROM node:18-alpine
+
+# Install essential packages
+RUN apk add --no-cache \
+    git \
+    python3 \
+    make \
+    g++
+
+# Create sandbox user with non-root privileges
+RUN addgroup -g 1000 -S sandbox && \
+    adduser -S sandbox -G sandbox
+
+# Set working directory
+WORKDIR /workspace
+
+# Switch to non-root user
+USER sandbox
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NPM_CONFIG_LOGLEVEL=warn \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false
+
+# Install global packages for testing
+RUN npm install -g --silent \
+    jest \
+    mocha \
+    chai \
+    eslint \
+    prettier \
+    typescript \
+    ts-node
+
+# Create package.json template for easy testing
+RUN echo '{"name":"sandbox-app","version":"1.0.0","main":"index.js","scripts":{"test":"jest","build":"tsc"}}' > package.json
+
+# Default command
+CMD ["node", "index.js"]

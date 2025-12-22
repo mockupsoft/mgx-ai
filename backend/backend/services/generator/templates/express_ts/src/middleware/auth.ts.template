@@ -1,0 +1,91 @@
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { logger } from '../utils/logger';
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: string;
+  };
+}
+
+/**
+ * Authentication middleware
+ */
+export const authenticate = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({
+        error: 'Access denied',
+        message: 'No token provided'
+      });
+    }
+
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) {
+      logger.error('JWT_SECRET not configured');
+      return res.status(500).json({
+        error: 'Server configuration error'
+      });
+    }
+
+    const decoded = jwt.verify(token, jwtSecret) as any;
+    req.user = decoded;
+    next();
+
+  } catch (error) {
+    logger.warn('Token verification failed', { error: error.message });
+    res.status(401).json({
+      error: 'Invalid token',
+      message: 'Please log in again'
+    });
+  }
+};
+
+/**
+ * Authorization middleware - check user role
+ */
+export const requireRole = (roles: string[]) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Authentication required'
+      });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        error: 'Insufficient permissions',
+        message: 'You do not have permission to access this resource'
+      });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Optional authentication - sets user if token is valid, but doesn't require it
+ */
+export const optionalAuth = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+
+    if (token) {
+      const jwtSecret = process.env.JWT_SECRET;
+      if (jwtSecret) {
+        const decoded = jwt.verify(token, jwtSecret) as any;
+        req.user = decoded;
+      }
+    }
+
+    next();
+
+  } catch (error) {
+    // Continue without authentication
+    next();
+  }
+};

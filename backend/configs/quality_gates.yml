@@ -1,0 +1,231 @@
+# Quality Gate Configuration
+# This file defines the default quality gates and their thresholds
+
+gates:
+  lint:
+    enabled: true
+    blocking: true
+    fail_on_error: true
+    fail_on_warning: false
+    max_warnings: 10
+    description: "Code linting using ESLint, Ruff, and Pint"
+    tools:
+      javascript:
+        enabled: true
+        command: "npx eslint --format json"
+        file_patterns: ["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]
+        max_errors: 0
+        max_warnings: 10
+      python:
+        enabled: true
+        command: "ruff check --format json"
+        file_patterns: ["**/*.py"]
+        max_errors: 0
+        max_warnings: 5
+      php:
+        enabled: true
+        command: "pint --format=json"
+        file_patterns: ["**/*.php"]
+        max_errors: 0
+        max_warnings: 5
+
+  coverage:
+    enabled: true
+    blocking: true
+    min_percentage: 80
+    exclude_patterns: 
+      - "**/generated/**"
+      - "**/tests/**"
+      - "**/migrations/**"
+      - "**/node_modules/**"
+      - "**/__pycache__/**"
+      - "**/.venv/**"
+    description: "Test coverage enforcement"
+    tools:
+      python:
+        enabled: true
+        command: "pytest --cov --cov-report=json --cov-report=term"
+        coverage_file: "coverage.json"
+      javascript:
+        enabled: true
+        command: "npm test -- --coverage --coverageReporters=json --coverageReporters=text"
+        coverage_file: "coverage/coverage-summary.json"
+      php:
+        enabled: true
+        command: "phpunit --coverage-clover coverage.xml"
+        coverage_file: "coverage.xml"
+
+  contract:
+    enabled: true
+    blocking: true
+    description: "API endpoint contract testing"
+    endpoints:
+      - path: "/health"
+        method: "GET"
+        expected_status: 200
+        timeout_ms: 5000
+        response_schema:
+          type: "object"
+          required: ["status"]
+      - path: "/api/v1/status"
+        method: "GET"
+        expected_status: 200
+        timeout_ms: 3000
+        response_schema:
+          type: "object"
+          required: ["version", "status"]
+    validation:
+      strict_mode: false
+      allow_additional_properties: true
+
+  performance:
+    enabled: true
+    blocking: true
+    max_response_time_ms: 500
+    min_throughput_rps: 100
+    max_memory_mb: 512
+    max_cpu_percent: 80
+    description: "Performance smoke tests"
+    tests:
+      response_time:
+        enabled: true
+        threshold_ms: 500
+        concurrent_requests: 10
+        duration_seconds: 30
+      throughput:
+        enabled: true
+        min_rps: 100
+        duration_seconds: 60
+      memory:
+        enabled: true
+        max_mb: 512
+      cpu:
+        enabled: true
+        max_percent: 80
+
+  security:
+    enabled: true
+    blocking: true
+    allow_dev_dependencies: false
+    critical_only: false
+    description: "Security audit and vulnerability scanning"
+    tools:
+      dependency_audit:
+        enabled: true
+        npm_audit: true
+        pip_audit: true
+        composer_audit: true
+        critical_vulnerabilities: 0
+        high_vulnerabilities: 0
+        medium_vulnerabilities: 5
+        low_vulnerabilities: 10
+      code_scan:
+        enabled: true
+        semgrep:
+          enabled: true
+          rules: ["owasp-top-ten", "security-audit"]
+        sonar_embedded: true
+        hardcoded_secrets: true
+      license_check:
+        enabled: true
+        allowed_licenses:
+          - "MIT"
+          - "Apache-2.0"
+          - "BSD-2-Clause"
+          - "BSD-3-Clause"
+          - "ISC"
+        blocked_licenses:
+          - "GPL-3.0"
+          - "AGPL-3.0"
+          - "LGPL-3.0"
+
+  complexity:
+    enabled: true
+    blocking: true
+    max_cyclomatic: 10
+    max_cognitive: 15
+    max_lines_per_function: 50
+    max_nesting_level: 4
+    exclude_patterns:
+      - "**/generated/**"
+      - "**/tests/**"
+    description: "Code complexity limits"
+    tools:
+      radon:
+        enabled: true
+        command: "radon cc --show-complexity --average"
+        threshold_a: 5
+        threshold_b: 10
+        threshold_c: 15
+      eslint_complexity:
+        enabled: true
+        max_complexity: 10
+
+  type_check:
+    enabled: true
+    blocking: true
+    strict_mode: false
+    description: "Type checking for TypeScript and Python"
+    tools:
+      typescript:
+        enabled: true
+        command: "npx tsc --noEmit --pretty"
+        strict_mode: false
+      mypy:
+        enabled: true
+        command: "mypy --show-error-codes --show-column-numbers"
+        strict_mode: false
+        ignore_missing_imports: true
+
+# Global settings
+global:
+  # Default timeout for all gates (in seconds)
+  default_timeout: 300
+  
+  # Parallel execution settings
+  parallel_execution: true
+  max_parallel_gates: 4
+  
+  # Retry settings
+  max_retries: 2
+  retry_delay_seconds: 5
+  
+  # Cleanup settings
+  cleanup_temp_files: true
+  max_log_lines: 1000
+  
+  # Notification settings
+  notify_on_failure: true
+  notify_on_warning: false
+  
+  # History retention
+  max_history_days: 90
+
+# Environment-specific overrides
+environments:
+  development:
+    lint:
+      max_warnings: 20
+    coverage:
+      min_percentage: 70
+    security:
+      critical_only: true
+      medium_vulnerabilities: 10
+  
+  staging:
+    lint:
+      max_warnings: 10
+    coverage:
+      min_percentage: 75
+    performance:
+      max_response_time_ms: 1000
+  
+  production:
+    lint:
+      max_warnings: 5
+    coverage:
+      min_percentage: 85
+    performance:
+      max_response_time_ms: 300
+    security:
+      allow_dev_dependencies: false

@@ -1,0 +1,113 @@
+{
+  "name": "Conditional Workflow",
+  "description": "A workflow that conditionally runs one (or more) branches based on boolean inputs",
+  "config": {},
+  "timeout_seconds": 3600,
+  "max_retries": 3,
+  "variables": [
+    {
+      "name": "input_value",
+      "data_type": "json",
+      "is_required": true,
+      "description": "Input value used by processing steps",
+      "metadata": {}
+    },
+    {
+      "name": "run_fast",
+      "data_type": "bool",
+      "is_required": false,
+      "default_value": false,
+      "description": "If true, run the fast processing branch",
+      "metadata": {}
+    },
+    {
+      "name": "run_standard",
+      "data_type": "bool",
+      "is_required": false,
+      "default_value": true,
+      "description": "If true, run the standard processing branch",
+      "metadata": {}
+    },
+    {
+      "name": "run_thorough",
+      "data_type": "bool",
+      "is_required": false,
+      "default_value": false,
+      "description": "If true, run the thorough processing branch",
+      "metadata": {}
+    }
+  ],
+  "steps": [
+    {
+      "name": "evaluate_inputs",
+      "step_type": "task",
+      "step_order": 1,
+      "timeout_seconds": 60,
+      "config": {
+        "description": "Validate inputs and prepare context"
+      },
+      "depends_on_steps": [],
+      "metadata": {
+        "category": "routing"
+      }
+    },
+    {
+      "name": "fast_process",
+      "step_type": "condition",
+      "step_order": 2,
+      "timeout_seconds": 600,
+      "condition_expression": "${run_fast}",
+      "config": {
+        "description": "Fast processing branch"
+      },
+      "depends_on_steps": ["evaluate_inputs"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "standard_process",
+      "step_type": "condition",
+      "step_order": 2,
+      "timeout_seconds": 1800,
+      "condition_expression": "${run_standard}",
+      "config": {
+        "description": "Standard processing branch"
+      },
+      "depends_on_steps": ["evaluate_inputs"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "thorough_process",
+      "step_type": "condition",
+      "step_order": 2,
+      "timeout_seconds": 3600,
+      "condition_expression": "${run_thorough}",
+      "config": {
+        "description": "Thorough processing branch"
+      },
+      "depends_on_steps": ["evaluate_inputs"],
+      "metadata": {
+        "category": "processing"
+      }
+    },
+    {
+      "name": "finalize",
+      "step_type": "task",
+      "step_order": 3,
+      "timeout_seconds": 120,
+      "config": {
+        "description": "Finalize execution (does not depend on which branch ran)"
+      },
+      "depends_on_steps": ["evaluate_inputs"],
+      "metadata": {
+        "category": "finalization"
+      }
+    }
+  ],
+  "metadata": {
+    "template": "conditional_workflow"
+  }
+}

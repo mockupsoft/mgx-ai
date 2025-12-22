@@ -1,0 +1,266 @@
+# Setup Guide
+
+This guide will help you get started with your newly generated project.
+
+## Prerequisites
+
+Make sure you have the following installed:
+
+- **Node.js** (version 18 or higher) - [Download here](https://nodejs.org/)
+- **npm** or **yarn** package manager
+- **Git** - [Download here](https://git-scm.com/)
+
+### Optional Tools
+
+- **Docker** and **Docker Compose** - for containerized development
+- **PostgreSQL** - if using database features
+- **Redis** - if using caching features
+
+## Quick Setup
+
+### 1. Install Dependencies
+
+```bash
+# Using npm
+npm install
+
+# Using yarn
+yarn install
+```
+
+### 2. Environment Configuration
+
+Copy the environment template and configure it:
+
+```bash
+cp .env.example .env.local
+```
+
+Edit `.env.local` with your specific configuration:
+
+```env
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Security
+CORS_ORIGIN=*
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+
+# Database (if using database features)
+DATABASE_URL=postgresql://user:password@localhost:5432/dbname
+
+# Logging
+LOG_LEVEL=info
+```
+
+### 3. Start Development Server
+
+```bash
+npm run dev
+```
+
+Your application will be available at `http://localhost:3000`
+
+## Available Commands
+
+### Development
+
+```bash
+npm run dev          # Start development server with hot reload
+npm run build        # Build TypeScript files
+npm start            # Start production server
+```
+
+### Testing
+
+```bash
+npm test             # Run test suite
+npm run test:watch   # Run tests in watch mode
+npm run test:coverage # Generate coverage report
+```
+
+### Code Quality
+
+```bash
+npm run lint         # Check code with ESLint
+npm run lint:fix     # Fix ESLint issues automatically
+npm run format       # Format code with Prettier
+```
+
+### Utilities
+
+```bash
+npm run clean        # Clean build artifacts
+make help            # Show available Make commands
+```
+
+## Using Make
+
+The generated Makefile provides convenient shortcuts:
+
+```bash
+make help      # Show all available commands
+make dev       # Start development server
+make build     # Build the project
+make test      # Run tests
+make setup     # Install dependencies and setup environment
+make lint      # Run linting
+make format    # Format code
+make clean     # Clean build artifacts
+make install   # Install dependencies
+```
+
+## Features
+
+Your project includes the following features:
+
+### Core Features
+- ✅ **Express.js with TypeScript** - Modern, type-safe server setup
+- ✅ **Security Middleware** - Helmet, CORS, rate limiting
+- ✅ **Structured Logging** - Winston logger with file rotation
+- ✅ **Health Checks** - `/health`, `/health/ready`, `/health/live` endpoints
+- ✅ **Error Handling** - Global error handler with proper HTTP status codes
+- ✅ **Testing Setup** - Jest with TypeScript support
+
+### Optional Features (enable as needed)
+- 🔐 **Authentication** - JWT-based authentication middleware
+- 🗄️ **Database** - PostgreSQL integration with Sequelize ORM
+- 📝 **API Documentation** - OpenAPI/Swagger documentation
+- 🐳 **Docker Support** - Containerization ready
+- 📊 **Monitoring** - Health checks and metrics
+
+## API Endpoints
+
+### Health Checks
+- `GET /health` - Basic application health
+- `GET /health/ready` - Readiness probe (checks dependencies)
+- `GET /health/live` - Liveness probe (checks if app is running)
+
+### API Routes
+- `GET /api/health` - API health check (requires authentication if auth enabled)
+
+## Database Setup (if using database features)
+
+### PostgreSQL Setup
+
+1. Install PostgreSQL locally or use Docker:
+
+```bash
+# Using Docker
+docker run --name postgres -e POSTGRES_PASSWORD=password -p 5432:5432 -d postgres:15
+```
+
+2. Create a database:
+
+```bash
+createdb myapp_db
+```
+
+3. Update your `.env.local`:
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/myapp_db
+```
+
+4. Run migrations (if applicable):
+
+```bash
+npm run migrate
+```
+
+## Docker Setup
+
+### Development with Docker
+
+```bash
+# Start all services
+docker-compose up
+
+# Start in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+### Production Build
+
+```bash
+# Build the image
+docker build -t my-app .
+
+# Run the container
+docker run -p 3000:3000 my-app
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Port already in use**
+   ```bash
+   # Change PORT in .env.local or kill the process using the port
+   lsof -ti:3000 | xargs kill
+   ```
+
+2. **Module not found errors**
+   ```bash
+   # Reinstall dependencies
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+3. **TypeScript compilation errors**
+   ```bash
+   # Check TypeScript configuration
+   npx tsc --noEmit
+   ```
+
+4. **Database connection errors**
+   - Verify PostgreSQL is running
+   - Check DATABASE_URL in .env.local
+   - Ensure database exists
+
+### Getting Help
+
+1. Check the application logs
+2. Review the health endpoints
+3. Check the troubleshooting section in README.md
+4. Create an issue in the project repository
+
+## Next Steps
+
+1. **Customize** - Modify the code to fit your specific requirements
+2. **Add Routes** - Create new API routes in `src/routes/`
+3. **Add Models** - Define database models if using database features
+4. **Add Middleware** - Create custom middleware in `src/middleware/`
+5. **Configure CI/CD** - Set up automated testing and deployment
+
+## Development Tips
+
+### Hot Reload
+The development server automatically reloads when you make changes to TypeScript files.
+
+### Debugging
+Use the following for debugging:
+
+```bash
+# Run with debugger
+npm run dev -- --inspect
+
+# In VS Code, use the built-in debugger with launch.json configuration
+```
+
+### Testing
+Write tests in the `tests/` directory. The setup includes Jest with TypeScript support.
+
+### Code Quality
+- ESLint enforces code style and catches common errors
+- Prettier formats code automatically
+- Run `npm run lint:fix` to fix most issues automatically
+
+Happy coding! 🚀

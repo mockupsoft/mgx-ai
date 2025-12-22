@@ -33,14 +33,19 @@ env/
 *.swp
 *.swo
 *~
+.cursor/
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+coverage*.txt
+coverage*.xml
+missing_*.txt
 
 # Logging
 *.log
+logs/
 
 # Output files
 output/
@@ -97,3 +102,11 @@ npm-debug.log
 
 # CLI Config
 .mgx/
+
+# Frontend build
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/test-results/
+frontend/playwright-report/
+

@@ -1,0 +1,13 @@
+{
+  "name": "@mgxai/cli",
+  "version": "0.1.0",
+  "description": "MGX AI CLI Wrapper",
+  "bin": {
+    "mgx": "./bin/mgx.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "MGX Team",
+  "license": "MIT"
+}

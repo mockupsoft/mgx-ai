@@ -1,0 +1,13 @@
+{
+  "task": "Build a FastAPI application for user management with authentication",
+  "target_stack": "fastapi",
+  "project_type": "api",
+  "output_mode": "generate_new",
+  "constraints": [
+    "Use Pydantic models for validation",
+    "Implement JWT authentication",
+    "Add async database operations",
+    "Include .env.example file"
+  ],
+  "strict_requirements": true
+}
