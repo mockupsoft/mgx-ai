@@ -78,6 +78,7 @@ from .entities import (
     EscalationRule,
     EscalationEvent,
     EscalationMetric,
+    GitHubWebhookEvent,
 )
 # AI Evaluation Framework - import from entities_evaluation
 from .entities_evaluation import (
@@ -168,4 +169,6 @@ __all__ = [
     "FileChange",
     "FileApproval",
     "ApprovalHistory",
+    # GitHub Integration Models
+    "GitHubWebhookEvent",
 ]

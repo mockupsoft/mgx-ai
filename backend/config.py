@@ -71,6 +71,10 @@ class Settings(BaseSettings):
         default="/tmp/mgx-agent-repos",
         description="Local directory used for cached git clones",
     )
+    github_webhook_secret: Optional[str] = Field(
+        default=None,
+        description="GitHub webhook secret for signature verification",
+    )
 
     # Agent Configuration
     agents_enabled: bool = Field(default=False, description="Enable multi-agent system")
