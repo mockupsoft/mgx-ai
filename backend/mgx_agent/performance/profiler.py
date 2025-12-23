@@ -48,23 +48,63 @@ class TimerStat:
     count: int = 0
     total_s: float = 0.0
     max_s: float = 0.0
+    min_s: float = float('inf')
+    durations: List[float] = field(default_factory=list)
 
     def add(self, duration_s: float) -> None:
         self.count += 1
         self.total_s += duration_s
         if duration_s > self.max_s:
             self.max_s = duration_s
+        if duration_s < self.min_s:
+            self.min_s = duration_s
+        # Store durations for percentile calculation (limit to last 1000)
+        self.durations.append(duration_s)
+        if len(self.durations) > 1000:
+            self.durations = self.durations[-1000:]
 
     @property
     def avg_s(self) -> float:
         return self.total_s / self.count if self.count else 0.0
+    
+    @property
+    def min_s_safe(self) -> float:
+        return self.min_s if self.min_s != float('inf') else 0.0
+    
+    def percentile(self, p: float) -> float:
+        """Calculate percentile (0.0-1.0)."""
+        if not self.durations:
+            return 0.0
+        sorted_durations = sorted(self.durations)
+        index = int(len(sorted_durations) * p)
+        index = min(index, len(sorted_durations) - 1)
+        return sorted_durations[index]
+    
+    @property
+    def p50(self) -> float:
+        """50th percentile (median)."""
+        return self.percentile(0.50)
+    
+    @property
+    def p95(self) -> float:
+        """95th percentile."""
+        return self.percentile(0.95)
+    
+    @property
+    def p99(self) -> float:
+        """99th percentile."""
+        return self.percentile(0.99)
 
     def to_dict(self) -> dict:
         return {
             "count": self.count,
             "total_s": self.total_s,
             "avg_s": self.avg_s,
+            "min_s": self.min_s_safe,
             "max_s": self.max_s,
+            "p50": self.p50,
+            "p95": self.p95,
+            "p99": self.p99,
         }
 
 
@@ -117,6 +157,11 @@ class PerformanceProfiler:
         self._started_tracemalloc: bool = False
 
         self.timers: Dict[str, TimerStat] = {}
+        
+        # Latency breakdown tracking
+        self.latency_breakdown: Dict[str, Dict[str, float]] = {}
+        self.slow_queries: List[Dict[str, Any]] = []
+        self.slow_query_threshold_ms: float = 5000.0  # 5 seconds
 
         self.cache_hits: int = 0
         self.cache_misses: int = 0
@@ -204,6 +249,94 @@ class PerformanceProfiler:
             self.cache_hits += 1
         else:
             self.cache_misses += 1
+    
+    def record_latency_breakdown(
+        self,
+        operation: str,
+        network_ms: float = 0.0,
+        processing_ms: float = 0.0,
+        llm_api_ms: float = 0.0,
+        total_ms: Optional[float] = None,
+    ) -> None:
+        """
+        Record detailed latency breakdown for an operation.
+        
+        Args:
+            operation: Operation name (e.g., "llm_call", "database_query")
+            network_ms: Network latency in milliseconds
+            processing_ms: Processing time in milliseconds
+            llm_api_ms: LLM API call time in milliseconds
+            total_ms: Total time (calculated if not provided)
+        """
+        if total_ms is None:
+            total_ms = network_ms + processing_ms + llm_api_ms
+        
+        self.latency_breakdown[operation] = {
+            "network_ms": network_ms,
+            "processing_ms": processing_ms,
+            "llm_api_ms": llm_api_ms,
+            "total_ms": total_ms,
+        }
+        
+        # Track slow queries
+        if total_ms > self.slow_query_threshold_ms:
+            self.slow_queries.append({
+                "operation": operation,
+                "total_ms": total_ms,
+                "network_ms": network_ms,
+                "processing_ms": processing_ms,
+                "llm_api_ms": llm_api_ms,
+                "timestamp": time.time(),
+            })
+    
+    def get_performance_bottlenecks(self) -> List[Dict[str, Any]]:
+        """
+        Identify performance bottlenecks based on latency breakdown.
+        
+        Returns:
+            List of bottleneck descriptions
+        """
+        bottlenecks = []
+        
+        for operation, breakdown in self.latency_breakdown.items():
+            total = breakdown["total_ms"]
+            if total == 0:
+                continue
+            
+            # Calculate percentages
+            network_pct = (breakdown["network_ms"] / total) * 100
+            processing_pct = (breakdown["processing_ms"] / total) * 100
+            llm_api_pct = (breakdown["llm_api_ms"] / total) * 100
+            
+            # Identify bottlenecks (>50% of total time)
+            if network_pct > 50:
+                bottlenecks.append({
+                    "operation": operation,
+                    "type": "network",
+                    "percentage": network_pct,
+                    "time_ms": breakdown["network_ms"],
+                    "recommendation": "Consider connection pooling or reducing network round trips",
+                })
+            
+            if processing_pct > 50:
+                bottlenecks.append({
+                    "operation": operation,
+                    "type": "processing",
+                    "percentage": processing_pct,
+                    "time_ms": breakdown["processing_ms"],
+                    "recommendation": "Optimize processing logic or use caching",
+                })
+            
+            if llm_api_pct > 50:
+                bottlenecks.append({
+                    "operation": operation,
+                    "type": "llm_api",
+                    "percentage": llm_api_pct,
+                    "time_ms": breakdown["llm_api_ms"],
+                    "recommendation": "Consider using faster models or prompt optimization",
+                })
+        
+        return sorted(bottlenecks, key=lambda x: x["percentage"], reverse=True)
 
     @property
     def cache_hit_rate(self) -> float:
@@ -270,6 +403,9 @@ class PerformanceProfiler:
                 "rss_max_kb": self.rss_max_kb,
             },
             "timers": {name: stat.to_dict() for name, stat in self.timers.items()},
+            "latency_breakdown": self.latency_breakdown,
+            "slow_queries": self.slow_queries[-10:],  # Last 10 slow queries
+            "bottlenecks": self.get_performance_bottlenecks(),
             "phases": [snapshot.to_dict() for snapshot in self.phase_snapshots],
         }
     
