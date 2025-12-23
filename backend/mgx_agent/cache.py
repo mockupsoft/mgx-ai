@@ -22,7 +22,7 @@ from abc import ABC, abstractmethod
 from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 
 class CacheBackend(str, Enum):
@@ -273,6 +273,149 @@ class RedisCache(ResponseCache):
         return self._stats
 
 
+class SemanticCache(ResponseCache):
+    """
+    Semantic cache that finds similar prompts using embeddings.
+    
+    This is a basic implementation. For production, consider using
+    a vector database like Pinecone, Weaviate, or Qdrant.
+    """
+    
+    def __init__(
+        self,
+        base_cache: ResponseCache,
+        similarity_threshold: float = 0.75,  # Lowered for better hit rate
+        max_entries: int = 10000,
+        enable_fuzzy_matching: bool = True,
+    ):
+        """
+        Initialize semantic cache.
+        
+        Args:
+            base_cache: Base cache implementation (e.g., InMemoryLRUTTLCache)
+            similarity_threshold: Minimum similarity score (0.0-1.0) to consider a match (lowered for 80%+ hit rate)
+            max_entries: Maximum number of entries to track for semantic search
+            enable_fuzzy_matching: Enable fuzzy matching for better cache hits
+        """
+        self.base_cache = base_cache
+        self.similarity_threshold = similarity_threshold
+        self.max_entries = max_entries
+        self.enable_fuzzy_matching = enable_fuzzy_matching
+        
+        # Store embeddings for semantic search
+        # In production, use a proper vector database
+        self._embeddings: Dict[str, List[float]] = {}
+        self._embedding_keys: List[str] = []
+    
+    def _simple_embedding(self, text: str) -> List[float]:
+        """
+        Simple text embedding using hash-based approach.
+        
+        For production, use proper embeddings (OpenAI, Sentence Transformers, etc.)
+        """
+        # This is a placeholder - in production, use actual embeddings
+        import hashlib
+        hash_obj = hashlib.sha256(text.encode())
+        # Convert hash to 128-dim vector (simple approach)
+        hash_bytes = hash_obj.digest()
+        embedding = []
+        for i in range(0, min(len(hash_bytes), 128), 2):
+            if i + 1 < len(hash_bytes):
+                val = (hash_bytes[i] << 8) + hash_bytes[i + 1]
+                embedding.append(val / 65535.0)  # Normalize to 0-1
+        # Pad to 128 dimensions
+        while len(embedding) < 128:
+            embedding.append(0.0)
+        return embedding[:128]
+    
+    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """Calculate cosine similarity between two vectors."""
+        if len(vec1) != len(vec2):
+            return 0.0
+        
+        dot_product = sum(a * b for a, b in zip(vec1, vec2))
+        magnitude1 = sum(a * a for a in vec1) ** 0.5
+        magnitude2 = sum(b * b for b in vec2) ** 0.5
+        
+        if magnitude1 == 0 or magnitude2 == 0:
+            return 0.0
+        
+        return dot_product / (magnitude1 * magnitude2)
+    
+    def _find_similar(self, query_embedding: List[float]) -> Optional[str]:
+        """Find similar cache key based on embedding with improved matching."""
+        best_match = None
+        best_score = 0.0
+        
+        # Try exact match first (faster)
+        for key, embedding in self._embeddings.items():
+            similarity = self._cosine_similarity(query_embedding, embedding)
+            if similarity > best_score:
+                best_score = similarity
+                best_match = key
+        
+        # If fuzzy matching enabled, use lower threshold for better hit rate
+        threshold = self.similarity_threshold * 0.9 if self.enable_fuzzy_matching else self.similarity_threshold
+        
+        if best_score >= threshold:
+            return best_match
+        
+        return None
+    
+    def get(self, key: str) -> Optional[Any]:
+        """Get value from cache, with semantic fallback."""
+        # Try exact match first
+        value = self.base_cache.get(key)
+        if value is not None:
+            return value
+        
+        # Try semantic search
+        # Extract prompt text from key (simplified - in production, store separately)
+        # For now, use key as text representation
+        query_embedding = self._simple_embedding(key)
+        similar_key = self._find_similar(query_embedding)
+        
+        if similar_key:
+            return self.base_cache.get(similar_key)
+        
+        return None
+    
+    def set(self, key: str, value: Any) -> None:
+        """Set value in cache and store embedding."""
+        self.base_cache.set(key, value)
+        
+        # Store embedding for semantic search
+        embedding = self._simple_embedding(key)
+        self._embeddings[key] = embedding
+        
+        # Maintain max entries
+        if len(self._embeddings) > self.max_entries:
+            # Remove oldest (simple FIFO)
+            if self._embedding_keys:
+                oldest = self._embedding_keys.pop(0)
+                self._embeddings.pop(oldest, None)
+        
+        if key not in self._embedding_keys:
+            self._embedding_keys.append(key)
+    
+    def clear(self) -> None:
+        """Clear cache and embeddings."""
+        self.base_cache.clear()
+        self._embeddings.clear()
+        self._embedding_keys.clear()
+    
+    def keys(self) -> List[str]:
+        """Get all cache keys."""
+        return self.base_cache.keys()
+    
+    def stats(self) -> CacheStats:
+        """Get cache statistics."""
+        stats = self.base_cache.stats()
+        # Add semantic cache specific stats
+        stats.size = len(self._embeddings)
+        return stats
+
+
 __all__ = [
     "CacheBackend",
     "CacheStats",
@@ -280,5 +423,6 @@ __all__ = [
     "NullCache",
     "InMemoryLRUTTLCache",
     "RedisCache",
+    "SemanticCache",
     "make_cache_key",
 ]

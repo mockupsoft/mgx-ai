@@ -293,13 +293,194 @@ class LLMCostTracker:
                 "calls": int(row.calls),
             })
         
+        # Get token breakdown (prompt vs completion)
+        stmt_token_breakdown = select(
+            func.sum(LLMCall.tokens_prompt).label("total_prompt_tokens"),
+            func.sum(LLMCall.tokens_completion).label("total_completion_tokens"),
+            func.avg(LLMCall.tokens_prompt).label("avg_prompt_tokens"),
+            func.avg(LLMCall.tokens_completion).label("avg_completion_tokens"),
+        ).where(
+            LLMCall.workspace_id == workspace_id,
+            LLMCall.timestamp >= start_date,
+        )
+        
+        result_token_breakdown = await self.session.execute(stmt_token_breakdown)
+        token_row = result_token_breakdown.first()
+        
+        token_breakdown = {
+            "total_prompt_tokens": int(token_row.total_prompt_tokens) if token_row.total_prompt_tokens else 0,
+            "total_completion_tokens": int(token_row.total_completion_tokens) if token_row.total_completion_tokens else 0,
+            "avg_prompt_tokens": float(token_row.avg_prompt_tokens) if token_row.avg_prompt_tokens else 0.0,
+            "avg_completion_tokens": float(token_row.avg_completion_tokens) if token_row.avg_completion_tokens else 0.0,
+        }
+        
+        # Calculate prompt/completion ratio
+        if token_breakdown["total_prompt_tokens"] + token_breakdown["total_completion_tokens"] > 0:
+            total = token_breakdown["total_prompt_tokens"] + token_breakdown["total_completion_tokens"]
+            token_breakdown["prompt_ratio"] = token_breakdown["total_prompt_tokens"] / total
+            token_breakdown["completion_ratio"] = token_breakdown["total_completion_tokens"] / total
+        else:
+            token_breakdown["prompt_ratio"] = 0.0
+            token_breakdown["completion_ratio"] = 0.0
+        
         return {
             "period": period,
             "total_cost": total_cost,
             "total_tokens": total_tokens,
+            "token_breakdown": token_breakdown,
             "call_count": call_count,
             "by_model": by_model,
         }
+    
+    async def analyze_token_usage_patterns(
+        self,
+        workspace_id: str,
+        period: str = "month",
+    ) -> Dict:
+        """
+        Analyze token usage patterns for optimization recommendations.
+        
+        Args:
+            workspace_id: Workspace identifier
+            period: Time period to analyze
+        
+        Returns:
+            Dictionary with usage patterns and recommendations
+        """
+        # Calculate time range
+        now = datetime.utcnow()
+        if period == "day":
+            start_date = now - timedelta(days=1)
+        elif period == "week":
+            start_date = now - timedelta(weeks=1)
+        elif period == "month":
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = datetime(2000, 1, 1)
+        
+        # Get token usage statistics
+        stmt = select(
+            func.avg(LLMCall.tokens_prompt).label("avg_prompt"),
+            func.avg(LLMCall.tokens_completion).label("avg_completion"),
+            func.avg(LLMCall.tokens_total).label("avg_total"),
+            func.max(LLMCall.tokens_total).label("max_total"),
+            func.min(LLMCall.tokens_total).label("min_total"),
+            func.count(LLMCall.id).label("call_count"),
+        ).where(
+            LLMCall.workspace_id == workspace_id,
+            LLMCall.timestamp >= start_date,
+        )
+        
+        result = await self.session.execute(stmt)
+        row = result.first()
+        
+        if not row or row.call_count == 0:
+            return {
+                "patterns": {},
+                "anomalies": [],
+                "recommendations": [],
+            }
+        
+        avg_prompt = float(row.avg_prompt) if row.avg_prompt else 0.0
+        avg_completion = float(row.avg_completion) if row.avg_completion else 0.0
+        avg_total = float(row.avg_total) if row.avg_total else 0.0
+        max_total = int(row.max_total) if row.max_total else 0
+        min_total = int(row.min_total) if row.min_total else 0
+        
+        # Detect anomalies (calls with unusually high token usage)
+        anomaly_threshold = avg_total * 3  # 3x average is considered anomaly
+        stmt_anomalies = select(LLMCall).where(
+            LLMCall.workspace_id == workspace_id,
+            LLMCall.timestamp >= start_date,
+            LLMCall.tokens_total > anomaly_threshold,
+        ).order_by(LLMCall.tokens_total.desc()).limit(10)
+        
+        result_anomalies = await self.session.execute(stmt_anomalies)
+        anomalies = []
+        for call in result_anomalies.scalars():
+            anomalies.append({
+                "id": call.id,
+                "timestamp": call.timestamp.isoformat(),
+                "provider": call.provider,
+                "model": call.model,
+                "tokens_total": call.tokens_total,
+                "tokens_prompt": call.tokens_prompt,
+                "tokens_completion": call.tokens_completion,
+                "cost_usd": call.cost_usd,
+            })
+        
+        # Generate recommendations
+        recommendations = []
+        
+        # High prompt token usage
+        if avg_prompt > 2000:
+            recommendations.append({
+                "type": "high_prompt_tokens",
+                "priority": "medium",
+                "message": f"Average prompt tokens ({avg_prompt:.0f}) is high. Consider prompt optimization or compression.",
+                "current_value": avg_prompt,
+                "target_value": 1500,
+            })
+        
+        # High completion token usage
+        if avg_completion > 2000:
+            recommendations.append({
+                "type": "high_completion_tokens",
+                "priority": "medium",
+                "message": f"Average completion tokens ({avg_completion:.0f}) is high. Consider setting max_tokens limits.",
+                "current_value": avg_completion,
+                "target_value": 1500,
+            })
+        
+        # High prompt/completion ratio (mostly prompt)
+        if avg_prompt > 0 and avg_completion > 0:
+            ratio = avg_prompt / avg_completion
+            if ratio > 3.0:
+                recommendations.append({
+                    "type": "high_prompt_ratio",
+                    "priority": "low",
+                    "message": f"Prompt/completion ratio ({ratio:.2f}) is high. Consider optimizing prompts.",
+                    "current_ratio": ratio,
+                    "target_ratio": 2.0,
+                })
+        
+        # Anomalies detected
+        if anomalies:
+            recommendations.append({
+                "type": "token_anomalies",
+                "priority": "high",
+                "message": f"Found {len(anomalies)} calls with unusually high token usage. Review these calls.",
+                "anomaly_count": len(anomalies),
+            })
+        
+        return {
+            "patterns": {
+                "avg_prompt_tokens": avg_prompt,
+                "avg_completion_tokens": avg_completion,
+                "avg_total_tokens": avg_total,
+                "max_tokens": max_total,
+                "min_tokens": min_total,
+                "total_calls": int(row.call_count),
+            },
+            "anomalies": anomalies,
+            "recommendations": recommendations,
+        }
+    
+    async def get_token_optimization_recommendations(
+        self,
+        workspace_id: str,
+    ) -> List[Dict]:
+        """
+        Get token optimization recommendations.
+        
+        Args:
+            workspace_id: Workspace identifier
+        
+        Returns:
+            List of optimization recommendations
+        """
+        patterns = await self.analyze_token_usage_patterns(workspace_id)
+        return patterns.get("recommendations", [])
 
     async def get_daily_costs(
         self,

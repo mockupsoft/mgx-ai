@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config import settings
 from backend.services.cost.llm_tracker import LLMCostTracker
+from backend.services.llm.prompt_optimizer import get_prompt_optimizer
 
 from mgx_observability import (
     ObservabilityConfig,
@@ -59,6 +60,7 @@ class LLMService:
         """
         self.db_session = db_session
         self.cost_tracker = LLMCostTracker(db_session) if db_session else None
+        self.prompt_optimizer = get_prompt_optimizer() if settings.enable_prompt_optimization else None
         
         # Initialize providers
         self.providers = self._initialize_providers()

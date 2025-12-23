@@ -95,6 +95,14 @@ class Settings(BaseSettings):
         description="Maximum number of context versions to retain per agent context",
     )
 
+    # Performance Optimization Settings
+    enable_prompt_optimization: bool = Field(default=True, description="Enable prompt optimization and compression")
+    enable_semantic_caching: bool = Field(default=False, description="Enable semantic caching (requires embeddings)")
+    semantic_cache_similarity_threshold: float = Field(default=0.85, ge=0.0, le=1.0, description="Semantic cache similarity threshold")
+    enable_early_termination: bool = Field(default=True, description="Enable early termination when task is completed")
+    enable_performance_profiling: bool = Field(default=False, description="Enable performance profiling")
+    slow_query_threshold_ms: float = Field(default=5000.0, ge=100.0, description="Threshold for slow query detection (ms)")
+    
     agent_message_retention_limit: int = Field(
         default=1000,
         ge=10,
