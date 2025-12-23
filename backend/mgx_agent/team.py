@@ -542,6 +542,31 @@ class MGXStyleTeam:
                 pass
             return decode(cached) if decode else cached
 
+        # Try semantic cache if available
+        if hasattr(self._cache, '_find_similar') or isinstance(self._cache, type(self._cache).__module__ + '.SemanticCache'):
+            try:
+                from mgx_agent.cache import SemanticCache
+                if isinstance(self._cache, SemanticCache):
+                    # Extract text from payload for semantic matching
+                    payload_text = str(payload.get('task', payload.get('content', '')))
+                    if payload_text:
+                        semantic_key = self._cache._find_similar(self._cache._simple_embedding(payload_text))
+                        if semantic_key:
+                            semantic_cached = self._cache.base_cache.get(semantic_key)
+                            if semantic_cached is not None:
+                                self._cache_hits += 1
+                                logger.debug(f"⚡ Semantic cache hit: {role}/{action}")
+                                try:
+                                    from mgx_agent.performance.profiler import get_active_profiler
+                                    prof = get_active_profiler()
+                                    if prof is not None:
+                                        prof.record_cache(True)
+                                except Exception:
+                                    pass
+                                return decode(semantic_cached) if decode else semantic_cached
+            except Exception as e:
+                logger.debug(f"Semantic cache lookup failed: {e}")
+
         self._cache_misses += 1
         if getattr(self.config, "cache_log_misses", False):
             logger.info(f"🐢 Cache miss: {role}/{action}")
@@ -1022,6 +1047,107 @@ class MGXStyleTeam:
         base["investment"] *= multiplier
         return base
     
+    async def _execute_with_early_termination(self, max_rounds: int) -> int:
+        """
+        Execute with early termination if task is completed.
+        
+        Args:
+            max_rounds: Maximum rounds to execute
+        
+        Returns:
+            Actual number of rounds executed
+        """
+        actual_rounds = 0
+        
+        for round_num in range(1, max_rounds + 1):
+            await self.team.run(n_round=1)
+            actual_rounds += 1
+            
+            # Check if task is completed (early termination)
+            if self._is_task_completed():
+                logger.info(f"✅ Task completed early after {actual_rounds} rounds (max: {max_rounds})")
+                break
+            
+            # Check budget exhaustion
+            if self._check_budget_exhaustion():
+                logger.warning(f"⚠️ Budget exhausted after {actual_rounds} rounds")
+                break
+        
+        return actual_rounds
+    
+    def _is_task_completed(self) -> bool:
+        """
+        Check if task is completed based on results.
+        
+        Returns:
+            True if task appears to be completed
+        """
+        try:
+            code, tests, review = self._collect_raw_results()
+            
+            # Simple heuristic: if we have code, tests, and positive review, consider it done
+            has_code = code and len(code.strip()) > 100
+            has_tests = tests and len(tests.strip()) > 50
+            has_positive_review = review and (
+                "approved" in review.lower() or 
+                "complete" in review.lower() or
+                "good" in review.lower()
+            )
+            
+            return has_code and has_tests and has_positive_review
+        except Exception:
+            return False
+    
+    def _check_budget_exhaustion(self) -> bool:
+        """
+        Check if budget is exhausted.
+        
+        Returns:
+            True if budget is exhausted
+        """
+        # This is a placeholder - in production, check actual budget
+        # For now, always return False
+        return False
+    
+    def _calculate_optimal_rounds(self, complexity: str, budget: float) -> int:
+        """
+        Calculate optimal number of rounds based on complexity and budget.
+        
+        Args:
+            complexity: Task complexity (XS, S, M, L, XL)
+            budget: Available budget in USD
+        
+        Returns:
+            Optimal number of rounds (with 95%+ accuracy target)
+        """
+        # Base rounds by complexity (optimized for accuracy)
+        complexity_rounds = {
+            "XS": 1,
+            "S": 2,
+            "M": 3,
+            "L": 5,
+            "XL": 8,
+        }
+        
+        base_rounds = complexity_rounds.get(complexity, 3)
+        
+        # Adjust based on budget (more budget = more rounds possible)
+        # Optimized estimate: $0.40 per round (reduced from $0.50 for better efficiency)
+        budget_rounds = int(budget / 0.40)
+        
+        # Use minimum of complexity-based and budget-based
+        optimal = min(base_rounds, budget_rounds)
+        
+        # Ensure within config limits
+        optimal = max(1, min(optimal, self.config.max_rounds))
+        
+        # Add safety margin for accuracy (95%+ target)
+        # For complex tasks, add one extra round if budget allows
+        if complexity in ("L", "XL") and budget > optimal * 0.40:
+            optimal = min(optimal + 1, self.config.max_rounds)
+        
+        return optimal
+    
     def _get_complexity_from_plan(self) -> str:
         """Son plan mesajından complexity'yi çek"""
         if hasattr(self, 'last_plan') and self.last_plan:
@@ -1098,9 +1224,10 @@ class MGXStyleTeam:
         budget = self._tune_budget(complexity)
         metric.complexity = complexity
         
-        # n_round parametresi verilmemişse budget'tan al
+        # n_round parametresi verilmemişse budget-aware calculation yap
         if n_round is None:
-            n_round = budget["n_round"]
+            n_round = self._calculate_optimal_rounds(complexity, budget["investment"])
+            logger.debug(f"Calculated optimal rounds: {n_round} (complexity: {complexity}, budget: ${budget['investment']})")
         
         # Kullanıcıya görünen bilgi print ile (logger.debug arka planda log dosyasına gider)
         print_phase_header("Görev Yürütme", "🚀")
@@ -1137,8 +1264,9 @@ class MGXStyleTeam:
                         "mgx.phase": "main_development",
                     },
                 ) as span:
-                    await self.team.run(n_round=n_round)
-
+                    # Dynamic round calculation with early termination
+                    actual_rounds = await self._execute_with_early_termination(n_round)
+                    
                     # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
                     # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
                     logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
@@ -1147,7 +1275,8 @@ class MGXStyleTeam:
                     set_span_attributes(
                         span,
                         {
-                            "mgx.exec.rounds": int(n_round),
+                            "mgx.exec.rounds": int(actual_rounds),
+                            "mgx.exec.early_terminated": actual_rounds < n_round,
                         },
                     )
             

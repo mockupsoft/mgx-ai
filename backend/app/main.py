@@ -58,6 +58,7 @@ from backend.routers import (
     branches_router,
     diffs_router,
 )
+from backend.routers.performance import router as performance_router
 
 # Import database session factory and workflow engine integration
 from backend.db.engine import get_session_factory
@@ -373,6 +374,9 @@ def create_app() -> FastAPI:
     
     app.include_router(diffs_router)
     logger.info("✓ Registered: diffs_router")
+    
+    app.include_router(performance_router)
+    logger.info("✓ Registered: performance_router")
     
     # ========== Root Endpoint ==========
     @app.get("/", tags=["root"])

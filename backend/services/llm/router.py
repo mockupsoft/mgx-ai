@@ -131,6 +131,8 @@ class LLMRouter:
         prefer_local: bool = False,
         required_capability: Optional[str] = None,
         strategy: Optional[RoutingStrategy] = None,
+        task_complexity: Optional[str] = None,
+        task_type: Optional[str] = None,
     ) -> Tuple[str, str]:
         """
         Select best provider and model based on criteria.
@@ -142,16 +144,23 @@ class LLMRouter:
             prefer_local: Prefer local models
             required_capability: Required model capability
             strategy: Routing strategy to use
+            task_complexity: Task complexity level (XS, S, M, L, XL)
+            task_type: Task type for optimization (e.g., "code", "analysis", "simple")
         
         Returns:
             Tuple of (provider_name, model_name)
         """
         strategy = strategy or self.default_strategy
         
+        # Auto-select strategy based on task complexity if not specified
+        if not strategy and task_complexity:
+            strategy = self._select_strategy_by_complexity(task_complexity, task_type)
+        
         logger.info(
             f"Selecting LLM provider - task={task}, strategy={strategy}, "
             f"budget={budget_remaining}, latency_sensitive={latency_sensitive}, "
-            f"prefer_local={prefer_local}, capability={required_capability}"
+            f"prefer_local={prefer_local}, capability={required_capability}, "
+            f"complexity={task_complexity}, task_type={task_type}"
         )
         
         # Get available providers
@@ -196,6 +205,36 @@ class LLMRouter:
                 budget_remaining,
                 prefer_local
             )
+    
+    def _select_strategy_by_complexity(
+        self,
+        complexity: str,
+        task_type: Optional[str] = None
+    ) -> RoutingStrategy:
+        """
+        Select routing strategy based on task complexity.
+        
+        Args:
+            complexity: Task complexity (XS, S, M, L, XL)
+            task_type: Optional task type
+        
+        Returns:
+            Appropriate routing strategy
+        """
+        # Simple tasks -> cost optimized
+        if complexity in ("XS", "S"):
+            return RoutingStrategy.COST_OPTIMIZED
+        
+        # Medium tasks -> balanced
+        if complexity == "M":
+            return RoutingStrategy.BALANCED
+        
+        # Complex tasks -> quality optimized
+        if complexity in ("L", "XL"):
+            return RoutingStrategy.QUALITY_OPTIMIZED
+        
+        # Default to balanced
+        return RoutingStrategy.BALANCED
     
     async def _select_local_first(
         self,

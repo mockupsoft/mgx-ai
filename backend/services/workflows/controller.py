@@ -607,12 +607,32 @@ class MultiAgentController:
                 },
             }
             
-            # Execute agent step with timeout
+            # Execute agent step with timeout and performance tracking
+            processing_start = time.time()
+            
             try:
+                # Execute agent logic with performance tracking
                 agent_output = await asyncio.wait_for(
                     self._execute_agent_logic(agent_instance, agent_input),
                     timeout=timeout_seconds
                 )
+                
+                processing_time_ms = (time.time() - processing_start) * 1000
+                
+                # Record latency breakdown for performance profiling
+                try:
+                    from mgx_agent.performance.profiler import get_active_profiler
+                    prof = get_active_profiler()
+                    if prof:
+                        prof.record_latency_breakdown(
+                            operation=f"agent_step_{step.name}",
+                            network_ms=0,  # Would be tracked separately if applicable
+                            processing_ms=processing_time_ms,
+                            llm_api_ms=0,  # Would be tracked separately
+                        )
+                except Exception:
+                    pass
+                    
             except asyncio.TimeoutError:
                 raise Exception(f"Agent execution timed out after {timeout_seconds} seconds")
             

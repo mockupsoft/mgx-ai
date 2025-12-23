@@ -162,11 +162,16 @@ class SharedContextService:
         # Increment version
         new_version = context.current_version + 1
 
+        # Optimize context data (compress if too large)
+        optimized_data = data
+        if len(str(data)) > 10000:  # If context is large, compress it
+            optimized_data = self._compress_context(data, max_size=8000)
+
         # Create version record
         version_record = AgentContextVersion(
             context_id=context_id,
             version=new_version,
-            data=data,
+            data=optimized_data,
             change_description=change_description,
             created_by=created_by,
         )
@@ -223,6 +228,81 @@ class SharedContextService:
 
         logger.info(f"Wrote context {context_id} version {new_version}")
         return new_version
+    
+    async def update_context_version(
+        self,
+        session: AsyncSession,
+        context_id: str,
+        data: Dict[str, Any],
+        change_description: Optional[str] = None,
+        created_by: Optional[str] = None,
+    ) -> int:
+        """Alias for write_context for backward compatibility."""
+        return await self.write_context(
+            session, context_id, data, change_description, created_by
+        )
+    
+    def _compress_context(self, data: Dict[str, Any], max_size: int = 10000) -> Dict[str, Any]:
+        """
+        Compress context data by removing old/unnecessary information.
+        
+        Args:
+            data: Context data dictionary
+            max_size: Maximum size in characters (rough estimate)
+        
+        Returns:
+            Compressed context data
+        """
+        import json
+        data_str = json.dumps(data)
+        
+        if len(data_str) <= max_size:
+            return data
+        
+        # Simple compression: keep only recent/important keys
+        # In production, use more sophisticated compression
+        compressed = {}
+        important_keys = ["state", "variables", "current_task", "last_update"]
+        
+        for key in important_keys:
+            if key in data:
+                compressed[key] = data[key]
+        
+        # Add summary of other keys
+        other_keys = [k for k in data.keys() if k not in important_keys]
+        if other_keys:
+            compressed["_other_keys"] = other_keys[:10]  # Keep first 10
+        
+        return compressed
+    
+    def _calculate_context_diff(
+        self,
+        old_data: Dict[str, Any],
+        new_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """
+        Calculate diff between two context versions.
+        
+        Args:
+            old_data: Previous context data
+            new_data: New context data
+        
+        Returns:
+            Diff dictionary with only changed values
+        """
+        diff = {}
+        
+        # Find changed keys
+        all_keys = set(old_data.keys()) | set(new_data.keys())
+        
+        for key in all_keys:
+            old_val = old_data.get(key)
+            new_val = new_data.get(key)
+            
+            if old_val != new_val:
+                diff[key] = new_val
+        
+        return diff
 
     async def list_versions(
         self,
