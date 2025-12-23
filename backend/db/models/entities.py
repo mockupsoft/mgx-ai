@@ -149,7 +149,7 @@ class Project(Base, TimestampMixin, SerializationMixin):
     )
 
     workspace = relationship("Workspace", back_populates="projects")
-    tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="project", cascade="all, delete-orphan", overlaps="tasks")
 
     repository_links = relationship(
         "RepositoryLink",
@@ -258,8 +258,8 @@ class Task(Base, TimestampMixin, SerializationMixin):
         Index("idx_tasks_workspace_project", "workspace_id", "project_id"),
     )
 
-    workspace = relationship("Workspace", back_populates="tasks")
-    project = relationship("Project", back_populates="tasks")
+    workspace = relationship("Workspace", back_populates="tasks", overlaps="tasks")
+    project = relationship("Project", back_populates="tasks", overlaps="tasks")
 
     runs = relationship("TaskRun", back_populates="task", cascade="all, delete-orphan")
 

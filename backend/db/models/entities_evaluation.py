@@ -376,7 +376,7 @@ class EvaluationAlert(Base, TimestampMixin, SerializationMixin):
     commit_hash = Column(String(40), nullable=True, index=True)
     branch_name = Column(String(255), nullable=True, index=True)
     triggered_by = Column(String(100), nullable=True)
-    metadata = Column(JSON, nullable=True)
+    alert_metadata = Column(JSON, nullable=True)  # Renamed from 'metadata' to avoid SQLAlchemy reserved name conflict
     
     def __repr__(self):
         return f"<EvaluationAlert(type='{self.alert_type}', severity='{self.severity}', status='{self.status}')>"

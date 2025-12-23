@@ -21,9 +21,15 @@ from __future__ import annotations
 import contextvars
 import time
 import tracemalloc
-import resource
 import json
 import os
+import sys
+
+# resource module is Unix-only, not available on Windows
+try:
+    import resource
+except ImportError:
+    resource = None  # type: ignore
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -159,10 +165,13 @@ class PerformanceProfiler:
                 tracemalloc.stop()
 
         try:
-            usage = resource.getrusage(resource.RUSAGE_SELF)
-            # On Linux ru_maxrss is KB; on macOS it's bytes. We normalize to KB.
-            rss = int(usage.ru_maxrss)
-            self.rss_max_kb = rss if rss > 10_000 else int(rss / 1024)
+            if resource is not None:
+                usage = resource.getrusage(resource.RUSAGE_SELF)
+                # On Linux ru_maxrss is KB; on macOS it's bytes. We normalize to KB.
+                rss = int(usage.ru_maxrss)
+                self.rss_max_kb = rss if rss > 10_000 else int(rss / 1024)
+            else:
+                self.rss_max_kb = 0
         except Exception:
             self.rss_max_kb = 0
 
@@ -206,10 +215,13 @@ class PerformanceProfiler:
     def _get_rss_kb(self) -> int:
         """Get current RSS in KB."""
         try:
-            usage = resource.getrusage(resource.RUSAGE_SELF)
-            rss = int(usage.ru_maxrss)
-            # On Linux ru_maxrss is KB; on macOS it's bytes. Normalize to KB.
-            return rss if rss > 10_000 else int(rss / 1024)
+            if resource is not None:
+                usage = resource.getrusage(resource.RUSAGE_SELF)
+                rss = int(usage.ru_maxrss)
+                # On Linux ru_maxrss is KB; on macOS it's bytes. Normalize to KB.
+                return rss if rss > 10_000 else int(rss / 1024)
+            else:
+                return 0
         except Exception:
             return 0
     

@@ -293,7 +293,7 @@ def upgrade():
         sa.Column('commit_hash', sa.String(length=40), nullable=True),
         sa.Column('branch_name', sa.String(length=255), nullable=True),
         sa.Column('triggered_by', sa.String(length=100), nullable=True),
-        sa.Column('metadata', sa.JSON(), nullable=True),
+        sa.Column('alert_metadata', sa.JSON(), nullable=True),  # Renamed from 'metadata' to avoid SQLAlchemy reserved name conflict
         sa.Column('created_at', sa.DateTime(), nullable=True),
         sa.Column('updated_at', sa.DateTime(), nullable=True),
         sa.ForeignKeyConstraint(['scenario_id'], ['evaluation_scenarios.id'], ),
