@@ -102,7 +102,7 @@ class Workspace(Base, TimestampMixin, SerializationMixin):
     meta_data = Column("metadata", JSON, nullable=False, default=dict)
 
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
-    tasks = relationship("Task", back_populates="workspace", cascade="all, delete-orphan")
+    tasks = relationship("Task", back_populates="workspace", cascade="all, delete-orphan", overlaps="tasks")
     generated_projects = relationship("GeneratedProject", back_populates="workspace", cascade="all, delete-orphan")
     knowledge_items = relationship("KnowledgeItem", back_populates="workspace", cascade="all, delete-orphan")
     budget = relationship("WorkspaceBudget", back_populates="workspace", uselist=False, cascade="all, delete-orphan")
@@ -259,7 +259,7 @@ class Task(Base, TimestampMixin, SerializationMixin):
     )
 
     workspace = relationship("Workspace", back_populates="tasks", overlaps="tasks")
-    project = relationship("Project", back_populates="tasks", overlaps="tasks")
+    project = relationship("Project", back_populates="tasks", overlaps="tasks,workspace")
 
     runs = relationship("TaskRun", back_populates="task", cascade="all, delete-orphan")
 
@@ -323,7 +323,7 @@ class TaskRun(Base, TimestampMixin, SerializationMixin):
 
     task = relationship("Task", back_populates="runs")
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
 
     metrics = relationship("MetricSnapshot", back_populates="task_run", cascade="all, delete-orphan")
     artifacts = relationship("Artifact", back_populates="task_run", cascade="all, delete-orphan")
@@ -376,7 +376,7 @@ class MetricSnapshot(Base, TimestampMixin, SerializationMixin):
     task = relationship("Task")
     task_run = relationship("TaskRun", back_populates="metrics")
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
 
     def __repr__(self) -> str:
         return f"<MetricSnapshot(id={self.id}, name='{self.name}', value={self.value})>"
@@ -480,7 +480,7 @@ class AgentInstance(Base, TimestampMixin, SerializationMixin):
 
     definition = relationship("AgentDefinition", back_populates="instances")
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     contexts = relationship("AgentContext", back_populates="instance", cascade="all, delete-orphan")
     messages = relationship("AgentMessage", back_populates="instance", cascade="all, delete-orphan")
 
@@ -520,7 +520,7 @@ class AgentContext(Base, TimestampMixin, SerializationMixin):
 
     instance = relationship("AgentInstance", back_populates="contexts")
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     versions = relationship("AgentContextVersion", back_populates="context", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -591,7 +591,7 @@ class AgentMessage(Base, TimestampMixin, SerializationMixin):
 
     instance = relationship("AgentInstance", back_populates="messages")
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
 
     def __repr__(self) -> str:
         return (
@@ -634,7 +634,7 @@ class WorkflowDefinition(Base, TimestampMixin, SerializationMixin):
     )
 
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     steps = relationship("WorkflowStep", back_populates="workflow", cascade="all, delete-orphan")
     variables = relationship("WorkflowVariable", back_populates="workflow", cascade="all, delete-orphan")
     executions = relationship("WorkflowExecution", back_populates="definition", cascade="all, delete-orphan")
@@ -759,7 +759,7 @@ class WorkflowExecution(Base, TimestampMixin, SerializationMixin):
 
     definition = relationship("WorkflowDefinition", back_populates="executions")
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     step_executions = relationship("WorkflowStepExecution", back_populates="execution", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -956,7 +956,7 @@ class SandboxExecution(Base, TimestampMixin, SerializationMixin):
     )
 
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
 
     def __repr__(self) -> str:
         return f"<SandboxExecution(id={self.id}, execution_type='{self.execution_type}', status='{self.status}')>"
@@ -1023,7 +1023,7 @@ class QualityGate(Base, TimestampMixin, SerializationMixin):
     )
 
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     executions = relationship("GateExecution", back_populates="gate", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
@@ -2130,7 +2130,7 @@ class EscalationRule(Base, TimestampMixin, SerializationMixin):
     
     # Relationships
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     escalation_events = relationship("EscalationEvent", back_populates="rule", cascade="all, delete-orphan")
     
     __table_args__ = (
@@ -2190,7 +2190,7 @@ class EscalationEvent(Base, TimestampMixin, SerializationMixin):
     
     # Relationships
     workspace = relationship("Workspace")
-    project = relationship("Project")
+    project = relationship("Project", overlaps="workspace")
     rule = relationship("EscalationRule", back_populates="escalation_events")
     task = relationship("Task")
     task_run = relationship("TaskRun")

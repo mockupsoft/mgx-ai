@@ -24,6 +24,10 @@ from backend.db.models import Project, Workspace
 from backend.db.session import get_session
 
 
+# Alias for backward compatibility
+get_db_session = get_session
+
+
 DEFAULT_WORKSPACE_SLUG = "default"
 DEFAULT_WORKSPACE_NAME = "Default Workspace"
 DEFAULT_PROJECT_SLUG = "default"
