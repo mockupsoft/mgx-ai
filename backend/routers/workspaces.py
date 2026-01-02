@@ -34,8 +34,23 @@ async def list_workspaces(
     result = await session.execute(select(Workspace).order_by(Workspace.created_at).offset(skip).limit(limit))
     workspaces = result.scalars().all()
 
+    # Convert workspaces to response format
+    # Manual conversion to avoid SQLAlchemy Base.metadata conflict
+    workspace_items = []
+    for ws in workspaces:
+        workspace_items.append(
+            WorkspaceResponse(
+                id=ws.id,
+                name=ws.name,
+                slug=ws.slug,
+                workspace_metadata=getattr(ws, 'workspace_metadata', {}),
+                created_at=ws.created_at,
+                updated_at=ws.updated_at,
+            )
+        )
+
     return WorkspaceListResponse(
-        items=[WorkspaceResponse.model_validate(ws) for ws in workspaces],
+        items=workspace_items,
         total=total,
         skip=skip,
         limit=limit,
@@ -53,7 +68,7 @@ async def create_workspace(
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="Workspace slug already exists")
 
-    workspace = Workspace(name=payload.name, slug=slug, meta_data=payload.meta_data)
+    workspace = Workspace(name=payload.name, slug=slug, workspace_metadata=payload.workspace_metadata)
     session.add(workspace)
     await session.flush()
 
@@ -61,7 +76,7 @@ async def create_workspace(
         workspace_id=workspace.id,
         name=DEFAULT_PROJECT_NAME,
         slug=DEFAULT_PROJECT_SLUG,
-        meta_data={},
+        project_metadata={},
     )
     session.add(default_project)
     await session.flush()
@@ -104,7 +119,7 @@ async def update_workspace(
             raise HTTPException(status_code=409, detail="Workspace slug already exists")
 
     for field, value in update_data.items():
-        if field == "meta_data" and value is None:
+        if field == "workspace_metadata" and value is None:
             continue
         setattr(workspace, field, value)
 

@@ -62,6 +62,20 @@ x-common-env: &common-env
   DEFAULT_WORKSPACE_NAME: ${DEFAULT_WORKSPACE_NAME:-default}
   DEFAULT_PROJECT_NAME: ${DEFAULT_PROJECT_NAME:-default}
 
+  # LLM Provider Settings
+  LLM_DEFAULT_PROVIDER: ${LLM_DEFAULT_PROVIDER:-gemini}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://localhost:11434}
+  # Google Gemini Settings
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
+  # Keep other LLM providers for fallback
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
+  TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}
+
   # Optional integrations
   KAFKA_ENABLED: ${KAFKA_ENABLED:-false}
   OTEL_ENABLED: ${OTEL_ENABLED:-false}
@@ -90,6 +104,8 @@ services:
       - pg_data:/var/lib/postgresql/data
       # Initialize database schema on first run
       - ./init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+      # PostgreSQL network access configuration
+      - ./init-postgres-hba.sh:/docker-entrypoint-initdb.d/02-init-hba.sh
     networks:
       - mgx-net
     healthcheck:
@@ -203,7 +219,9 @@ services:
         condition: service_healthy
     environment:
       <<: *common-env
-    command: bash -c "alembic upgrade head && echo 'Migrations completed successfully'"
+      # Alembic requires sync connection (not async) - override DATABASE_URL
+      DATABASE_URL: postgresql://${DB_USER:-mgx}:${DB_PASSWORD:-mgx}@postgres:5432/${DB_NAME:-mgx}
+    command: bash -c "cd backend && alembic -c alembic.ini upgrade head && echo 'Migrations completed successfully'"
     networks:
       - mgx-net
     restart: on-failure
@@ -229,10 +247,10 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      mgx-migrate:
-        condition: service_completed_successfully
     environment:
       <<: *common-env
+      # Fix HOME for MetaGPT config discovery
+      HOME: /home/appuser
       # API Settings
       MGX_PORT: 8000
       MGX_BASE_URL: ${MGX_BASE_URL:-http://localhost:8000}

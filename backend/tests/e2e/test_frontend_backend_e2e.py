@@ -428,3 +428,6 @@ class TestFrontendBackendIntegration:
         not_found_response = await client.get("/api/workspaces/non-existent")
         assert not_found_response.status_code in [404, 401, 403]
 
+
+
+

@@ -44,6 +44,10 @@ from backend.schemas import (
 from backend.services.events import get_event_broadcaster
 from backend.services.team_provider import MGXTeamProvider
 from backend.services.git import GitService, get_git_service, GitServiceError
+from backend.db.models import AgentDefinition, AgentInstance, Task
+from backend.db.models.enums import AgentStatus, AgentMessageDirection
+from backend.services.agents.messages import get_agent_message_bus
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +103,8 @@ class TaskExecutor:
         task_name: Optional[str] = None,
         run_number: Optional[int] = None,
         project_config: Optional[Dict[str, Any]] = None,
+        session: Optional[AsyncSession] = None,
+        auto_approve: bool = True,  # Auto-approve plans by default
     ) -> Dict[str, Any]:
         """
         Execute a task with full event lifecycle.
@@ -107,10 +113,12 @@ class TaskExecutor:
             task_id: ID of the task
             run_id: ID of the specific run
             task_description: Description of task to execute
+            auto_approve: If True, automatically approve the plan without waiting
             max_rounds: Maximum execution rounds
             task_name: Name of the task (for git branch naming)
             run_number: Run number (for git branch naming)
             project_config: Project configuration including git settings
+            session: Optional database session for agent instance creation
         
         Returns:
             Execution result dict
@@ -119,8 +127,120 @@ class TaskExecutor:
         repo_dir = None
         branch_name = None
         git_cleanup_needed = False
+        agent_instance_id = None
+        task_obj = None
         
         try:
+            # Create or get agent instance for this task run
+            # Always create a new session for agent operations to avoid session state issues
+            db_session = None
+            if self.session_factory:
+                db_session = await self.session_factory()
+            
+            if db_session:
+                try:
+                    # Get task to get workspace_id and project_id
+                    task_result = await db_session.execute(
+                        select(Task).where(Task.id == task_id)
+                    )
+                    task_obj = task_result.scalar_one_or_none()
+                    
+                    if task_obj:
+                        # Try to find existing agent instance for this task/run
+                        existing_instance = await db_session.execute(
+                            select(AgentInstance).where(
+                                AgentInstance.workspace_id == task_obj.workspace_id,
+                                AgentInstance.project_id == task_obj.project_id,
+                            ).limit(1)
+                        )
+                        agent_instance = existing_instance.scalar_one_or_none()
+                        
+                        # If no instance exists, create a default one
+                        if not agent_instance:
+                            # Get or create a default agent definition
+                            default_def = await db_session.execute(
+                                select(AgentDefinition).where(
+                                    AgentDefinition.slug == "default"
+                                ).limit(1)
+                            )
+                            agent_def = default_def.scalar_one_or_none()
+                            
+                            if not agent_def:
+                                # Create a minimal default agent definition
+                                agent_def = AgentDefinition(
+                                    name="Default Agent",
+                                    slug="default",
+                                    agent_type="base",
+                                    description="Default agent for task execution",
+                                    is_enabled=True,
+                                )
+                                db_session.add(agent_def)
+                                await db_session.flush()
+                            
+                            # Create agent instance
+                            agent_instance = AgentInstance(
+                                workspace_id=task_obj.workspace_id,
+                                project_id=task_obj.project_id,
+                                definition_id=agent_def.id,
+                                name=f"Task Agent - {task_name or task_id[:8]}",
+                                status=AgentStatus.ACTIVE,  # Enum value is "active" (lowercase)
+                                config={},
+                            )
+                            db_session.add(agent_instance)
+                            await db_session.flush()
+                            await db_session.commit()  # Commit to make instance available immediately
+                            logger.info(f"Created agent instance {agent_instance.id} for task {task_id}")
+                        
+                        agent_instance_id = agent_instance.id
+                        
+                        # Close the session after creating agent instance
+                        await db_session.close()
+                        
+                        # Send initial message via agent message bus (use a fresh session for message)
+                        if self.session_factory:
+                            try:
+                                msg_session = await self.session_factory()
+                                try:
+                                    message_bus = get_agent_message_bus()
+                                    await message_bus.append(
+                                        msg_session,
+                                        workspace_id=task_obj.workspace_id,
+                                        project_id=task_obj.project_id,
+                                        agent_instance_id=agent_instance_id,
+                                        direction=AgentMessageDirection.SYSTEM,
+                                        payload={
+                                            "type": "task_started",
+                                            "agent_name": "Mike",  # TeamLeader starts the task
+                                            "role": "TeamLeader",
+                                            "task_id": task_id,
+                                            "run_id": run_id,
+                                            "message": f"Task execution started: {task_description[:100]}",
+                                            "content": f"Task execution started: {task_description[:100]}",
+                                        },
+                                        task_id=task_id,
+                                        run_id=run_id,
+                                        broadcast=True,
+                                    )
+                                    await msg_session.commit()
+                                finally:
+                                    await msg_session.close()
+                            except Exception as msg_error:
+                                logger.warning(f"Failed to send initial message: {msg_error}")
+                except Exception as e:
+                    logger.warning(f"Failed to create agent instance for task {task_id}: {e}", exc_info=True)
+                    # Continue without agent instance
+                    try:
+                        await db_session.rollback()
+                    except:
+                        pass
+                finally:
+                    # Close the session if we created it
+                    if db_session:
+                        try:
+                            await db_session.close()
+                        except:
+                            pass
+            
             # Phase 1: Start analysis
             await self._emit_event(
                 AnalysisStartEvent(
@@ -134,98 +254,320 @@ class TaskExecutor:
             # Simulate analysis phase
             await asyncio.sleep(0.1)
             
-            # Phase 2: Generate plan
-            logger.info(f"Generating plan for run {run_id}")
-            plan = {
-                "steps": ["step1", "step2", "step3"],
-                "estimated_time": "5 minutes",
-                "resources": ["agent1", "agent2"],
-            }
+            # Check if this is a simple question (chat mode) vs complex task (code generation)
+            # Do this BEFORE plan generation to skip approval for simple questions
+            is_simple = self.team_provider.is_simple_question(task_description)
+            logger.info(f"Task type: {'simple chat' if is_simple else 'complex task'}")
             
-            await self._emit_event(
-                PlanReadyEvent(
-                    task_id=task_id,
-                    run_id=run_id,
-                    data={"plan": plan},
-                    message="Plan ready for review",
-                ),
-                broadcaster=broadcaster,
-            )
-            
-            # Phase 2.5: Git setup (clone repo and create branch)
-            git_metadata = {}
-            if project_config and project_config.get("repo_full_name"):
+            # Skip plan generation and approval for simple questions
+            if is_simple:
+                # Simple chat mode - direct LLM response
                 try:
-                    git_metadata = await self._setup_git_branch(
-                        run_id=run_id,
-                        task_id=task_id,
-                        task_name=task_name or "task",
-                        run_number=run_number or 1,
-                        project_config=project_config,
-                        broadcaster=broadcaster,
-                    )
-                    repo_dir = git_metadata.get("repo_dir")
-                    branch_name = git_metadata.get("branch_name")
-                    git_cleanup_needed = True
-                except GitServiceError as e:
-                    logger.error(f"Git setup failed: {e}")
+                    result = await self.team_provider.simple_chat(task_description)
+                    
+                    # Send the response as an agent message
+                    if agent_instance_id and task_obj and self.session_factory:
+                        try:
+                            msg_session = await self.session_factory()
+                            try:
+                                message_bus = get_agent_message_bus()
+                                response_content = result.get("response", "No response")
+                                await message_bus.append(
+                                    msg_session,
+                                    workspace_id=task_obj.workspace_id,
+                                    project_id=task_obj.project_id,
+                                    agent_instance_id=agent_instance_id,
+                                    direction=AgentMessageDirection.OUTBOUND,
+                                    payload={
+                                        "type": "chat_response",
+                                        "agent_name": "AI Assistant",
+                                        "role": "Assistant",
+                                        "task_id": task_id,
+                                        "run_id": run_id,
+                                        "message": response_content,
+                                        "content": response_content,
+                                        "mode": "simple_chat",
+                                    },
+                                    task_id=task_id,
+                                    run_id=run_id,
+                                    broadcast=True,
+                                )
+                                await msg_session.commit()
+                            finally:
+                                await msg_session.close()
+                        except Exception as msg_error:
+                            logger.warning(f"Failed to send chat response: {msg_error}")
+                    
+                    # Emit completion event
                     await self._emit_event(
-                        GitOperationFailedEvent(
+                        CompletionEvent(
                             task_id=task_id,
                             run_id=run_id,
-                            data={"error": str(e), "operation": "branch_creation"},
-                            message=f"Git setup failed: {str(e)}",
+                            data={"result": result},
+                            message="Chat response completed",
                         ),
                         broadcaster=broadcaster,
                     )
+                    
+                    return {
+                        "status": "completed",
+                        "mode": "simple_chat",
+                        "response": result.get("response"),
+                    }
+                except Exception as chat_error:
+                    logger.error(f"Simple chat failed: {chat_error}", exc_info=True)
+                    # Fall through to complex task execution
             
-            # Phase 3: Request approval
-            await self._emit_event(
-                ApprovalRequiredEvent(
-                    task_id=task_id,
-                    run_id=run_id,
-                    data={"plan": plan},
-                    message="Waiting for plan approval",
-                ),
-                broadcaster=broadcaster,
-            )
-            
-            # Wait for approval
-            approved = await self.wait_for_approval(run_id, timeout=300)
-            
-            if not approved:
-                logger.info(f"Run {run_id} plan was rejected")
-                await self._emit_event(
-                    FailureEvent(
-                        task_id=task_id,
-                        run_id=run_id,
-                        message="Plan rejected by user",
-                    ),
-                    broadcaster=broadcaster,
-                )
-                return {
-                    "status": "rejected",
-                    "message": "Plan rejected by user",
-                }
-            
-            # Emit approval confirmation
-            await self._emit_event(
-                ApprovedEvent(
-                    task_id=task_id,
-                    run_id=run_id,
-                    message="Plan approved, execution started",
-                ),
-                broadcaster=broadcaster,
-            )
-            
-            # Phase 4: Execute plan
-            logger.info(f"Executing plan for run {run_id}")
+            # Complex task mode - full MGXStyleTeam execution
             try:
+                # Send execution started message (create new session for message)
+                if agent_instance_id and task_obj and self.session_factory:
+                    try:
+                        msg_session = await self.session_factory()
+                        try:
+                            message_bus = get_agent_message_bus()
+                            await message_bus.append(
+                                msg_session,
+                                workspace_id=task_obj.workspace_id,
+                                project_id=task_obj.project_id,
+                                agent_instance_id=agent_instance_id,
+                                direction=AgentMessageDirection.OUTBOUND,
+                                payload={
+                                    "type": "execution_started",
+                                    "agent_name": "Mike",  # TeamLeader executes the plan
+                                    "role": "TeamLeader",
+                                    "task_id": task_id,
+                                    "run_id": run_id,
+                                    "message": f"Executing plan for task: {task_description[:100]}",
+                                    "content": f"Executing plan for task: {task_description[:100]}",
+                                },
+                                task_id=task_id,
+                                run_id=run_id,
+                                broadcast=True,
+                            )
+                            await msg_session.commit()
+                        finally:
+                            await msg_session.close()
+                    except Exception as msg_error:
+                        logger.warning(f"Failed to send execution started message: {msg_error}")
+                
                 team = await self.team_provider.get_team()
-                result = await team.run(task_description)
+                
+                # Helper function to capture and send agent messages
+                async def capture_and_send_messages(env, initial_count: int = 0):
+                    """Capture agent messages from MetaGPT team environment and send them."""
+                    if not agent_instance_id or not task_obj or not self.session_factory:
+                        return
+                    
+                    try:
+                        if not hasattr(env, 'messages'):
+                            return
+                        
+                        # Get new messages since initial_count
+                        all_messages = env.messages
+                        new_messages = all_messages[initial_count:] if initial_count < len(all_messages) else all_messages
+                        
+                        if not new_messages:
+                            return
+                        
+                        logger.info(f"Capturing {len(new_messages)} agent messages from team execution")
+                        
+                        # Map MetaGPT roles to agent names
+                        role_name_map = {
+                            "TeamLeader": "Mike",
+                            "Engineer": "Alex", 
+                            "Tester": "Bob",
+                            "Reviewer": "Charlie",
+                        }
+                        
+                        # Send each agent message
+                        for msg in new_messages:
+                            try:
+                                # Extract agent name from message role
+                                msg_role = msg.role if hasattr(msg, 'role') else None
+                                agent_name = role_name_map.get(msg_role, msg_role) if msg_role else "Agent"
+                                
+                                # Get content
+                                content = msg.content if hasattr(msg, 'content') else str(msg)
+                                
+                                # Skip empty or system messages
+                                if not content or not content.strip():
+                                    continue
+                                
+                                # Determine message type
+                                msg_type = "agent_message"
+                                if hasattr(msg, 'cause_by'):
+                                    cause_by = str(msg.cause_by) if msg.cause_by else ""
+                                    if "AnalyzeTask" in cause_by or "DraftPlan" in cause_by:
+                                        msg_type = "planning"
+                                    elif "WriteCode" in cause_by:
+                                        msg_type = "coding"
+                                    elif "WriteTest" in cause_by:
+                                        msg_type = "testing"
+                                    elif "ReviewCode" in cause_by:
+                                        msg_type = "review"
+                                
+                                # Send message via agent message bus
+                                msg_session = await self.session_factory()
+                                try:
+                                    message_bus = get_agent_message_bus()
+                                    await message_bus.append(
+                                        msg_session,
+                                        workspace_id=task_obj.workspace_id,
+                                        project_id=task_obj.project_id,
+                                        agent_instance_id=agent_instance_id,
+                                        direction=AgentMessageDirection.OUTBOUND,
+                                        payload={
+                                            "type": msg_type,
+                                            "agent_name": agent_name,
+                                            "role": msg_role or "assistant",
+                                            "content": content,
+                                            "task_id": task_id,
+                                            "run_id": run_id,
+                                            "message": content[:200] + "..." if len(content) > 200 else content,
+                                        },
+                                        task_id=task_id,
+                                        run_id=run_id,
+                                        broadcast=True,
+                                    )
+                                    await msg_session.commit()
+                                    logger.debug(f"Sent agent message from {agent_name}: {content[:50]}...")
+                                finally:
+                                    await msg_session.close()
+                            except Exception as msg_error:
+                                logger.warning(f"Failed to send agent message: {msg_error}", exc_info=True)
+                                continue
+                    except Exception as capture_error:
+                        logger.warning(f"Failed to capture agent messages: {capture_error}", exc_info=True)
+                
+                # Track agent messages during execution
+                # MetaGPT stores messages in team.env.messages
+                initial_message_count = 0
+                if hasattr(team, 'env') and hasattr(team.env, 'messages'):
+                    initial_message_count = len(team.env.messages)
+                    logger.info(f"Initial message count: {initial_message_count}")
+                
+                # Create progress callback for real-time agent updates
+                async def agent_progress_callback(agent_name: str, status: str, message: str):
+                    """Broadcast agent progress as WebSocket events."""
+                    if agent_instance_id and task_obj and self.session_factory:
+                        try:
+                            msg_session = await self.session_factory()
+                            try:
+                                message_bus = get_agent_message_bus()
+                                await message_bus.append(
+                                    msg_session,
+                                    workspace_id=task_obj.workspace_id,
+                                    project_id=task_obj.project_id,
+                                    agent_instance_id=agent_instance_id,
+                                    direction=AgentMessageDirection.OUTBOUND,
+                                    payload={
+                                        "type": "agent_progress",
+                                        "agent_name": agent_name,
+                                        "status": status,
+                                        "task_id": task_id,
+                                        "run_id": run_id,
+                                        "message": message,
+                                        "content": message,
+                                    },
+                                    task_id=task_id,
+                                    run_id=run_id,
+                                    broadcast=True,
+                                )
+                                await msg_session.commit()
+                            finally:
+                                await msg_session.close()
+                        except Exception as cb_error:
+                            logger.warning(f"Failed to send agent progress: {cb_error}")
+                
+                # Execute task via team_provider which calls analyze_and_plan and execute
+                result = await self.team_provider.run_task(task_description)
+                
+                # Capture agent messages from team execution
+                if hasattr(team, 'env') and hasattr(team.env, 'messages'):
+                    await capture_and_send_messages(team.env, initial_message_count)
+                
+                # Send execution completed message
+                if agent_instance_id and task_obj and self.session_factory:
+                    try:
+                        msg_session = await self.session_factory()
+                        try:
+                            message_bus = get_agent_message_bus()
+                            
+                            # Extract the actual result content for display
+                            result_message = "Task execution completed successfully"
+                            if isinstance(result, dict):
+                                # If result has a 'result' key with actual content, show it
+                                if result.get("result"):
+                                    result_content = result.get("result")
+                                    if isinstance(result_content, str):
+                                        result_message = result_content
+                                    elif isinstance(result_content, dict):
+                                        # Try to get summary or description from result
+                                        result_message = result_content.get("summary", 
+                                            result_content.get("description",
+                                                result_content.get("message", str(result_content))))
+                                # If result has a 'plan' key, mention it
+                                if result.get("plan"):
+                                    plan = result.get("plan")
+                                    if isinstance(plan, str) and len(plan) > 100:
+                                        result_message = f"📋 Plan executed successfully.\n\n{result_message}"
+                            
+                            await message_bus.append(
+                                msg_session,
+                                workspace_id=task_obj.workspace_id,
+                                project_id=task_obj.project_id,
+                                agent_instance_id=agent_instance_id,
+                                direction=AgentMessageDirection.OUTBOUND,
+                                payload={
+                                    "type": "execution_completed",
+                                    "task_id": task_id,
+                                    "run_id": run_id,
+                                    "message": result_message,
+                                    "content": result_message,  # Also add as content for frontend extraction
+                                    "result": result if isinstance(result, dict) else {"status": "completed"},
+                                },
+                                task_id=task_id,
+                                run_id=run_id,
+                                broadcast=True,
+                            )
+                            await msg_session.commit()
+                        finally:
+                            await msg_session.close()
+                    except Exception as msg_error:
+                        logger.warning(f"Failed to send execution completed message: {msg_error}")
             except Exception as e:
                 logger.error(f"Execution failed: {e}")
                 result = None
+                
+                # Send execution failed message
+                if agent_instance_id and task_obj and self.session_factory:
+                    try:
+                        msg_session = await self.session_factory()
+                        try:
+                            message_bus = get_agent_message_bus()
+                            await message_bus.append(
+                                msg_session,
+                                workspace_id=task_obj.workspace_id,
+                                project_id=task_obj.project_id,
+                                agent_instance_id=agent_instance_id,
+                                direction=AgentMessageDirection.OUTBOUND,
+                                payload={
+                                    "type": "execution_failed",
+                                    "task_id": task_id,
+                                    "run_id": run_id,
+                                    "message": f"Task execution failed: {str(e)}",
+                                    "error": str(e),
+                                },
+                                task_id=task_id,
+                                run_id=run_id,
+                                broadcast=True,
+                            )
+                            await msg_session.commit()
+                        finally:
+                            await msg_session.close()
+                    except Exception as msg_error:
+                        logger.warning(f"Failed to send error message: {msg_error}")
             
             # Phase 4.5: Git commit and push (if git was setup)
             if result and repo_dir and branch_name:
@@ -264,6 +606,40 @@ class TaskExecutor:
                     ),
                     broadcaster=broadcaster,
                 )
+                
+                # Emit FILES_UPDATED event after completion
+                try:
+                    from pathlib import Path
+                    output_base = Path("output")
+                    if output_base.exists():
+                        # Find the most recent mgx_team_* directory
+                        mgx_dirs = sorted(
+                            [d for d in output_base.iterdir() if d.is_dir() and d.name.startswith("mgx_team_")],
+                            key=lambda p: p.stat().st_mtime,
+                            reverse=True
+                        )
+                        if mgx_dirs:
+                            # Count files in the directory
+                            file_count = sum(1 for _ in mgx_dirs[0].rglob("*") if _.is_file())
+                            await self._emit_event(
+                                EventPayload(
+                                    event_type=EventTypeEnum.FILES_UPDATED,
+                                    task_id=task_id,
+                                    run_id=run_id,
+                                    workspace_id=task_obj.workspace_id if task_obj else None,
+                                    data={
+                                        "task_id": task_id,
+                                        "run_id": run_id,
+                                        "file_count": file_count,
+                                        "output_dir": str(mgx_dirs[0]),
+                                    },
+                                    message=f"Files updated: {file_count} files in output directory",
+                                ),
+                                broadcaster=broadcaster,
+                            )
+                            logger.info(f"Emitted FILES_UPDATED event for task {task_id}, run {run_id}: {file_count} files")
+                except Exception as files_error:
+                    logger.warning(f"Failed to emit FILES_UPDATED event: {files_error}", exc_info=True)
                 
                 return {
                     "status": "completed",
@@ -572,7 +948,17 @@ def get_task_executor(
         if team_provider is None:
             from backend.services import get_team_provider
             team_provider = get_team_provider()
-        _executor = TaskExecutor(team_provider=team_provider)
+        
+        # Create a session factory callable that returns a new session
+        async def session_factory():
+            from backend.db.engine import get_session_factory
+            factory = await get_session_factory()
+            return factory()
+        
+        _executor = TaskExecutor(
+            team_provider=team_provider,
+            session_factory=session_factory,
+        )
     return _executor
 
 

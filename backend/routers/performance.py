@@ -11,8 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.db.engine import get_session
 from backend.services.cost.llm_tracker import get_llm_tracker
 from backend.services.cost.optimizer import get_cost_optimizer
-from backend.mgx_agent.performance.profiler import get_active_profiler
-from backend.routers.auth import get_workspace_context, WorkspaceContext
+# Lazy import to avoid Pydantic validation errors during module import
+# from backend.mgx_agent.performance.profiler import get_active_profiler
+from backend.routers.deps import get_workspace_context, WorkspaceContext
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +40,15 @@ async def get_performance_metrics(
     # Get token usage patterns
     token_patterns = await tracker.analyze_token_usage_patterns(ctx.workspace.id, period)
     
-    # Get active profiler metrics if available
+    # Get active profiler metrics if available (lazy import)
     profiler_metrics = None
-    profiler = get_active_profiler()
-    if profiler:
-        profiler_metrics = profiler.to_run_metrics()
+    try:
+        from backend.mgx_agent.performance.profiler import get_active_profiler
+        profiler = get_active_profiler()
+        if profiler:
+            profiler_metrics = profiler.to_run_metrics()
+    except Exception as e:
+        logger.debug(f"Profiler not available: {e}")
     
     return {
         "workspace_id": ctx.workspace.id,
@@ -114,11 +119,15 @@ async def get_optimization_recommendations(
     # Get token optimization recommendations
     token_recommendations = await tracker.get_token_optimization_recommendations(ctx.workspace.id)
     
-    # Get performance bottlenecks from profiler
+    # Get performance bottlenecks from profiler (lazy import)
     bottlenecks = []
-    profiler = get_active_profiler()
-    if profiler:
-        bottlenecks = profiler.get_performance_bottlenecks()
+    try:
+        from backend.mgx_agent.performance.profiler import get_active_profiler
+        profiler = get_active_profiler()
+        if profiler:
+            bottlenecks = profiler.get_performance_bottlenecks()
+    except Exception as e:
+        logger.debug(f"Profiler not available: {e}")
     
     return {
         "workspace_id": ctx.workspace.id,
@@ -160,4 +169,5 @@ async def get_cost_analysis(
         "daily_breakdown": daily_costs,
         "forecast": forecast,
     }
+
 

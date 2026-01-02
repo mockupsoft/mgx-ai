@@ -30,6 +30,9 @@ Built on **MetaGPT** with a **FastAPI** backend, **PostgreSQL** persistence, **R
 ### ✅ Multi-Agent Orchestration & Coordination
 Sophisticated multi-agent runtime simulating an AI engineering team (planner, implementer, reviewer roles) with task assignment, progress tracking, and stack-aware execution across 8 web frameworks.
 
+### ✅ Intelligent Chat Interface
+Smart question detection system that distinguishes between simple chat questions and complex code generation tasks. Simple questions receive direct LLM responses without plan generation, while complex tasks trigger the full multi-agent workflow. Features natural, conversational responses with temperature control and post-processing to filter generic LLM disclaimers.
+
 ### ✅ Workflow Engine with Dependency Resolution  
 Production-grade DAG-based workflow orchestration with conditional steps, retries/timeouts, multi-agent parallel execution, and real-time telemetry. Supports complex CI/CD pipelines and automated code generation workflows.
 
@@ -44,6 +47,9 @@ Extensible template system with stack-specific prompts, versioned templates, and
 
 ### ✅ LLM Caching Layer
 Intelligent response caching with in-memory LRU + TTL and optional Redis backend. Achieves 65-75% cache hit rates on iterative workflows with deterministic cache keys and comprehensive stats tracking.
+
+### ✅ Multi-LLM Provider Support
+Comprehensive LLM provider integration supporting OpenRouter, Google Gemini, Ollama, OpenAI, Anthropic, Mistral, and Together AI. Dynamic provider switching with automatic fallback and unified API interface. Supports provider-specific features like temperature control, streaming, and custom model selection.
 
 ### ✅ Observability (OTEL, Structured Logging)
 Enterprise observability with OpenTelemetry tracing, structured logging, metrics collection, and performance profiling. Full integration with workflow execution and multi-agent coordination.
@@ -460,7 +466,7 @@ Full contributing guide: **[CONTRIBUTING.md](./CONTRIBUTING.md)**
 
 ## Recent Updates
 
-### Completed Phases: 1-10+
+### Completed Phases: 1-11+
 
 **Production-Ready Milestones:**
 - ✅ Agent Foundation & Multi-Agent Orchestration
@@ -473,6 +479,11 @@ Full contributing guide: **[CONTRIBUTING.md](./CONTRIBUTING.md)**
 - ✅ CLI Distribution (PyPI + npm)
 - ✅ Workflow Engine & Orchestration
 - ✅ Sandboxed Code Runner (Phase 11)
+- ✅ **Intelligent Chat Interface** - Simple question detection & direct LLM responses
+- ✅ **Plan Approval System** - Human-in-the-loop approval with auto-approval for simple tasks
+- ✅ **Multi-LLM Provider Support** - OpenRouter, Gemini, Ollama, OpenAI, Anthropic, Mistral, Together
+- ✅ **Real-time WebSocket Updates** - Live chat messages, plan updates, execution progress
+- ✅ **Enhanced Response Quality** - Natural, conversational AI responses with temperature control
 
 ### Recent Merged PRs
 

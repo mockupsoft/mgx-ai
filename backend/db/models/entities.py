@@ -99,7 +99,7 @@ class Workspace(Base, TimestampMixin, SerializationMixin):
     name = Column(String(255), nullable=False)
     slug = Column(String(255), nullable=False, unique=True, index=True)
 
-    meta_data = Column("metadata", JSON, nullable=False, default=dict)
+    workspace_metadata = Column("metadata", JSON, nullable=False, default=dict)
 
     projects = relationship("Project", back_populates="workspace", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="workspace", cascade="all, delete-orphan", overlaps="tasks")
@@ -230,7 +230,7 @@ class Task(Base, TimestampMixin, SerializationMixin):
 
     config = Column(JSON, nullable=False, default=dict, comment="Task configuration")
 
-    status = Column(SQLEnum(TaskStatus), nullable=False, default=TaskStatus.PENDING, index=True)
+    status = Column(SQLEnum(TaskStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=TaskStatus.PENDING, index=True)
 
     max_rounds = Column(Integer, default=5, comment="Maximum execution rounds")
     max_revision_rounds = Column(Integer, default=2, comment="Maximum revision rounds")
@@ -288,7 +288,7 @@ class TaskRun(Base, TimestampMixin, SerializationMixin):
 
     run_number = Column(Integer, nullable=False, comment="Sequence number within task")
 
-    status = Column(SQLEnum(RunStatus), nullable=False, default=RunStatus.PENDING, index=True)
+    status = Column(SQLEnum(RunStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=RunStatus.PENDING, index=True)
 
     plan = Column(JSON, comment="Execution plan")
     results = Column(JSON, comment="Execution results")
@@ -458,7 +458,7 @@ class AgentInstance(Base, TimestampMixin, SerializationMixin):
     definition_id = Column(String(36), ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False, comment="Instance name (can differ from definition)")
-    status = Column(SQLEnum(AgentStatus), nullable=False, default=AgentStatus.IDLE, index=True)
+    status = Column(SQLEnum(AgentStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=AgentStatus.IDLE, index=True)
 
     config = Column(JSON, nullable=False, default=dict, comment="Instance-specific configuration")
     state = Column(JSON, comment="Current runtime state")
@@ -571,7 +571,7 @@ class AgentMessage(Base, TimestampMixin, SerializationMixin):
         index=True,
     )
 
-    direction = Column(SQLEnum(AgentMessageDirection), nullable=False, index=True)
+    direction = Column(SQLEnum(AgentMessageDirection, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
     payload = Column(JSON, nullable=False, default=dict)
 
     correlation_id = Column(String(255), index=True)

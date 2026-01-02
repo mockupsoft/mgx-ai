@@ -1533,26 +1533,57 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         output_dir = f"{self.output_dir_base}/mgx_team_{timestamp}"
         os.makedirs(output_dir, exist_ok=True)
         
+        files_saved = []
+        
         # Kod dosyasını kaydet
         if code:
-            # Python kod bloklarını çıkar (farklı formatları destekle)
-            code_blocks = re.findall(r'```(?:python)?\s*(.*?)\s*```', code, re.DOTALL)
-            
-            main_py_path = f"{output_dir}/main.py"
-            main_py_content = "# MGX Style Team tarafından üretildi\n"
-            main_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            if code_blocks:
-                for block in code_blocks:
-                    # Boş blokları atla
-                    if block.strip():
-                        main_py_content += block.strip() + "\n\n"
-            else:
-                # Kod bloğu bulunamazsa ham içeriği kaydet
-                main_py_content += code
-            
-            # Güvenli yaz (varsa .bak al)
-            self._safe_write_file(main_py_path, main_py_content)
+            # HTML kod bloklarını çıkar ve kaydet
+            html_blocks = re.findall(r'```html\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(html_blocks):
+                if block.strip():
+                    filename = "index.html" if i == 0 else f"page_{i}.html"
+                    html_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(html_path, block.strip())
+                    files_saved.append(filename)
+                    logger.info(f"💾 HTML dosyası yazıldı: {html_path}")
+
+            # CSS kod bloklarını çıkar ve kaydet
+            css_blocks = re.findall(r'```css\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(css_blocks):
+                if block.strip():
+                    filename = "style.css" if i == 0 else f"style_{i}.css"
+                    css_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(css_path, block.strip())
+                    files_saved.append(filename)
+                    logger.info(f"💾 CSS dosyası yazıldı: {css_path}")
+
+            # JavaScript kod bloklarını çıkar ve kaydet
+            js_blocks = re.findall(r'```(?:javascript|js)\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(js_blocks):
+                if block.strip():
+                    filename = "script.js" if i == 0 else f"script_{i}.js"
+                    js_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(js_path, block.strip())
+                    files_saved.append(filename)
+                    logger.info(f"💾 JavaScript dosyası yazıldı: {js_path}")
+
+            # Python kod bloklarını çıkar (eğer HTML/CSS/JS yoksa)
+            if not (html_blocks or css_blocks or js_blocks):
+                python_blocks = re.findall(r'```(?:python)?\s*(.*?)\s*```', code, re.DOTALL)
+                
+                main_py_path = f"{output_dir}/main.py"
+                main_py_content = "# MGX Style Team tarafından üretildi\n"
+                main_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                
+                if python_blocks:
+                    for block in python_blocks:
+                        if block.strip():
+                            main_py_content += block.strip() + "\n\n"
+                else:
+                    main_py_content += code
+                
+                self._safe_write_file(main_py_path, main_py_content)
+                files_saved.append("main.py")
         
         # Test dosyasını kaydet
         if tests:
@@ -1569,8 +1600,8 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             else:
                 test_py_content += tests
             
-            # Güvenli yaz (varsa .bak al)
             self._safe_write_file(test_py_path, test_py_content)
+            files_saved.append("test_main.py")
         
         # Review dosyasını kaydet
         if review:
@@ -1579,10 +1610,10 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             review_content += f"**Tarih:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             review_content += review
             
-            # Güvenli yaz (varsa .bak al)
             self._safe_write_file(review_path, review_content)
+            files_saved.append("review.md")
         
-        logger.info(f"📁 Tüm dosyalar kaydedildi: {output_dir}/")
+        logger.info(f"📁 Dosyalar kaydedildi: {output_dir}/ - {', '.join(files_saved)}")
     
     def get_progress(self) -> str:
         """İlerleme durumunu al"""

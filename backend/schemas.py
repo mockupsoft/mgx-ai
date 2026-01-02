@@ -84,6 +84,9 @@ class EventTypeEnum(str, Enum):
     AGENT_MESSAGE = "agent_message"
     AGENT_CONTEXT_UPDATED = "agent_context_updated"
     
+    # File events
+    FILES_UPDATED = "files_updated"
+    
     # Workflow events
     WORKFLOW_STARTED = "workflow_started"
     WORKFLOW_COMPLETED = "workflow_completed"
@@ -123,7 +126,7 @@ class WorkspaceCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=255, description="Workspace name")
     slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Workspace slug (unique)")
-    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata", description="Workspace metadata")
+    workspace_metadata: Dict[str, Any] = Field(default_factory=dict, alias="metadata", description="Workspace metadata")
 
     class Config:
         allow_population_by_field_name = True
@@ -134,7 +137,7 @@ class WorkspaceUpdate(BaseModel):
 
     name: Optional[str] = Field(None, min_length=1, max_length=255, description="Workspace name")
     slug: Optional[str] = Field(None, min_length=1, max_length=255, description="Workspace slug (unique)")
-    meta_data: Optional[Dict[str, Any]] = Field(None, alias="metadata", description="Workspace metadata")
+    workspace_metadata: Optional[Dict[str, Any]] = Field(None, alias="metadata", description="Workspace metadata")
 
     class Config:
         allow_population_by_field_name = True
@@ -154,13 +157,14 @@ class WorkspaceSummary(BaseModel):
 class WorkspaceResponse(WorkspaceSummary):
     """Workspace response schema."""
 
-    meta_data: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
+    workspace_metadata: Dict[str, Any] = Field(default_factory=dict, alias="metadata")
     created_at: datetime
     updated_at: datetime
 
     class Config:
         allow_population_by_field_name = True
         from_attributes = True
+        populate_by_name = True  # Pydantic v2 compatibility
 
 
 class WorkspaceListResponse(BaseModel):

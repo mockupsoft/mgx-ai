@@ -33,6 +33,7 @@ from metagpt.actions import Action
 from metagpt.logs import logger
 from metagpt.roles import Role
 from metagpt.schema import Message
+from metagpt.config2 import config as global_config
 try:
     from metagpt.team import Team
     from metagpt.context import Context
@@ -392,6 +393,8 @@ class MGXStyleTeam:
                 logger.info("📦 Tek LLM modu - Tüm roller aynı modeli kullanacak")
 
             # Takımı oluştur (her role farklı config ile)
+            # Global LLM config'i kullan (config2.yaml'dan okunan değerler)
+            logger.info(f"🤖 Global LLM model: {global_config.llm.model}, type: {global_config.llm.api_type}")
             roles_list = [
                 Mike(config=mike_config) if mike_config else Mike(),
                 Alex(config=alex_config) if alex_config else Alex(),
@@ -400,6 +403,11 @@ class MGXStyleTeam:
                 if charlie_config
                 else Charlie(is_human=config.human_reviewer),
             ]
+            
+            # Global LLM config'i tüm rollere uygula
+            for role in roles_list:
+                if hasattr(role, 'llm') and hasattr(global_config, 'llm'):
+                    role.llm = global_config.get_llm()
 
         # Role'lara team referansı ekle (progress bar için)
         for role in roles_list:
@@ -1198,15 +1206,24 @@ class MGXStyleTeam:
         # Fallback: gerçek değer bulunamazsa tahmini döndür
         return total_tokens if total_tokens > 0 else 1000
     
-    async def execute(self, n_round: int = None, max_revision_rounds: int = None) -> str:
+    async def execute(
+        self, 
+        n_round: int = None, 
+        max_revision_rounds: int = None,
+        progress_callback: Callable[[str, str, str], None] = None
+    ) -> str:
         """Görevi çalıştır
         
         Args:
             n_round: Her tur için maksimum round sayısı (None ise config'den alınır)
             max_revision_rounds: Review sonrası maksimum düzeltme turu (None ise config'den alınır)
+            progress_callback: Agent ilerleme callback'i - (agent_name, status, message) parametreleri alır
         """
         if not self.plan_approved and not self.config.auto_approve_plan:
             return "❌ Plan henüz onaylanmadı! Önce plan onaylamalısınız."
+        
+        # Progress callback helper
+        self._progress_callback = progress_callback
         
         # Config'den varsayılan değerleri al
         if max_revision_rounds is None:
@@ -1234,6 +1251,9 @@ class MGXStyleTeam:
         print(f"📊 Karmaşıklık: {complexity} → Investment: ${budget['investment']}, Rounds: {n_round}")
         logger.debug(f"Görev yürütme başlıyor - Karmaşıklık: {complexity}, Investment: ${budget['investment']}, Rounds: {n_round}")
         
+        # Progress callback: Mike başlıyor
+        await self._emit_progress("Mike", "working", "📋 Görevi analiz ediyorum ve planı oluşturuyorum...")
+        
         # Start profiling phase if enabled
         if self._profiler:
             self._profiler.start_phase("execute")
@@ -1255,6 +1275,9 @@ class MGXStyleTeam:
             # İlk tur: Ana geliştirme
             print_phase_header("TUR 1: Ana Geliştirme", "🔄")
             
+            # Progress: Alex başlıyor
+            await self._emit_progress("Alex", "working", "💻 Kod yazıyorum...")
+            
             # Wrap main execution with timer
             async with AsyncTimer("main_development_round", log_on_exit=True) as exec_timer:
                 async with start_span(
@@ -1267,10 +1290,18 @@ class MGXStyleTeam:
                     # Dynamic round calculation with early termination
                     actual_rounds = await self._execute_with_early_termination(n_round)
                     
+                    # Progress: Alex tamamladı, Bob başlıyor
+                    await self._emit_progress("Alex", "completed", "✅ Kod yazıldı")
+                    await self._emit_progress("Bob", "working", "🧪 Testler yazılıyor...")
+                    
                     # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
                     # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
                     logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
                     await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
+                    
+                    # Progress: Bob tamamladı, Charlie başlıyor
+                    await self._emit_progress("Bob", "completed", "✅ Testler yazıldı")
+                    await self._emit_progress("Charlie", "working", "🔍 Kod incelemesi yapılıyor...")
 
                     set_span_attributes(
                         span,
@@ -1414,14 +1445,23 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
                     self.team.env.publish_message(improvement_msg)
                     logger.info("📤 İyileştirme talebi ve plan mesajı Alex'e iletildi!")
                     
+                    # Progress: Düzeltme turu başlıyor
+                    await self._emit_progress("Alex", "working", f"🔄 Düzeltme turu {revision_count}: Kod iyileştiriliyor...")
+                    
                     # Tekrar çalıştır (with timing)
                     async with AsyncTimer(f"revision_round_{revision_count}", log_on_exit=True) as rev_timer:
                         await self.team.run(n_round=n_round)
+                        
+                        await self._emit_progress("Alex", "completed", f"✅ Düzeltme turu {revision_count}: Kod güncellendi")
+                        await self._emit_progress("Bob", "working", f"🧪 Düzeltme turu {revision_count}: Testler güncelleniyor...")
                         
                         # Charlie'nin revision turunda da review yapması için ek round
                         # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
                         logger.debug("🔍 Charlie'nin revision review yapması için ek round çalıştırılıyor...")
                         await self.team.run(n_round=1)  # Charlie'nin Bob'un mesajını gözlemlemesi ve review yapması için
+                        
+                        await self._emit_progress("Bob", "completed", f"✅ Düzeltme turu {revision_count}: Testler güncellendi")
+                        await self._emit_progress("Charlie", "working", f"🔍 Düzeltme turu {revision_count}: Tekrar inceleniyor...")
                     
                     self.phase_timings.add_phase(f"revision_round_{revision_count}", rev_timer.duration)
                     
@@ -1433,6 +1473,7 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
                     await run_in_thread(self.cleanup_memory)
                 else:
                     # Review OK - döngüden çık
+                    await self._emit_progress("Charlie", "completed", "✅ Review tamamlandı - Kod onaylandı!")
                     print(f"\n✅ Review ONAYLANDI - Düzeltme gerekmiyor.")
                     break
             
@@ -1607,6 +1648,30 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         
         return code_content, test_content, review_content
     
+    async def _emit_progress(self, agent_name: str, status: str, message: str):
+        """Agent ilerleme durumunu callback'e bildir
+        
+        Args:
+            agent_name: Agent adı (Mike, Alex, Bob, Charlie)
+            status: Durum (working, completed, error)
+            message: İlerleme mesajı
+        """
+        if hasattr(self, '_progress_callback') and self._progress_callback:
+            try:
+                # Callback async olabilir
+                import asyncio
+                if asyncio.iscoroutinefunction(self._progress_callback):
+                    await self._progress_callback(agent_name, status, message)
+                else:
+                    self._progress_callback(agent_name, status, message)
+            except Exception as e:
+                logger.warning(f"Progress callback failed: {e}")
+        
+        # Console'a da yazdır
+        status_emoji = "🔄" if status == "working" else "✅" if status == "completed" else "❌"
+        print(f"{status_emoji} {agent_name}: {message}")
+        logger.debug(f"Agent progress: {agent_name} - {status} - {message}")
+    
     def _collect_results(self) -> str:
         """Üretilen kod, test ve review'ları topla ve kaydet"""
         code_content, test_content, review_content = self._collect_raw_results()
@@ -1651,7 +1716,7 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         logger.info(f"💾 Dosya yazıldı: {path}")
     
     def _save_results(self, code: str, tests: str, review: str):
-        """Üretilen kodu, testleri ve review'ı dosyalara kaydet"""
+        """Üretilen kodu, testleri ve review'ı dosyalara kaydet - HTML/CSS/JS dahil"""
         # re ve datetime zaten en üstte import edilmiş
         
         # Output dizini oluştur
@@ -1662,26 +1727,72 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         output_dir = f"{self.output_dir_base}/mgx_team_{timestamp}"
         os.makedirs(output_dir, exist_ok=True)
         
-        # Kod dosyasını kaydet
+        saved_files = []
+        
+        # Kod dosyalarını kaydet - tüm dilleri destekle
         if code:
+            # HTML dosyalarını çıkar ve kaydet
+            html_blocks = re.findall(r'```html\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(html_blocks):
+                if block.strip():
+                    filename = "index.html" if i == 0 else f"page_{i}.html"
+                    html_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(html_path, block.strip())
+                    saved_files.append(filename)
+            
+            # CSS dosyalarını çıkar ve kaydet
+            css_blocks = re.findall(r'```css\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(css_blocks):
+                if block.strip():
+                    filename = "style.css" if i == 0 else f"style_{i}.css"
+                    css_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(css_path, block.strip())
+                    saved_files.append(filename)
+            
+            # JavaScript dosyalarını çıkar ve kaydet
+            js_blocks = re.findall(r'```(?:javascript|js)\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(js_blocks):
+                if block.strip():
+                    filename = "script.js" if i == 0 else f"script_{i}.js"
+                    js_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(js_path, block.strip())
+                    saved_files.append(filename)
+            
+            # PHP dosyalarını çıkar ve kaydet
+            php_blocks = re.findall(r'```php\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            for i, block in enumerate(php_blocks):
+                if block.strip():
+                    filename = "index.php" if i == 0 else f"page_{i}.php"
+                    php_path = f"{output_dir}/{filename}"
+                    self._safe_write_file(php_path, block.strip())
+                    saved_files.append(filename)
+            
             # Python kod bloklarını çıkar (farklı formatları destekle)
-            code_blocks = re.findall(r'```(?:python)?\s*(.*?)\s*```', code, re.DOTALL)
+            python_blocks = re.findall(r'```python\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
+            # Eğer spesifik dil belirtilmemiş bloklar varsa onları da al
+            generic_blocks = re.findall(r'```\s*\n(.*?)\s*```', code, re.DOTALL)
             
-            main_py_path = f"{output_dir}/main.py"
-            main_py_content = "# MGX Style Team tarafından üretildi\n"
-            main_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            all_python_blocks = python_blocks + [b for b in generic_blocks if 'def ' in b or 'import ' in b or 'class ' in b]
             
-            if code_blocks:
-                for block in code_blocks:
-                    # Boş blokları atla
+            if all_python_blocks:
+                main_py_path = f"{output_dir}/main.py"
+                main_py_content = "# MGX Style Team tarafından üretildi\n"
+                main_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                
+                for block in all_python_blocks:
                     if block.strip():
                         main_py_content += block.strip() + "\n\n"
-            else:
-                # Kod bloğu bulunamazsa ham içeriği kaydet
+                
+                self._safe_write_file(main_py_path, main_py_content)
+                saved_files.append("main.py")
+            elif not html_blocks and not css_blocks and not js_blocks and not php_blocks:
+                # Hiçbir kod bloğu bulunamazsa ham içeriği Python olarak kaydet
+                main_py_path = f"{output_dir}/main.py"
+                main_py_content = "# MGX Style Team tarafından üretildi\n"
+                main_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 main_py_content += code
-            
-            # Güvenli yaz (varsa .bak al)
-            self._safe_write_file(main_py_path, main_py_content)
+                self._safe_write_file(main_py_path, main_py_content)
+                saved_files.append("main.py")
         
         # Test dosyasını kaydet
         if tests:
@@ -1698,8 +1809,8 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             else:
                 test_py_content += tests
             
-            # Güvenli yaz (varsa .bak al)
             self._safe_write_file(test_py_path, test_py_content)
+            saved_files.append("test_main.py")
         
         # Review dosyasını kaydet
         if review:
@@ -1708,10 +1819,10 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             review_content += f"**Tarih:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             review_content += review
             
-            # Güvenli yaz (varsa .bak al)
             self._safe_write_file(review_path, review_content)
+            saved_files.append("review.md")
         
-        logger.info(f"📁 Tüm dosyalar kaydedildi: {output_dir}/")
+        logger.info(f"📁 Tüm dosyalar kaydedildi ({len(saved_files)} dosya): {output_dir}/")
     
     def get_progress(self) -> str:
         """İlerleme durumunu al"""

@@ -15,8 +15,12 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+import logging
+
 from backend.config import settings
 from backend.services.llm.registry import ModelConfig, ModelRegistry
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/api/llm", tags=["llm"])
@@ -32,6 +36,8 @@ def _provider_configured(provider: str) -> bool:
         return bool(settings.mistral_api_key)
     if provider == "together":
         return bool(settings.together_api_key)
+    if provider == "openrouter":
+        return bool(settings.openrouter_api_key)
     if provider == "ollama":
         return bool(settings.ollama_base_url)
     return False
@@ -177,6 +183,203 @@ async def list_models(provider: Optional[str] = None) -> Dict[str, Any]:
     return {
         "provider": provider,
         "models": ModelRegistry.list_models(provider),
+    }
+
+
+# Ollama-specific endpoints
+class OllamaModelInfo(BaseModel):
+    name: str
+    size: Optional[int] = None
+    modified_at: Optional[str] = None
+
+
+class OllamaListResponse(BaseModel):
+    models: List[OllamaModelInfo]
+    connected: bool
+    base_url: str
+
+
+class OllamaPullRequest(BaseModel):
+    model: str = Field(..., description="Model name to pull (e.g., 'mistral', 'llama2')")
+
+
+class OllamaPullResponse(BaseModel):
+    success: bool
+    message: str
+    model: str
+
+
+class OllamaDeleteRequest(BaseModel):
+    model: str = Field(..., description="Model name to delete")
+
+
+class OllamaDeleteResponse(BaseModel):
+    success: bool
+    message: str
+    model: str
+
+
+@router.get("/ollama/models", response_model=OllamaListResponse)
+async def list_ollama_models() -> OllamaListResponse:
+    """List models installed in Ollama."""
+    from backend.services.llm.providers.ollama_provider import OllamaProvider
+    
+    base_url = settings.ollama_base_url
+    provider = OllamaProvider(base_url=base_url)
+    
+    try:
+        models = await provider.list_installed_models()
+        connected = await provider.check_connection()
+        
+        # Get detailed model info
+        import httpx
+        client = httpx.AsyncClient(base_url=base_url, timeout=10.0)
+        model_details = []
+        
+        if connected:
+            try:
+                response = await client.get("/api/tags")
+                if response.status_code == 200:
+                    data = response.json()
+                    for model in data.get("models", []):
+                        model_details.append(OllamaModelInfo(
+                            name=model.get("name", ""),
+                            size=model.get("size"),
+                            modified_at=model.get("modified_at"),
+                        ))
+            except Exception:
+                # Fallback to simple list
+                model_details = [OllamaModelInfo(name=m) for m in models]
+        else:
+            model_details = [OllamaModelInfo(name=m) for m in models]
+        
+        await client.aclose()
+        
+        return OllamaListResponse(
+            models=model_details,
+            connected=connected,
+            base_url=base_url,
+        )
+    except Exception as e:
+        return OllamaListResponse(
+            models=[],
+            connected=False,
+            base_url=base_url,
+        )
+
+
+@router.post("/ollama/pull", response_model=OllamaPullResponse)
+async def pull_ollama_model(req: OllamaPullRequest) -> OllamaPullResponse:
+    """Pull a model from Ollama."""
+    import httpx
+    
+    base_url = settings.ollama_base_url
+    model = req.model
+    
+    try:
+        client = httpx.AsyncClient(base_url=base_url, timeout=300.0)  # Long timeout for pulling
+        
+        # Start pull request
+        async with client.stream(
+            "POST",
+            "/api/pull",
+            json={"name": model},
+        ) as response:
+            if response.status_code != 200:
+                await client.aclose()
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Failed to pull model: {response.text}"
+                )
+            
+            # Stream the response (Ollama sends progress updates)
+            async for line in response.aiter_lines():
+                if line:
+                    import json
+                    try:
+                        data = json.loads(line)
+                        # Log progress if needed
+                        if "status" in data:
+                            logger.info(f"Ollama pull progress: {data.get('status')}")
+                    except json.JSONDecodeError:
+                        continue
+        
+        await client.aclose()
+        
+        return OllamaPullResponse(
+            success=True,
+            message=f"Model '{model}' pulled successfully",
+            model=model,
+        )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot connect to Ollama at {base_url}. Make sure Ollama is running."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to pull model: {str(e)}"
+        )
+
+
+@router.post("/ollama/delete", response_model=OllamaDeleteResponse)
+async def delete_ollama_model(req: OllamaDeleteRequest) -> OllamaDeleteResponse:
+    """Delete a model from Ollama."""
+    import httpx
+    
+    base_url = settings.ollama_base_url
+    model = req.model
+    
+    try:
+        client = httpx.AsyncClient(base_url=base_url, timeout=30.0)
+        
+        response = await client.delete(
+            "/api/delete",
+            json={"name": model},
+        )
+        
+        await client.aclose()
+        
+        if response.status_code == 200:
+            return OllamaDeleteResponse(
+                success=True,
+                message=f"Model '{model}' deleted successfully",
+                model=model,
+            )
+        else:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"Failed to delete model: {response.text}"
+            )
+    except httpx.ConnectError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Cannot connect to Ollama at {base_url}. Make sure Ollama is running."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to delete model: {str(e)}"
+        )
+
+
+@router.get("/ollama/health")
+async def ollama_health() -> Dict[str, Any]:
+    """Check Ollama connection health."""
+    from backend.services.llm.providers.ollama_provider import OllamaProvider
+    
+    base_url = settings.ollama_base_url
+    provider = OllamaProvider(base_url=base_url)
+    
+    connected = await provider.check_connection()
+    models = await provider.list_installed_models()
+    
+    return {
+        "connected": connected,
+        "base_url": base_url,
+        "model_count": len(models),
+        "models": models,
     }
 
 

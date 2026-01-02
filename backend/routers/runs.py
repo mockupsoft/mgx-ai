@@ -11,18 +11,86 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import selectinload
 
 from backend.db.models import Project, Task, TaskRun
 from backend.db.models.enums import RunStatus
 from backend.routers.deps import WorkspaceContext, get_workspace_context
-from backend.schemas import RunApprovalRequest, RunCreate, RunListResponse, RunResponse
+from backend.schemas import RunApprovalRequest, RunCreate, RunListResponse, RunResponse, RunStatusEnum, WorkspaceSummary, ProjectSummary
 from backend.services import get_task_executor
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
+
+
+def run_to_response(run: TaskRun, workspace=None, project=None) -> RunResponse:
+    """Convert TaskRun ORM object to RunResponse schema manually to avoid async session issues."""
+    # Convert status enum to string value
+    status_value = run.status.value if hasattr(run.status, 'value') else str(run.status)
+    
+    # Build workspace summary if available
+    workspace_summary = None
+    if workspace:
+        workspace_summary = WorkspaceSummary(
+            id=workspace.id,
+            name=workspace.name,
+            slug=workspace.slug,
+        )
+    elif hasattr(run, 'workspace') and run.workspace:
+        workspace_summary = WorkspaceSummary(
+            id=run.workspace.id,
+            name=run.workspace.name,
+            slug=run.workspace.slug,
+        )
+    
+    # Build project summary if available
+    project_summary = None
+    if project:
+        project_summary = ProjectSummary(
+            id=project.id,
+            workspace_id=project.workspace_id,
+            name=project.name,
+            slug=project.slug,
+        )
+    elif hasattr(run, 'project') and run.project:
+        project_summary = ProjectSummary(
+            id=run.project.id,
+            workspace_id=run.project.workspace_id,
+            name=run.project.name,
+            slug=run.project.slug,
+        )
+    
+    # Get created_at and updated_at safely (may be None for newly created runs)
+    from datetime import datetime, timezone
+    created_at = getattr(run, 'created_at', None)
+    if created_at is None:
+        created_at = datetime.now(timezone.utc)
+    
+    updated_at = getattr(run, 'updated_at', None)
+    if updated_at is None:
+        updated_at = datetime.now(timezone.utc)
+    
+    return RunResponse(
+        id=run.id,
+        workspace_id=run.workspace_id,
+        project_id=run.project_id,
+        task_id=run.task_id,
+        run_number=run.run_number,
+        status=RunStatusEnum(status_value),
+        workspace=workspace_summary,
+        project=project_summary,
+        plan=getattr(run, 'plan', None),
+        results=getattr(run, 'results', None),
+        started_at=getattr(run, 'started_at', None),
+        completed_at=getattr(run, 'completed_at', None),
+        duration=getattr(run, 'duration', None),
+        error_message=getattr(run, 'error_message', None),
+        error_details=getattr(run, 'error_details', None),
+        created_at=created_at,
+        updated_at=updated_at,
+    )
 
 
 @router.get("/", response_model=RunListResponse)
@@ -72,7 +140,7 @@ async def list_runs(
     runs = result.scalars().all()
 
     return RunListResponse(
-        items=[RunResponse.model_validate(run) for run in runs],
+        items=[run_to_response(run) for run in runs],
         total=total,
         skip=skip,
         limit=limit,
@@ -101,12 +169,29 @@ async def create_run(
         await session.execute(select(func.count()).select_from(TaskRun).where(TaskRun.task_id == run_create.task_id))
     ).scalar_one()
 
+    # Use raw SQL to avoid issues with missing columns in database (migration issue)
+    from sqlalchemy import text
     project_result = await session.execute(
-        select(Project).where(Project.id == db_task.project_id, Project.workspace_id == db_task.workspace_id)
+        text("""
+            SELECT id, workspace_id, name, slug, metadata, created_at, updated_at
+            FROM projects
+            WHERE id = :project_id AND workspace_id = :workspace_id
+            LIMIT 1
+        """),
+        {"project_id": db_task.project_id, "workspace_id": db_task.workspace_id}
     )
-    project = project_result.scalar_one_or_none()
-    if project is None:
+    row = project_result.first()
+    if row is None:
         raise HTTPException(status_code=500, detail="Task project not found")
+    
+    # Manually construct Project object from row data
+    project = Project(
+        id=row[0],
+        workspace_id=row[1],
+        name=row[2],
+        slug=row[3],
+        meta_data=row[4] if row[4] else {},
+    )
 
     db_run = TaskRun(
         task_id=db_task.id,
@@ -116,9 +201,8 @@ async def create_run(
         status=RunStatus.PENDING,
     )
 
-    db_run.task = db_task
-    db_run.workspace = ctx.workspace
-    db_run.project = project
+    # Don't assign workspace/project objects to avoid SQLAlchemy trying to INSERT them
+    # We only need the IDs which are already set above
 
     session.add(db_run)
     await session.flush()
@@ -128,6 +212,16 @@ async def create_run(
 
     logger.info("Run created: %s", db_run.id)
 
+    # Get project config for executor
+    project_config = {
+        "repo_full_name": getattr(project, 'repo_full_name', None),
+        "default_branch": getattr(project, 'default_branch', 'main'),
+        "run_branch_prefix": db_task.run_branch_prefix or "mgx",
+    }
+    
+    await session.commit()
+    
+    # After commit, start executor in background (it will create its own session)
     executor = get_task_executor()
     asyncio.create_task(
         executor.execute_task(
@@ -135,10 +229,14 @@ async def create_run(
             run_id=db_run.id,
             task_description=db_task.description or db_task.name,
             max_rounds=db_task.max_rounds,
+            task_name=db_task.name,
+            run_number=db_run.run_number,
+            project_config=project_config,
+            session=None,  # Executor will create its own session
         )
     )
 
-    return RunResponse.model_validate(db_run)
+    return run_to_response(db_run, workspace=ctx.workspace, project=project)
 
 
 @router.get("/{run_id}", response_model=RunResponse)
@@ -162,7 +260,7 @@ async def get_run(
     if db_run is None:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    return RunResponse.model_validate(db_run)
+    return run_to_response(db_run)
 
 
 @router.put("/{run_id}", response_model=RunResponse)
@@ -206,8 +304,10 @@ async def update_run(
         db_run.status = status_enum
         await session.flush()
 
+    await session.commit()
+
     logger.info("Run updated: %s", run_id)
-    return RunResponse.model_validate(db_run)
+    return run_to_response(db_run)
 
 
 @router.delete("/{run_id}")
@@ -250,21 +350,47 @@ async def approve_plan(
         approval.approved,
     )
 
+    # Query TaskRun without eager loading to avoid missing column issues
     result = await session.execute(
         select(TaskRun)
         .where(TaskRun.id == run_id, TaskRun.workspace_id == ctx.workspace.id)
-        .options(selectinload(TaskRun.workspace), selectinload(TaskRun.project))
+        # Removed selectinload to avoid projects.repo_full_name error
     )
     db_run = result.scalar_one_or_none()
 
     if db_run is None:
         raise HTTPException(status_code=404, detail="Run not found")
 
+    # Get project using raw SQL to avoid missing column issues
+    project_result = await session.execute(
+        text("""
+            SELECT id, workspace_id, name, slug, metadata, created_at, updated_at
+            FROM projects
+            WHERE id = :project_id AND workspace_id = :workspace_id
+            LIMIT 1
+        """),
+        {"project_id": db_run.project_id, "workspace_id": db_run.workspace_id}
+    )
+    row = project_result.first()
+    if row is None:
+        raise HTTPException(status_code=500, detail="Run project not found")
+    
+    # Manually construct Project object from row data
+    project = Project(
+        id=row[0],
+        workspace_id=row[1],
+        name=row[2],
+        slug=row[3],
+        meta_data=row[4] if row[4] else {},
+    )
+
     executor = get_task_executor()
     await executor.approve_plan(run_id, approved=approval.approved)
 
+    await session.commit()
+
     logger.info("Approval decision submitted for run: %s", run_id)
-    return RunResponse.model_validate(db_run)
+    return run_to_response(db_run, workspace=ctx.workspace, project=project)
 
 
 @router.get("/{run_id}/logs")

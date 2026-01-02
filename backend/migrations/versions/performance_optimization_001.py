@@ -100,3 +100,6 @@ def downgrade() -> None:
     op.drop_table('token_usage_analytics')
     op.drop_table('performance_metrics')
 
+
+
+

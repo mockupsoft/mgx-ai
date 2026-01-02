@@ -29,6 +29,7 @@ from .providers import (
     MistralProvider,
     OllamaProvider,
     TogetherAIProvider,
+    OpenRouterProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -109,12 +110,24 @@ class LLMService:
             )
             logger.info("Together AI provider initialized")
         
-        # Ollama (local)
-        if settings.llm_prefer_local or not providers:
+        # OpenRouter
+        if settings.openrouter_api_key:
+            providers["openrouter"] = OpenRouterProvider(
+                api_key=settings.openrouter_api_key,
+                base_url=settings.openrouter_base_url,
+            )
+            logger.info("OpenRouter provider initialized")
+        
+        # Ollama (local) - Always initialize as fallback option
+        # Even if llm_prefer_local is False, Ollama should be available as a fallback
+        try:
             providers["ollama"] = OllamaProvider(
                 base_url=settings.ollama_base_url,
             )
             logger.info(f"Ollama provider initialized at {settings.ollama_base_url}")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Ollama provider: {e}")
+            # Continue without Ollama if initialization fails
         
         return providers
     

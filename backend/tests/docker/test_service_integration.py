@@ -251,3 +251,6 @@ class TestContainerEnvironment:
         # Should have REDIS_URL
         assert "REDIS_URL" in result.stdout or result.returncode != 0
 
+
+
+

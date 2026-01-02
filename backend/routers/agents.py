@@ -14,11 +14,13 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
+from sqlalchemy.exc import ProgrammingError
 
 from backend.config import settings
 from backend.db.models import (
     AgentDefinition,
     AgentInstance,
+    AgentMessage,
     AgentMessageDirection,
     AgentStatus,
     Project,
@@ -33,6 +35,7 @@ from backend.schemas import (
     AgentDefinitionResponse,
     AgentInstanceListResponse,
     AgentInstanceResponse,
+    AgentMessageDirectionEnum,
     AgentMessageResponse,
     AgentSendMessageRequest,
     AgentUpdateRequest,
@@ -112,23 +115,165 @@ async def list_definitions(ctx: WorkspaceContext = Depends(get_workspace_context
 @router.get("/", response_model=AgentInstanceListResponse)
 async def list_instances(
     project_id: Optional[str] = Query(None),
+    task_id: Optional[str] = Query(None),
+    run_id: Optional[str] = Query(None),
     ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> AgentInstanceListResponse:
-    session = ctx.session
+    """List agent instances in the active workspace.
+    
+    If task_id is provided, returns agents that have messages for that task.
+    If run_id is provided, returns agents that have messages for that run.
+    """
+    try:
+        # Store workspace_id and project_id before any operations that might rollback
+        workspace_id = ctx.workspace.id
+        project_id_value = project_id
+        
+        logger.info(
+            "[list_instances] Starting - workspace_id=%s, project_id=%s, task_id=%s, run_id=%s",
+            workspace_id,
+            project_id_value,
+            task_id,
+            run_id,
+        )
+        
+        session = ctx.session
 
-    query = (
-        select(AgentInstance)
-        .where(AgentInstance.workspace_id == ctx.workspace.id)
-        .options(selectinload(AgentInstance.definition))
-        .order_by(AgentInstance.created_at.desc())
-    )
-    if project_id:
-        query = query.where(AgentInstance.project_id == project_id)
+        # Initialize query variable
+        query = None
+        
+        # Check if agent_instances table exists
+        from sqlalchemy import text, inspect
+        from backend.db.models import AgentMessage
+        
+        # If task_id or run_id is provided, try to find agents via AgentMessage table
+        if task_id or run_id:
+            logger.debug("[list_instances] Filtering by task_id=%s or run_id=%s", task_id, run_id)
+            try:
+                # Query AgentMessage to find agent_instance_ids
+                message_query = select(AgentMessage.agent_instance_id).distinct().where(
+                    AgentMessage.workspace_id == workspace_id
+                )
+                if task_id:
+                    message_query = message_query.where(AgentMessage.task_id == task_id)
+                if run_id:
+                    message_query = message_query.where(AgentMessage.run_id == run_id)
+                
+                message_result = await session.execute(message_query)
+                agent_instance_ids = [row[0] for row in message_result.fetchall()]
+                
+                if not agent_instance_ids:
+                    logger.debug("[list_instances] No agents found for task_id=%s, run_id=%s", task_id, run_id)
+                    return AgentInstanceListResponse(items=[])
+                
+                logger.debug("[list_instances] Found %s agent instance IDs from messages", len(agent_instance_ids))
+                
+                # Query AgentInstance for those IDs
+                query = (
+                    select(AgentInstance)
+                    .where(AgentInstance.id.in_(agent_instance_ids))
+                    .where(AgentInstance.workspace_id == workspace_id)
+                    .options(selectinload(AgentInstance.definition))
+                    .order_by(AgentInstance.created_at.desc())
+                )
+                if project_id_value:
+                    query = query.where(AgentInstance.project_id == project_id_value)
+            except Exception as msg_error:
+                # If AgentMessage table doesn't exist or transaction error, rollback and fall back
+                error_str = str(msg_error)
+                if "does not exist" in error_str or "UndefinedTableError" in error_str or "relation" in error_str.lower() or "InFailedSQLTransaction" in error_str:
+                    logger.warning("[list_instances] AgentMessage table error, rolling back and falling back to regular query: %s", error_str)
+                    # Rollback the failed transaction
+                    try:
+                        await session.rollback()
+                    except:
+                        pass
+                    # Fall through to regular query below - query will be set there
+                    query = None
+                else:
+                    # For other errors, rollback and re-raise
+                    try:
+                        await session.rollback()
+                    except:
+                        pass
+                    raise
+        
+        # Regular query (used when no task_id/run_id, or when AgentMessage table doesn't exist)
+        if query is None:
+            query = (
+                select(AgentInstance)
+                .where(AgentInstance.workspace_id == workspace_id)
+                .options(selectinload(AgentInstance.definition))
+                .order_by(AgentInstance.created_at.desc())
+            )
+            if project_id_value:
+                query = query.where(AgentInstance.project_id == project_id_value)
 
-    result = await session.execute(query)
-    items = result.scalars().all()
+        try:
+            logger.debug("[list_instances] Executing query")
+            result = await session.execute(query)
+            items = result.scalars().all()
+            logger.debug("[list_instances] Found %s instances", len(items))
 
-    return AgentInstanceListResponse(items=[AgentInstanceResponse.model_validate(i) for i in items])
+            logger.debug("[list_instances] Converting to response")
+            response_items = []
+            for i in items:
+                try:
+                    # Manually construct response to avoid MetaData() confusion
+                    instance_dict = {
+                        "id": i.id,
+                        "workspace_id": i.workspace_id,
+                        "project_id": i.project_id,
+                        "definition_id": i.definition_id,
+                        "name": i.name,
+                        "status": i.status.value if hasattr(i.status, 'value') else (str(i.status) if i.status else "idle"),
+                        "config": i.config or {},
+                        "state": i.state,
+                        "last_heartbeat": i.last_heartbeat,
+                        "last_error": i.last_error,
+                        "created_at": i.created_at,
+                        "updated_at": i.updated_at,
+                    }
+                    
+                    # Add definition if available
+                    if i.definition:
+                        instance_dict["definition"] = {
+                            "id": i.definition.id,
+                            "name": i.definition.name,
+                            "slug": i.definition.slug,
+                            "agent_type": i.definition.agent_type,
+                            "description": i.definition.description,
+                            "capabilities": i.definition.capabilities or [],
+                            "config_schema": i.definition.config_schema,
+                            "meta_data": i.definition.meta_data if isinstance(i.definition.meta_data, dict) else (i.definition.meta_data if i.definition.meta_data else {}),
+                            "is_enabled": i.definition.is_enabled,
+                            "created_at": i.definition.created_at,
+                            "updated_at": i.definition.updated_at,
+                        }
+                    
+                    response_items.append(AgentInstanceResponse.model_validate(instance_dict))
+                except Exception as e:
+                    logger.warning("[list_instances] Failed to validate instance %s: %s", i.id, e, exc_info=True)
+                    # Skip invalid instances instead of failing the entire request
+                    continue
+
+            logger.info("[list_instances] Success - returning %s instances", len(response_items))
+            return AgentInstanceListResponse(items=response_items)
+        except Exception as table_error:
+            # If table doesn't exist or other database error, return empty list
+            error_str = str(table_error)
+            if "does not exist" in error_str or "UndefinedTableError" in error_str:
+                logger.warning("[list_instances] agent_instances table does not exist, returning empty list")
+                return AgentInstanceListResponse(items=[])
+            # Re-raise other errors
+            raise
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("[list_instances] Error: %s", e, exc_info=True)
+        # Return empty list instead of 500 error for better UX
+        logger.warning("[list_instances] Returning empty list due to error")
+        return AgentInstanceListResponse(items=[])
 
 
 @router.post("/", response_model=AgentInstanceResponse, status_code=201)
@@ -458,6 +603,119 @@ async def rollback_context(
     )
 
 
+@router.get("/messages", response_model=list[AgentMessageResponse])
+async def list_messages_by_task(
+    task_id: Optional[str] = Query(None),
+    run_id: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=200),
+    before_id: Optional[str] = Query(None, description="Load messages before this message ID (for pagination)"),
+    before_timestamp: Optional[str] = Query(None, description="Load messages before this timestamp (ISO format, for pagination)"),
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> list[AgentMessageResponse]:
+    """List messages by task_id or run_id (alternative to agent_id-based lookup).
+    
+    Supports cursor-based pagination:
+    - Use `before_id` to load messages older than a specific message
+    - Use `before_timestamp` to load messages older than a specific timestamp
+    - If neither is provided, returns the oldest messages (offset by skip)
+    """
+    try:
+        session = ctx.session
+        
+        # CRITICAL: task_id is required to prevent loading messages from other tasks
+        if not task_id:
+            logger.warning(f"[list_messages_by_task] task_id is required but not provided. workspace_id: {ctx.workspace.id}")
+            raise HTTPException(status_code=400, detail="task_id is required")
+        
+        # Validate task_id is not empty string
+        if task_id.strip() == "":
+            logger.warning(f"[list_messages_by_task] task_id is empty string. workspace_id: {ctx.workspace.id}")
+            raise HTTPException(status_code=400, detail="task_id cannot be empty")
+        
+        logger.debug(f"[list_messages_by_task] Fetching messages for task_id: {task_id}, run_id: {run_id}, workspace_id: {ctx.workspace.id}")
+        
+        from backend.db.models import AgentMessage
+        from datetime import datetime
+        
+        query = select(AgentMessage).where(AgentMessage.workspace_id == ctx.workspace.id)
+        
+        # Always filter by task_id to ensure we only get messages for this specific task
+        query = query.where(AgentMessage.task_id == task_id)
+        
+        if run_id:
+            query = query.where(AgentMessage.run_id == run_id)
+        
+        # Cursor-based pagination: load messages before a specific message or timestamp
+        if before_id:
+            # Get the message to use as cursor
+            cursor_msg = await session.get(AgentMessage, before_id)
+            if cursor_msg:
+                # Load messages older than the cursor message
+                query = query.where(AgentMessage.created_at < cursor_msg.created_at)
+        elif before_timestamp:
+            try:
+                # Parse ISO timestamp
+                cursor_time = datetime.fromisoformat(before_timestamp.replace('Z', '+00:00'))
+                query = query.where(AgentMessage.created_at < cursor_time)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid before_timestamp format. Use ISO format.")
+        
+        # Order by created_at ascending (oldest first, newest last)
+        # This ensures newest messages appear at the bottom of the chat
+        # When loading older messages (pagination), we want the oldest messages first
+        query = query.order_by(AgentMessage.created_at.asc())
+        
+        # Apply skip and limit
+        if not before_id and not before_timestamp:
+            # Only use skip/offset for initial load, not for cursor-based pagination
+            query = query.offset(skip)
+        query = query.limit(limit)
+        
+        result = await session.execute(query)
+        messages = result.scalars().all()
+        
+        logger.debug(f"[list_messages_by_task] Found {len(messages)} messages for task_id: {task_id}, run_id: {run_id}")
+        
+        # Verify all messages belong to the correct task (safety check)
+        wrong_task_messages = [m for m in messages if m.task_id != task_id]
+        if wrong_task_messages:
+            logger.warning(f"[list_messages_by_task] WARNING: Found {len(wrong_task_messages)} messages with incorrect task_id! Expected: {task_id}, Found: {[m.task_id for m in wrong_task_messages[:5]]}")
+        
+        # Manually convert to avoid MissingGreenlet issues
+        response_messages = []
+        for m in messages:
+            try:
+                response_messages.append(AgentMessageResponse(
+                    id=m.id,
+                    workspace_id=m.workspace_id,
+                    project_id=m.project_id,
+                    agent_instance_id=m.agent_instance_id,
+                    direction=AgentMessageDirectionEnum(m.direction.value if hasattr(m.direction, 'value') else str(m.direction)),
+                    payload=m.payload or {},
+                    correlation_id=m.correlation_id,
+                    task_id=m.task_id,
+                    run_id=m.run_id,
+                    created_at=m.created_at,
+                    updated_at=m.updated_at,
+                ))
+            except Exception as e:
+                logger.warning("[list_messages_by_task] Failed to convert message %s: %s", m.id, e)
+                continue
+        
+        return response_messages
+    except HTTPException:
+        raise
+    except ProgrammingError as e:
+        if "relation \"agent_messages\" does not exist" in str(e):
+            logger.warning("[list_messages_by_task] Agent messages table does not exist. Returning empty list.")
+            return []
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        logger.error("[list_messages_by_task] Error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list messages: {str(e)}")
+
+
 @router.get("/{agent_id}/messages", response_model=list[AgentMessageResponse])
 async def list_messages(
     agent_id: str,
@@ -467,29 +725,50 @@ async def list_messages(
     correlation_id: Optional[str] = Query(None),
     ctx: WorkspaceContext = Depends(get_workspace_context),
 ) -> list[AgentMessageResponse]:
-    session = ctx.session
+    """List message history for an agent instance."""
+    try:
+        session = ctx.session
 
-    await _get_instance_or_404(session, workspace_id=ctx.workspace.id, agent_id=agent_id)
+        await _get_instance_or_404(session, workspace_id=ctx.workspace.id, agent_id=agent_id)
 
-    direction_enum: Optional[AgentMessageDirection] = None
-    if direction is not None:
-        try:
-            direction_enum = AgentMessageDirection(direction)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid direction")
+        direction_enum: Optional[AgentMessageDirection] = None
+        if direction is not None:
+            try:
+                direction_enum = AgentMessageDirection(direction)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid direction")
 
-    bus = get_agent_message_bus()
-    messages = await bus.list_history(
-        session,
-        workspace_id=ctx.workspace.id,
-        agent_instance_id=agent_id,
-        skip=skip,
-        limit=limit,
-        direction=direction_enum,
-        correlation_id=correlation_id,
-    )
+        bus = get_agent_message_bus()
+        messages = await bus.list_history(
+            session,
+            workspace_id=ctx.workspace.id,
+            agent_instance_id=agent_id,
+            skip=skip,
+            limit=limit,
+            direction=direction_enum,
+            correlation_id=correlation_id,
+        )
 
-    return [AgentMessageResponse.model_validate(m) for m in messages]
+        return [AgentMessageResponse.model_validate(m) for m in messages]
+    except HTTPException:
+        raise
+    except ProgrammingError as e:
+        if "relation \"agent_messages\" does not exist" in str(e):
+            logger.warning(
+                "[list_messages] Agent messages table does not exist. Returning empty list. "
+                "Please run migrations if this is unexpected. Error: %s", e
+            )
+            return []  # Return empty list if table doesn't exist
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error while listing agent messages: {str(e)}"
+        )
+    except Exception as e:
+        logger.error("[list_messages] Error: %s", e, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to list agent messages: {str(e)}"
+        )
 
 
 @router.post("/{agent_id}/messages", response_model=AgentMessageResponse, status_code=201)
@@ -549,6 +828,134 @@ async def send_message(
     except Exception:
         pass
 
+    return AgentMessageResponse.model_validate(message)
+
+
+@router.post("/messages", response_model=AgentMessageResponse, status_code=201)
+async def send_message_by_task(
+    payload: AgentSendMessageRequest,
+    ctx: WorkspaceContext = Depends(get_workspace_context),
+) -> AgentMessageResponse:
+    """Send a message by task_id/run_id without requiring agent_id.
+    
+    This endpoint allows saving user messages before an agent instance is created.
+    It will create or find a placeholder agent instance for the task.
+    """
+    session = ctx.session
+    
+    if not payload.task_id:
+        raise HTTPException(status_code=400, detail="task_id is required")
+    
+    from backend.db.models import Task, AgentInstance, AgentDefinition, AgentStatus, AgentMessage
+    from sqlalchemy import select
+    from uuid import uuid4
+    
+    # Get task to find project_id
+    task = await session.get(Task, payload.task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if task.workspace_id != ctx.workspace.id:
+        raise HTTPException(status_code=403, detail="Task does not belong to this workspace")
+    
+    # Try to find existing agent instance for this task
+    # Look for agent instances via existing messages with the same task_id
+    agent_instance = None
+    
+    # First, try to find an agent instance from existing messages with this task_id
+    result = await session.execute(
+        select(AgentInstance)
+        .join(AgentMessage, AgentMessage.agent_instance_id == AgentInstance.id)
+        .where(AgentMessage.task_id == payload.task_id)
+        .where(AgentInstance.workspace_id == ctx.workspace.id)
+        .limit(1)
+    )
+    agent_instance = result.scalar_one_or_none()
+    
+    # If no instance found from messages, look for any instance in the same project
+    if not agent_instance:
+        result = await session.execute(
+            select(AgentInstance)
+            .where(AgentInstance.workspace_id == ctx.workspace.id)
+            .where(AgentInstance.project_id == task.project_id)
+            .limit(1)
+        )
+        agent_instance = result.scalar_one_or_none()
+    
+    # If still no instance, create a placeholder instance
+    if not agent_instance:
+        # Find or create a default agent definition
+        result = await session.execute(
+            select(AgentDefinition)
+            .where(AgentDefinition.slug == "mgx-team")
+            .limit(1)
+        )
+        agent_def = result.scalar_one_or_none()
+        
+        if not agent_def:
+            # Create a minimal agent definition if it doesn't exist
+            agent_def = AgentDefinition(
+                id=str(uuid4()),
+                slug="mgx-team",
+                name="MGX Team",
+                agent_type="multi_agent",
+                config={},
+            )
+            session.add(agent_def)
+            await session.flush()
+        
+        # Create placeholder agent instance
+        agent_instance = AgentInstance(
+            id=str(uuid4()),
+            workspace_id=ctx.workspace.id,
+            project_id=task.project_id,
+            definition_id=agent_def.id,
+            name=f"Task {payload.task_id[:8]}",
+            status=AgentStatus.IDLE,
+            config={},
+        )
+        session.add(agent_instance)
+        await session.flush()
+        logger.info(f"Created placeholder agent instance {agent_instance.id} for task {payload.task_id}")
+    
+    try:
+        direction_enum = AgentMessageDirection(payload.direction.value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid direction")
+    
+    bus = get_agent_message_bus()
+    
+    message = await bus.append(
+        session,
+        workspace_id=ctx.workspace.id,
+        project_id=task.project_id,
+        agent_instance_id=agent_instance.id,
+        direction=direction_enum,
+        payload=payload.payload,
+        correlation_id=payload.correlation_id,
+        task_id=payload.task_id,
+        run_id=payload.run_id,
+        broadcast=True,
+    )
+    
+    try:
+        await get_event_broadcaster().publish(
+            EventPayload(
+                event_type=EventTypeEnum.AGENT_ACTIVITY,
+                workspace_id=ctx.workspace.id,
+                agent_id=agent_instance.id,
+                task_id=payload.task_id,
+                run_id=payload.run_id,
+                data={
+                    "action": "message",
+                    "direction": payload.direction.value,
+                    "correlation_id": payload.correlation_id,
+                },
+            )
+        )
+    except Exception:
+        pass
+    
     return AgentMessageResponse.model_validate(message)
 
 

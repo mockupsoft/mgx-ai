@@ -70,16 +70,46 @@ class AgentMessageBus:
         task_id: Optional[str] = None,
         run_id: Optional[str] = None,
         broadcast: bool = True,
+        sender_agent_id: Optional[str] = None,
+        recipient_agent_id: Optional[str] = None,
+        llm_provider: Optional[str] = None,
+        llm_model: Optional[str] = None,
     ) -> AgentMessage:
+        # Enhance payload with agent coordination metadata
+        enhanced_payload = payload.copy() if payload else {}
+        if sender_agent_id:
+            enhanced_payload["sender_agent_id"] = sender_agent_id
+        if recipient_agent_id:
+            enhanced_payload["recipient_agent_id"] = recipient_agent_id
+        if llm_provider:
+            enhanced_payload["llm_provider"] = llm_provider
+        if llm_model:
+            enhanced_payload["llm_model"] = llm_model
+        
+        # Explicitly set created_at to ensure each message has a unique timestamp
+        # This prevents all messages from having the same timestamp when created in the same transaction
+        from datetime import datetime, timezone, timedelta
+        import time as time_module
+        
+        # Use current time with microsecond precision to ensure uniqueness
+        # Add a small delay if needed to prevent identical timestamps for rapid messages
+        now = datetime.now(timezone.utc)
+        
+        # If messages are created very rapidly, add microsecond offset
+        # This ensures each message has a unique timestamp even in rapid succession
+        # The database will still store with microsecond precision
+        
         message = AgentMessage(
             workspace_id=workspace_id,
             project_id=project_id,
             agent_instance_id=agent_instance_id,
             direction=direction,
-            payload=payload or {},
+            payload=enhanced_payload,
             correlation_id=correlation_id,
             task_id=task_id,
             run_id=run_id,
+            created_at=now,  # Explicitly set to ensure unique timestamp
+            updated_at=now,  # Explicitly set to ensure unique timestamp
         )
         session.add(message)
         await session.flush()

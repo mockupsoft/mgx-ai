@@ -75,3 +75,6 @@ def authenticated_client(api_client, mock_auth_token):
     api_client.headers.update({"Authorization": f"Bearer {mock_auth_token}"})
     return api_client
 
+
+
+

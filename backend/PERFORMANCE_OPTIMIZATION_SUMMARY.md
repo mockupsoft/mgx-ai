@@ -131,3 +131,6 @@ Tüm optimizasyonlar `backend/config.py` dosyasındaki ayarlarla kontrol edilebi
 - `enable_early_termination`: Early termination aktif/pasif
 - `slow_query_threshold_ms`: Slow query detection threshold
 
+
+
+

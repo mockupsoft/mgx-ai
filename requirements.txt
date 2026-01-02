@@ -22,7 +22,8 @@ metagpt>=0.8.0
 tenacity>=8.2.0
 
 # Async & Concurrency
-httpx>=0.24.0
+# httpx 0.28+ removed 'proxies' parameter, metagpt/openai still use it
+httpx>=0.24.0,<0.28.0
 asyncio-contextmanager>=1.0.0
 
 # WebSocket & Events

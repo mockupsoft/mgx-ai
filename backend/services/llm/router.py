@@ -13,6 +13,7 @@ from .providers import (
     MistralProvider,
     OllamaProvider,
     TogetherAIProvider,
+    OpenRouterProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,7 @@ class FallbackChain:
     ]
     
     LOCAL_ONLY = [
+        ("ollama", "qwen3-coder:30b"),
         ("ollama", "mistral"),
         ("ollama", "llama2"),
         ("ollama", "codellama"),
@@ -64,6 +66,7 @@ class FallbackChain:
         ("openai", "gpt-4"),
         ("anthropic", "claude-3-sonnet"),
         ("together", "codellama/CodeLlama-34b-Instruct-hf"),
+        ("ollama", "qwen3-coder:30b"),
         ("ollama", "codellama"),
     ]
     
@@ -76,6 +79,7 @@ class FallbackChain:
     
     BALANCED = [
         ("openai", "gpt-3.5-turbo"),
+        ("openrouter", "nex-agi/deepseek-v3.1-nex-n1:free"),
         ("anthropic", "claude-3-sonnet"),
         ("mistral", "mistral-medium"),
         ("together", "mistralai/Mistral-7B-Instruct-v0.2"),

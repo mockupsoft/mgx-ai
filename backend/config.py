@@ -204,7 +204,7 @@ class Settings(BaseSettings):
     # LLM Provider Settings
     llm_default_provider: str = Field(
         default="openai",
-        description="Default LLM provider: openai | anthropic | mistral | ollama | together"
+        description="Default LLM provider: openai | anthropic | mistral | ollama | together | openrouter"
     )
     llm_routing_strategy: str = Field(
         default="balanced",
@@ -234,6 +234,18 @@ class Settings(BaseSettings):
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         description="Ollama server base URL"
+    )
+    openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        description="OpenRouter API base URL"
+    )
+    
+    # Google Gemini Settings
+    google_api_key: Optional[str] = Field(default=None, description="Google AI Studio API key for Gemini")
+    gemini_model: str = Field(
+        default="gemini-2.0-flash",
+        description="Gemini model to use"
     )
     
     # Knowledge Base & Vector Database Settings

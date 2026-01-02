@@ -337,6 +337,33 @@ STACK_SPECS: Dict[str, StackSpec] = {
         file_extensions=[".vue", ".ts", ".css", ".json"]
     ),
     
+    # Vanilla HTML/CSS/JS Stack (No Framework)
+    "vanilla-html": StackSpec(
+        stack_id="vanilla-html",
+        name="Vanilla HTML/CSS/JavaScript",
+        category=StackCategory.FRONTEND,
+        language="js",
+        test_framework="none",
+        package_manager="none",
+        linter_formatter="prettier",
+        project_layout={
+            "index.html": "Ana HTML sayfası",
+            "style.css": "CSS stilleri",
+            "script.js": "JavaScript kodu",
+            "assets/": "Resimler ve diğer medya dosyaları"
+        },
+        run_commands={
+            "dev": "python -m http.server 8080",
+            "build": "echo 'No build step for vanilla HTML'",
+            "test": "echo 'No tests configured'",
+            "start": "python -m http.server 8080"
+        },
+        docker_templates=False,
+        ci_templates=False,
+        common_dependencies=[],
+        file_extensions=[".html", ".css", ".js"]
+    ),
+    
     # DevOps Stacks
     "devops-docker": StackSpec(
         stack_id="devops-docker",
@@ -400,6 +427,12 @@ def get_stack_spec(stack_id: str) -> Optional[StackSpec]:
 def infer_stack_from_task(task: str) -> str:
     """Görev açıklamasından stack tahmin et"""
     task_lower = task.lower()
+    
+    # Vanilla HTML/CSS/JS - check first (simple web pages without frameworks)
+    if any(kw in task_lower for kw in ["html", "vanilla", "static page", "basit web", "basit sayfa", "sayaç", "counter", "hesap makinesi", "calculator", "form", "landing page"]):
+        # If user specifically wants React/Vue/Next, don't use vanilla
+        if not any(fw in task_lower for fw in ["react", "vue", "next", "angular", "svelte"]):
+            return "vanilla-html"
     
     # Backend - specific framework checks first
     if "nest" in task_lower or "nestjs" in task_lower:

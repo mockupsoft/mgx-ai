@@ -194,6 +194,14 @@ class ModelRegistry:
                 "latency_estimate_ms": 9000,
                 "capabilities": ["code"],
             },
+            "qwen3-coder:30b": {
+                "max_tokens": 8192,
+                "context_window": 32768,
+                "cost_per_1k_prompt": 0.0,
+                "cost_per_1k_completion": 0.0,
+                "latency_estimate_ms": 12000,
+                "capabilities": ["code", "analysis", "reasoning"],
+            },
         },
         "together": {
             "mistralai/Mistral-7B-Instruct-v0.2": {

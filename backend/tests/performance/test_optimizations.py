@@ -206,3 +206,6 @@ async def test_async_execution_performance():
     assert parallel_time < sequential_time
     assert len(results_par) == 5
 
+
+
+

@@ -20,8 +20,8 @@ from backend.config import settings
 from backend.middleware.observability import ObservabilityContextMiddleware
 
 from mgx_observability import ObservabilityConfig, initialize_otel, get_langsmith_logger
+# Lazy import MGXTeamProvider to avoid Pydantic validation errors during module import
 from backend.services import (
-    MGXTeamProvider,
     get_task_runner,
     AgentRegistry,
     SharedContextService,
@@ -128,10 +128,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     app.state.observability_config = obs_config
     app.state.langsmith_logger = get_langsmith_logger(obs_config)
 
-    # Initialize team provider
-    team_provider = MGXTeamProvider(config=None)  # Uses default config
-    app.state.team_provider = team_provider
-    logger.info("✓ MGXTeamProvider initialized")
+    # Initialize team provider (lazy import to avoid Pydantic validation errors)
+    try:
+        from backend.services import MGXTeamProvider
+        team_provider = MGXTeamProvider(config=None)  # Uses default config
+        app.state.team_provider = team_provider
+        logger.info("✓ MGXTeamProvider initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize MGXTeamProvider: {e}")
+        logger.warning("Continuing without MGXTeamProvider - some features may be unavailable")
+        app.state.team_provider = None
     
     # Start background task runner
     task_runner = get_task_runner()
@@ -264,23 +270,129 @@ def create_app() -> FastAPI:
     
     # ========== CORS Configuration ==========
     # Allow requests from development and production origins
+    # In development, allow all origins to avoid CORS issues
+    cors_origins = [
+        "http://localhost",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
+    
+    # In development mode, also allow all origins (less secure but easier for dev)
+    if getattr(settings, 'mgx_env', 'development') == 'development' or getattr(settings, 'log_level', 'INFO') == 'DEBUG':
+        cors_origins.append("*")
+        allow_credentials = False  # Can't use credentials with wildcard
+    else:
+        allow_credentials = True
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost",
-            "http://localhost:3000",
-            "http://localhost:8000",
-            "http://127.0.0.1",
-            "http://127.0.0.1:3000",
-            "http://127.0.0.1:8000",
-        ],
-        allow_credentials=True,
+        allow_origins=cors_origins if "*" not in cors_origins else ["*"],
+        allow_credentials=allow_credentials if "*" not in cors_origins else False,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*"],
+        max_age=3600,
     )
     
-    logger.info("CORS middleware configured")
+    logger.info("CORS middleware configured with origins: %s", cors_origins if "*" not in cors_origins else ["*"])
 
+    # Add exception handler to ensure CORS headers are always added, even on errors
+    from fastapi import Request, status
+    from fastapi.responses import JSONResponse
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        """Global exception handler that ensures CORS headers are always present."""
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(
+            "[global_exception_handler] Unhandled exception on %s %s: %s\n%s",
+            request.method,
+            request.url.path,
+            str(exc),
+            error_trace
+        )
+        
+        # Ensure CORS headers are always present
+        cors_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+        
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"Internal server error: {str(exc)}"},
+            headers=cors_headers
+        )
+    
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+        """HTTP exception handler with CORS headers."""
+        logger.warning(
+            "[http_exception_handler] HTTP exception on %s %s: %s - %s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            exc.detail
+        )
+        
+        cors_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+        
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"detail": exc.detail},
+            headers=cors_headers
+        )
+    
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        """Validation exception handler with CORS headers."""
+        logger.warning(
+            "[validation_exception_handler] Validation error on %s %s: %s",
+            request.method,
+            request.url.path,
+            exc.errors()
+        )
+        
+        cors_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+        
+        return JSONResponse(
+            status_code=422,
+            content={"detail": exc.errors()},
+            headers=cors_headers
+        )
+
+    # Add request logging middleware for debugging
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.requests import Request as StarletteRequest
+    
+    class RequestLoggingMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: StarletteRequest, call_next):
+            logger.info("[RequestLogging] %s %s", request.method, request.url.path)
+            try:
+                response = await call_next(request)
+                logger.info("[RequestLogging] %s %s - Status: %s", request.method, request.url.path, response.status_code)
+                return response
+            except Exception as e:
+                logger.error("[RequestLogging] %s %s - Exception: %s", request.method, request.url.path, e, exc_info=True)
+                raise
+    
+    app.add_middleware(RequestLoggingMiddleware)
+    
     # Add middleware that enriches traces with workspace/project context.
     app.add_middleware(ObservabilityContextMiddleware)
 

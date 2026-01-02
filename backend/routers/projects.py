@@ -9,7 +9,7 @@ Projects are always scoped to the active workspace (see :func:`get_workspace_con
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from backend.db.models import Project
 from backend.routers.deps import WorkspaceContext, get_workspace_context, slugify
@@ -28,20 +28,48 @@ async def list_projects(
 ) -> ProjectListResponse:
     session = ctx.session
 
+    # Count query - this doesn't select columns, so it's safe
     count_query = select(func.count()).select_from(Project).where(Project.workspace_id == ctx.workspace.id)
     total = (await session.execute(count_query)).scalar_one()
 
+    # Use raw SQL to avoid issues with missing columns in database (migration issue)
+    # Only select columns that exist in the database
     result = await session.execute(
-        select(Project)
-        .where(Project.workspace_id == ctx.workspace.id)
-        .order_by(Project.created_at)
-        .offset(skip)
-        .limit(limit)
+        text("""
+            SELECT id, workspace_id, name, slug, metadata, created_at, updated_at
+            FROM projects
+            WHERE workspace_id = :workspace_id
+            ORDER BY created_at
+            OFFSET :skip
+            LIMIT :limit
+        """),
+        {"workspace_id": ctx.workspace.id, "skip": skip, "limit": limit}
     )
-    projects = result.scalars().all()
+    rows = result.all()
+
+    # Convert raw SQL results to ProjectResponse objects
+    project_items = []
+    for row in rows:
+        project_items.append(
+            ProjectResponse(
+                id=row[0],
+                workspace_id=row[1],
+                name=row[2],
+                slug=row[3],
+                meta_data=row[4] if row[4] else {},
+                created_at=row[5],
+                updated_at=row[6],
+                # Optional fields that don't exist in DB yet
+                repo_full_name=None,
+                default_branch=None,
+                primary_repository_link_id=None,
+                run_branch_prefix=None,
+                commit_template=None,
+            )
+        )
 
     return ProjectListResponse(
-        items=[ProjectResponse.model_validate(p) for p in projects],
+        items=project_items,
         total=total,
         skip=skip,
         limit=limit,
