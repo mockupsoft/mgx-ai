@@ -1,0 +1,99 @@
+[project]
+name = "mgx-agent"
+version = "0.1.0"
+
+[lint]
+# Enable all rule sets (optional - you can be more selective)
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "PT",  # flake8-pytest-style
+    "PTH", # flake8-use-pathlib
+    "ERA", # eradicate
+    "PL",  # Pylint
+    "RUF", # Ruff-specific rules
+]
+
+# Ignore specific rules (adjust as needed)
+ignore = [
+    "E501",  # Line too long (let Black handle this)
+    "PLR0913",  # Too many arguments
+    "PLR2004",  # Magic value comparison
+    "SIM108",  # Use ternary operator
+    "UP007",  # Optional[X] -> X | None (requires Python 3.10+)
+]
+
+# Allow autofix for all enabled rules (when `--fix` is provided)
+fixable = ["ALL"]
+unfixable = []
+
+# Exclude certain files/directories
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+    ".venv",
+]
+
+# Allow unused variables when underscore-prefixed
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+# Per-file ignores
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"tests/**/*.py" = ["S101", "ARG", "PLR2004"]  # Allow assert, unused args, magic values in tests
+
+[format]
+# Use double quotes
+quote-style = "double"
+
+# Indent with spaces
+indent-style = "space"
+
+# Line length (same as Black)
+line-length = 88
+
+# Enforce line ending
+line-ending = "auto"
+
+# Skip magic trailing comma
+skip-magic-trailing-comma = false
+
+[isort]
+# Combine multiple imports from the same module into a single statement
+force-single-line = false
+
+# Force all imports to be on the same line
+force-sort-within-sections = true
+
+# Put certain imports after others
+known-first-party = ["backend", "mgx_agent", "mgx_observability", "mgx_cli"]
+
+# Group imports from the same package together
+order-by-type = false
+

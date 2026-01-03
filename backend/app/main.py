@@ -64,12 +64,12 @@ from backend.routers.performance import router as performance_router
 from backend.db.engine import get_session_factory
 from backend.services.workflows.integration import get_workflow_engine_integration
 
-# Configure logging
-logging.basicConfig(
-    level=settings.log_level,
-    format='%(asctime)s [%(levelname)8s] %(name)s - %(message)s',
-)
-logger = logging.getLogger(__name__)
+# Structured logging configuration
+from backend.middleware.logging import setup_logging, get_logger
+
+# Configure structured logging
+setup_logging(log_level=settings.log_level)
+logger = get_logger(__name__)
 
 
 # ============================================
@@ -376,23 +376,10 @@ def create_app() -> FastAPI:
             headers=cors_headers
         )
 
-    # Add request logging middleware for debugging
-    from starlette.middleware.base import BaseHTTPMiddleware
-    from starlette.requests import Request as StarletteRequest
-    
-    class RequestLoggingMiddleware(BaseHTTPMiddleware):
-        async def dispatch(self, request: StarletteRequest, call_next):
-            logger.info("[RequestLogging] %s %s", request.method, request.url.path)
-            try:
-                response = await call_next(request)
-                logger.info("[RequestLogging] %s %s - Status: %s", request.method, request.url.path, response.status_code)
-                return response
-            except Exception as e:
-                logger.error("[RequestLogging] %s %s - Exception: %s", request.method, request.url.path, e, exc_info=True)
-                raise
-    
-    app.add_middleware(RequestLoggingMiddleware)
-    
+    # Add structured logging middleware (replaces old RequestLoggingMiddleware)
+    from backend.middleware.logging import StructuredLoggingMiddleware
+    app.add_middleware(StructuredLoggingMiddleware)
+
     # Add middleware that enriches traces with workspace/project context.
     app.add_middleware(ObservabilityContextMiddleware)
 
