@@ -45,6 +45,9 @@ opentelemetry-instrumentation-sqlalchemy>=0.46b0
 opentelemetry-instrumentation-httpx>=0.46b0
 langsmith>=0.1.0
 
+# Structured Logging
+structlog>=23.0.0  # Structured logging with JSON support
+
 # Type hints
 types-PyYAML>=6.0.0
 

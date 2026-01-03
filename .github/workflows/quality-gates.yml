@@ -1,0 +1,232 @@
+name: Quality Gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  linting:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: Run Ruff (linter)
+        run: |
+          cd backend
+          ruff check . --output-format=github
+
+      - name: Run Ruff format check
+        run: |
+          cd backend
+          ruff format --check .
+
+      - name: Run Black format check
+        run: |
+          cd backend
+          black --check --diff .
+
+      - name: Run mypy (type checking)
+        run: |
+          cd backend
+          mypy . --ignore-missing-imports || true
+        continue-on-error: true  # Allow type errors for now, make strict later
+
+      - name: Run Bandit (security linter)
+        run: |
+          cd backend
+          bandit -r . -f json -o bandit-report.json || true
+        continue-on-error: true
+
+      - name: Upload Bandit report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: bandit-report
+          path: backend/bandit-report.json
+          retention-days: 7
+
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: Run pip-audit
+        run: |
+          cd backend
+          pip-audit --desc --format json --output pip-audit-report.json || true
+        continue-on-error: true
+
+      - name: Run safety check
+        run: |
+          cd backend
+          safety check --json > safety-report.json || true
+        continue-on-error: true
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-reports
+          path: |
+            backend/pip-audit-report.json
+            backend/safety-report.json
+          retention-days: 7
+
+      - name: Check for secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Check for secrets (detect-secrets)
+        run: |
+          pip install detect-secrets
+          detect-secrets scan > .secrets.detected.json || true
+        continue-on-error: true
+
+      - name: Upload secrets detection report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: secrets-detection-report
+          path: .secrets.detected.json
+          retention-days: 7
+
+  pre-commit:
+    name: Pre-commit Hooks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files || true
+        continue-on-error: true  # Allow failures for now, make strict later
+
+  code-style:
+    name: Code Style Enforcement
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements-dev.txt
+
+      - name: Check import sorting with isort
+        run: |
+          cd backend
+          isort --check-only --diff .
+
+      - name: Check for TODO/FIXME comments
+        run: |
+          cd backend
+          grep -r "TODO\|FIXME\|XXX\|HACK" --include="*.py" . || echo "No TODO/FIXME comments found"
+
+  dependency-check:
+    name: Dependency Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check requirements.txt
+        run: |
+          cd backend
+          if [ ! -f requirements.txt ]; then
+            echo "ERROR: requirements.txt not found"
+            exit 1
+          fi
+          echo "✓ requirements.txt exists"
+
+      - name: Check requirements-dev.txt
+        run: |
+          cd backend
+          if [ ! -f requirements-dev.txt ]; then
+            echo "ERROR: requirements-dev.txt not found"
+            exit 1
+          fi
+          echo "✓ requirements-dev.txt exists"
+
+      - name: Validate .env.example exists
+        run: |
+          cd backend
+          if [ ! -f .env.example ]; then
+            echo "ERROR: .env.example not found"
+            exit 1
+          fi
+          echo "✓ .env.example exists"
+
+      - name: Check for secrets in .env.example
+        run: |
+          cd backend
+          if grep -q "sk-\|ghp_\|AKIA\|-----BEGIN" .env.example; then
+            echo "WARNING: Potential secrets found in .env.example"
+            exit 1
+          fi
+          echo "✓ No secrets in .env.example"
+
+  summary:
+    name: Quality Gates Summary
+    runs-on: ubuntu-latest
+    needs: [linting, security-scan, pre-commit, code-style, dependency-check]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# Quality Gates Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Job Status" >> $GITHUB_STEP_SUMMARY
+          echo "- Linting: ${{ needs.linting.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Scan: ${{ needs.security-scan.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Pre-commit: ${{ needs.pre-commit.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Code Style: ${{ needs.code-style.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Dependency Check: ${{ needs.dependency-check.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Bandit Report: Available in job artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Security Reports: Available in job artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- Secrets Detection: Available in job artifacts" >> $GITHUB_STEP_SUMMARY
