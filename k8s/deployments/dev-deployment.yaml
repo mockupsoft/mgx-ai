@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mgx-ai-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mgx-ai
+      env: dev
+  template:
+    metadata:
+      labels:
+        app: mgx-ai
+        env: dev
+    spec:
+      containers:
+        - name: api
+          image: mgx-ai:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: mgx-ai-config-dev
+            - secretRef:
+                name: mgx-ai-secrets-dev
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10

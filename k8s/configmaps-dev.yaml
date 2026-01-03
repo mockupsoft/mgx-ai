@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mgx-ai-config-dev
+data:
+  MGX_ENV: "development"
+  LOG_LEVEL: "DEBUG"
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "mgx_agent_dev"
+  REDIS_URL: "redis://redis:6379"
+  FEATURE_FLAGS_CONFIG_PATH: "/etc/mgx/config/feature_flags.yaml"

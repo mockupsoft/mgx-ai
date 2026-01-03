@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mgx-ai-staging
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mgx-ai
+      env: staging
+  template:
+    metadata:
+      labels:
+        app: mgx-ai
+        env: staging
+    spec:
+      containers:
+        - name: api
+          image: mgx-ai:staging
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: mgx-ai-config-staging
+            - secretRef:
+                name: mgx-ai-secrets-staging
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10

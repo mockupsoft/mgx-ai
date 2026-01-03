@@ -1,0 +1,27 @@
+MGX-AI On-Call Quick Reference
+
+Emergency contacts
+- Level 1 On-call engineer: (rotate)  
+- Level 2 Tech Lead: (fill)  
+- Level 3 CTO: (fill)  
+
+Links
+- Dashboards: /monitoring/dashboards/on-call-dashboard.json
+- Alerts: /monitoring/alerts/on-call-alerts.yaml
+- Dashboard guide: /docs/on-call-dashboard-guide.md
+- Runbooks index: /docs/runbooks/README.md
+- Status page: (fill)
+- Logs: (Datadog/ELK link)
+- Traces: (APM link)
+
+Common alerts and quick actions
+- Application down (P0): check recent deploy, roll back, verify /health/live
+- Memory > 90% (P0): scale up/out, restart pods, check leak
+- Error rate > 5% (P1): check top errors, provider status, rollback if deploy-related
+- Provider 429 (P1): reduce concurrency, backoff, failover
+- DB pool > 90% (P1): find slow queries, increase pool carefully, restart if leak
+
+Escalation checklist
+- Not resolved in 10 min → Tech Lead
+- Not resolved in 30 min → CTO
+- P0 → CTO immediately + status page update within 2 minutes

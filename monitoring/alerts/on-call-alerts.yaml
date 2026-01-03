@@ -1,0 +1,53 @@
+# On-call alert definitions (platform-agnostic)
+#
+# These rules can be translated into PrometheusRule/Grafana/Datadog monitors.
+
+alerts:
+  - name: ApplicationDown
+    severity: P0
+    condition: "up == 0"
+    for: "2m"
+    description: "Application is not responding"
+    runbook: "/docs/runbooks/README.md"
+
+  - name: HighErrorRate
+    severity: P1
+    condition: "error_rate_percent > 5"
+    for: "5m"
+    description: "HTTP 5xx error rate is above 5%"
+    runbook: "/docs/runbooks/task-failure.md"
+
+  - name: HighLatencyP99
+    severity: P1
+    condition: "latency_p99_seconds > 5"
+    for: "5m"
+    description: "P99 latency is above 5s"
+    runbook: "/docs/on-call-dashboard-guide.md"
+
+  - name: MemoryHigh
+    severity: P0
+    condition: "memory_percent > 90"
+    for: "2m"
+    description: "Memory usage above 90%"
+    runbook: "/docs/runbooks/memory-exhaustion.md"
+
+  - name: ProviderRateLimit429
+    severity: P1
+    condition: "provider_429_rate > 0"
+    for: "5m"
+    description: "Provider is returning sustained HTTP 429"
+    runbook: "/docs/runbooks/rate-limit-429.md"
+
+  - name: DbConnectionsHigh
+    severity: P1
+    condition: "db_connections_percent > 90"
+    for: "5m"
+    description: "DB connection pool saturation > 90%"
+    runbook: "/docs/runbooks/db-connection-pool.md"
+
+  - name: QueueDepthHigh
+    severity: P1
+    condition: "queue_depth > QUEUE_DEPTH_THRESHOLD"
+    for: "10m"
+    description: "Queue depth is above threshold"
+    runbook: "/docs/runbooks/task-failure.md"

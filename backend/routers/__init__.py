@@ -16,6 +16,7 @@ from .llm import router as llm_router
 from .escalation import router as escalation_router
 from .observability import router as observability_router
 from .file_approvals import router as file_approvals_router
+from .feature_flags_admin import router as feature_flags_admin_router
 
 # Legacy routers (kept for backwards compatibility)
 from .health import router as health_router
@@ -54,6 +55,7 @@ __all__ = [
     "escalation_router",
     "observability_router",
     "file_approvals_router",
+    "feature_flags_admin_router",
     "health_router",
     "workspaces_router",
     "projects_router", 

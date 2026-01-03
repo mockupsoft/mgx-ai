@@ -79,6 +79,24 @@ async def _check_vector_db() -> Dict[str, Any]:
         return {"status": "unhealthy", "message": str(e)}
 
 
+async def _check_feature_flags() -> Dict[str, Any]:
+    """Check feature flag service availability.
+
+    Feature flags are local/in-process and should never block request handling.
+    """
+
+    try:
+        from backend.services.feature_flag_service import get_feature_flag_service
+
+        service = get_feature_flag_service()
+        health = service.health()
+        status = health.get("status", "unknown")
+        return {"status": "healthy" if status == "ok" else "degraded", "details": health}
+    except Exception as e:
+        logger.error(f"Feature flags health check failed: {str(e)}")
+        return {"status": "unhealthy", "message": str(e)}
+
+
 @router.get("/", response_model=Dict[str, Any])
 async def health_check() -> Dict[str, Any]:
     """
@@ -91,6 +109,19 @@ async def health_check() -> Dict[str, Any]:
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
         "service": "mgx-agent-api",
+    }
+
+
+@router.get("/feature-flags", response_model=Dict[str, Any])
+async def feature_flags_health() -> Dict[str, Any]:
+    """Feature flag health endpoint.
+
+    This endpoint is intentionally non-failing and is safe to call during incidents.
+    """
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "feature_flags": await _check_feature_flags(),
     }
 
 

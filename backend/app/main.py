@@ -18,6 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.config import settings
 from backend.middleware.observability import ObservabilityContextMiddleware
+from backend.middleware.feature_flag_context import FeatureFlagContextMiddleware
 
 from mgx_observability import ObservabilityConfig, initialize_otel, get_langsmith_logger
 # Lazy import MGXTeamProvider to avoid Pydantic validation errors during module import
@@ -51,6 +52,7 @@ from backend.routers import (
     escalation_router,
     observability_router,
     file_approvals_router,
+    feature_flags_admin_router,
     webhooks_router,
     pull_requests_router,
     issues_router,
@@ -383,6 +385,8 @@ def create_app() -> FastAPI:
     # Add middleware that enriches traces with workspace/project context.
     app.add_middleware(ObservabilityContextMiddleware)
 
+    app.add_middleware(FeatureFlagContextMiddleware)
+
     # ========== Router Registration ==========
     app.include_router(health_router)
     logger.info("✓ Registered: health_router")
@@ -455,6 +459,9 @@ def create_app() -> FastAPI:
     
     app.include_router(file_approvals_router)
     logger.info("✓ Registered: file_approvals_router")
+
+    app.include_router(feature_flags_admin_router)
+    logger.info("✓ Registered: feature_flags_admin_router")
     
     app.include_router(webhooks_router)
     logger.info("✓ Registered: webhooks_router")
