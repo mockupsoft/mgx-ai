@@ -1,0 +1,24 @@
+links:
+  logs:
+    label: "Application logs"
+    url: "https://REPLACE_ME/logs"
+  traces:
+    label: "Distributed traces"
+    url: "https://REPLACE_ME/traces"
+  dashboards:
+    label: "Dashboards"
+    url: "https://REPLACE_ME/dashboards"
+  alerts:
+    label: "Alerting"
+    url: "https://REPLACE_ME/alerts"
+  status_page:
+    label: "Status page"
+    url: "https://REPLACE_ME/status"
+  provider_status_pages:
+    - label: "OpenAI status"
+      url: "https://status.openai.com/"
+    - label: "Anthropic status"
+      url: "https://status.anthropic.com/"
+  incident_docs:
+    label: "Incident documentation"
+    url: "/docs/runbooks/README.md"

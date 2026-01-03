@@ -118,8 +118,30 @@ class Settings(BaseSettings):
     )
     
     # Application Settings
+    mgx_env: str = Field(
+        default="development",
+        description="Deployment environment: development | staging | production",
+    )
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
+
+    # Feature Flags
+    feature_flags_config_path: str = Field(
+        default="config/feature_flags.yaml",
+        description="Path to feature flag configuration YAML",
+    )
+    feature_flags_cache_ttl_seconds: int = Field(
+        default=60,
+        ge=0,
+        le=3600,
+        description="Decision cache TTL for feature flag lookups (seconds)",
+    )
+    feature_flags_config_reload_ttl_seconds: int = Field(
+        default=30,
+        ge=0,
+        le=3600,
+        description="How often to check the feature flag config file for changes (seconds)",
+    )
 
     # Observability Settings
     otel_enabled: bool = Field(default=False, description="Enable OpenTelemetry tracing")

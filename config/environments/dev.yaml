@@ -1,0 +1,31 @@
+environment: dev
+
+database:
+  host: localhost
+  port: 5432
+  name: mgx_agent_dev
+  mode: local
+
+cache:
+  redis_url: redis://localhost:6379
+  mode: local
+
+queue:
+  mode: local
+
+api_keys:
+  providers:
+    openai: "SANDBOX_KEY_REPLACE_ME"
+    anthropic: "SANDBOX_KEY_REPLACE_ME"
+
+logging:
+  level: DEBUG
+
+feature_flags:
+  defaults:
+    new_provider: true
+    new_algorithm: true
+    experimental_feature: true
+
+rate_limits:
+  enabled: false

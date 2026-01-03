@@ -1,0 +1,132 @@
+{
+  "title": "MGX-AI On-Call Dashboard",
+  "timezone": "utc",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["mgx-ai", "on-call"],
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "type": "custom",
+        "label": "Environment",
+        "query": "dev,staging,prod",
+        "current": {"text": "prod", "value": "prod"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "1) System Health",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Uptime %",
+      "targets": [{"refId": "A", "expr": "100 * avg_over_time(up{env=\"$env\"}[5m])"}],
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 1}
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate %",
+      "targets": [{"refId": "A", "expr": "100 * (sum(rate(http_requests_total{env=\"$env\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{env=\"$env\"}[5m])))"}],
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 1}
+    },
+    {
+      "type": "timeseries",
+      "title": "P99 latency (s)",
+      "targets": [{"refId": "A", "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{env=\"$env\"}[5m])) by (le))"}],
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 7}
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue depth",
+      "targets": [{"refId": "A", "expr": "queue_depth{env=\"$env\"}"}],
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 7}
+    },
+
+    {
+      "type": "row",
+      "title": "2) Provider Status",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 13}
+    },
+    {
+      "type": "timeseries",
+      "title": "Provider success rate %",
+      "targets": [{"refId": "A", "expr": "100 * (sum(rate(provider_requests_total{env=\"$env\",result=\"success\"}[5m])) by (provider) / sum(rate(provider_requests_total{env=\"$env\"}[5m])) by (provider))"}],
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 14}
+    },
+    {
+      "type": "timeseries",
+      "title": "Provider 429 rate",
+      "targets": [{"refId": "A", "expr": "sum(rate(provider_http_responses_total{env=\"$env\",status=\"429\"}[5m])) by (provider)"}],
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 14}
+    },
+
+    {
+      "type": "row",
+      "title": "3) Resources",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 20}
+    },
+    {
+      "type": "timeseries",
+      "title": "CPU %",
+      "targets": [{"refId": "A", "expr": "100 * avg(rate(container_cpu_usage_seconds_total{env=\"$env\"}[5m]))"}],
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 21}
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory %",
+      "targets": [{"refId": "A", "expr": "100 * (avg(container_memory_working_set_bytes{env=\"$env\"}) / avg(container_spec_memory_limit_bytes{env=\"$env\"}))"}],
+      "gridPos": {"h": 6, "w": 8, "x": 8, "y": 21}
+    },
+    {
+      "type": "timeseries",
+      "title": "DB connections",
+      "targets": [{"refId": "A", "expr": "db_connections_in_use{env=\"$env\"}"}],
+      "gridPos": {"h": 6, "w": 8, "x": 16, "y": 21}
+    },
+
+    {
+      "type": "row",
+      "title": "4) Error Analysis",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27}
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors by type",
+      "targets": [{"refId": "A", "expr": "sum(rate(app_errors_total{env=\"$env\"}[5m])) by (error_type)"}],
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 28}
+    },
+    {
+      "type": "timeseries",
+      "title": "DLQ size",
+      "targets": [{"refId": "A", "expr": "dlq_size{env=\"$env\"}"}],
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 28}
+    },
+
+    {
+      "type": "row",
+      "title": "5) Performance",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34}
+    },
+    {
+      "type": "timeseries",
+      "title": "P50/P95/P99 latency (s)",
+      "targets": [
+        {"refId": "A", "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{env=\"$env\"}[5m])) by (le))"},
+        {"refId": "B", "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{env=\"$env\"}[5m])) by (le))"},
+        {"refId": "C", "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{env=\"$env\"}[5m])) by (le))"}
+      ],
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 35}
+    },
+    {
+      "type": "timeseries",
+      "title": "Throughput (req/s)",
+      "targets": [{"refId": "A", "expr": "sum(rate(http_requests_total{env=\"$env\"}[5m]))"}],
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 35}
+    }
+  ]
+}

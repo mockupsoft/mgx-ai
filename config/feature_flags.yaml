@@ -1,0 +1,15 @@
+features:
+  new_provider:
+    enabled: true
+    rollout_percentage: 10
+    description: "Gradual rollout of new provider"
+
+  new_algorithm:
+    enabled: true
+    rollout_percentage: 25
+    description: "Optimized algorithm rollout"
+
+  experimental_feature:
+    enabled: false
+    rollout_percentage: 0
+    description: "Experimental feature (disabled by default)"

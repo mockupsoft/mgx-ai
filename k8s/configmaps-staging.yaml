@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mgx-ai-config-staging
+data:
+  MGX_ENV: "staging"
+  LOG_LEVEL: "INFO"
+  DB_HOST: "staging-postgres.REPLACE_ME"
+  DB_PORT: "5432"
+  DB_NAME: "mgx_agent_staging"
+  REDIS_URL: "redis://staging-redis.REPLACE_ME:6379"
+  FEATURE_FLAGS_CONFIG_PATH: "/etc/mgx/config/feature_flags.yaml"

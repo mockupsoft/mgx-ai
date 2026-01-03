@@ -1,0 +1,34 @@
+# Quality gates by environment
+
+dev:
+  build: required
+  unit_tests: required
+  lint:
+    ruff_check: required
+    ruff_format: optional
+
+staging:
+  build: required
+  tests:
+    unit: required
+    integration: required
+  security:
+    bandit: required
+    pip_audit: required
+    safety: required
+  coverage:
+    min_percent: 80
+  performance:
+    regression_allowed: false
+  lint:
+    ruff_check: required
+    ruff_format: required
+    mypy: required
+
+prod:
+  inherits: staging
+  approvals:
+    code_review: required
+    product_approval: required
+  deployment_window: required
+  rollback_plan: required

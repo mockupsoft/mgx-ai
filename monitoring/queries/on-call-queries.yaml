@@ -1,0 +1,28 @@
+queries:
+  error_rate_by_service:
+    description: "Error rate by service"
+    promql: "100 * (sum(rate(http_requests_total{status=~\"5..\"}[5m])) by (service) / sum(rate(http_requests_total[5m])) by (service))"
+
+  slow_queries_over_1s:
+    description: "Slow DB queries (>1s)"
+    promql: "sum(rate(db_query_duration_seconds_bucket{le=\"1\"}[5m]))"
+
+  task_failures_by_provider:
+    description: "Task failures by provider"
+    promql: "sum(rate(task_runs_total{result=\"failed\"}[5m])) by (provider)"
+
+  memory_usage_trends:
+    description: "Memory usage trends"
+    promql: "avg(container_memory_working_set_bytes) by (pod)"
+
+  connection_pool_saturation:
+    description: "Connection pool saturation"
+    promql: "100 * (db_connections_in_use / db_pool_size)"
+
+  recent_deployments:
+    description: "Recent deployments"
+    promql: "changes(deployment_version[1h])"
+
+  dead_letter_queue_content:
+    description: "Dead-letter queue size"
+    promql: "dlq_size"

@@ -1,0 +1,32 @@
+environment: staging
+
+database:
+  host: staging-postgres.REPLACE_ME
+  port: 5432
+  name: mgx_agent_staging
+  mode: production_like
+
+cache:
+  redis_url: redis://staging-redis.REPLACE_ME:6379
+  mode: cluster
+
+queue:
+  mode: staging
+
+api_keys:
+  providers:
+    openai: "STAGING_KEY_FROM_SECRETS"
+    anthropic: "STAGING_KEY_FROM_SECRETS"
+
+logging:
+  level: INFO
+
+feature_flags:
+  defaults:
+    new_provider: true
+    new_algorithm: true
+    experimental_feature: false
+
+rate_limits:
+  enabled: true
+  monitored: true

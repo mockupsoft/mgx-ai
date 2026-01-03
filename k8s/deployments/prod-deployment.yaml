@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mgx-ai-prod
+  labels:
+    rollout: blue-green
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: mgx-ai
+      env: prod
+  template:
+    metadata:
+      labels:
+        app: mgx-ai
+        env: prod
+    spec:
+      containers:
+        - name: api
+          image: mgx-ai:prod
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: mgx-ai-config-prod
+            - secretRef:
+                name: mgx-ai-secrets-prod
+          resources:
+            requests:
+              cpu: "1000m"
+              memory: "2Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10

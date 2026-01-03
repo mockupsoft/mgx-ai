@@ -1,0 +1,32 @@
+environment: prod
+
+database:
+  host: prod-postgres-ha.REPLACE_ME
+  port: 5432
+  name: mgx_agent
+  mode: ha
+
+cache:
+  redis_url: redis://prod-redis.REPLACE_ME:6379
+  mode: cluster
+
+queue:
+  mode: production
+
+api_keys:
+  providers:
+    openai: "FROM_K8S_SECRET"
+    anthropic: "FROM_K8S_SECRET"
+
+logging:
+  level: WARNING
+
+feature_flags:
+  defaults:
+    new_provider: true
+    new_algorithm: true
+    experimental_feature: false
+
+rate_limits:
+  enabled: true
+  enforcement: strict
