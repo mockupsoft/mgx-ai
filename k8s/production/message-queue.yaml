@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: message-queue-config
+  namespace: production
+data:
+  README: |
+    Placeholder for message queue (RabbitMQ/Kafka) with persistence.
+
+    Recommended:
+      - RabbitMQ Cluster Operator
+      - Strimzi Kafka operator

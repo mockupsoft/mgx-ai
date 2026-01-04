@@ -1,0 +1,5 @@
+[bandit]
+# Bandit configuration entrypoint (kept for tooling compatibility).
+# The canonical configuration for this repo is: backend/.bandit.yaml
+
+exclude: backend/tests

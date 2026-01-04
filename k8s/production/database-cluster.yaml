@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: database-cluster-config
+  namespace: production
+data:
+  README: |
+    This is a placeholder for a production database setup.
+
+    Requirements:
+      - replication
+      - backups
+      - automated failover
+
+    Recommended implementations:
+      - PostgreSQL operator (e.g. CloudNativePG, CrunchyData)
+      - managed DB (RDS/Aurora) with replicas

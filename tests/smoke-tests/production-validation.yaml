@@ -1,0 +1,15 @@
+version: 1
+name: production-validation
+steps:
+  - name: health_ready
+    request:
+      method: GET
+      path: /health/ready
+    expect:
+      status: 200
+  - name: health_status
+    request:
+      method: GET
+      path: /health/status
+    expect:
+      status: 200

@@ -19,7 +19,7 @@ GitHub-related environment variables:
 
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -324,7 +324,23 @@ class Settings(BaseSettings):
     qdrant_host: str = Field(default="localhost", description="Qdrant server host")
     qdrant_port: int = Field(default=6333, description="Qdrant server port")
     qdrant_collection_name: str = Field(default="knowledge_items", description="Qdrant collection name")
-    
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.mgx_env.lower() != "production":
+            return self
+
+        insecure_passwords = {"postgres", "password", ""}
+        if self.db_password in insecure_passwords:
+            raise ValueError("DB password must not be a default/empty value in production")
+
+        if self.secret_encryption_backend.lower() == "fernet" and not self.secret_encryption_key:
+            raise ValueError(
+                "secret_encryption_key must be set in production when using the fernet encryption backend"
+            )
+
+        return self
+
     @property
     def database_url(self) -> str:
         """Generate PostgreSQL connection URL."""

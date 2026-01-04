@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-cluster-config
+  namespace: production
+data:
+  README: |
+    Placeholder for Redis HA (Sentinel/Cluster).
+
+    Recommended:
+      - Redis operator / Helm chart
+      - managed Redis (Elasticache / Memorystore)
