@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: traffic-switch-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: traffic-switcher
+      rules:
+        - alert: TrafficSwitchErrorRateHigh
+          expr: |
+            sum(rate(http_requests_total{job="mgx-agent",status=~"5.."}[1m]))
+              /
+            sum(rate(http_requests_total{job="mgx-agent"}[1m]))
+              > 0.01
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "MGX Agent error rate > 1% during traffic switch"
+            description: "Error rate exceeded 1% for 1 minute; initiate rollback."

@@ -1,0 +1,28 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: production-switch-alerts
+  namespace: monitoring
+spec:
+  groups:
+    - name: production-switch
+      rules:
+        - alert: ProductionReadinessFailing
+          expr: |
+            min_over_time(up{job="mgx-agent"}[2m]) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "MGX Agent is not ready"
+            description: "One or more instances are failing readiness checks."
+        - alert: ProductionLatencyP95High
+          expr: |
+            histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="mgx-agent"}[5m])) by (le))
+              > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MGX Agent p95 latency elevated"
+            description: "p95 latency > 2s for 5 minutes."

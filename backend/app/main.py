@@ -301,38 +301,71 @@ def create_app() -> FastAPI:
     
     logger.info("CORS middleware configured with origins: %s", cors_origins if "*" not in cors_origins else ["*"])
 
-    # Add exception handler to ensure CORS headers are always added, even on errors
-    from fastapi import Request, status
-    from fastapi.responses import JSONResponse
+    # ========== Security Headers ==========
+    from backend.middleware.security_headers import (
+        SecurityHeadersConfig,
+        SecurityHeadersMiddleware,
+    )
+
+    security_headers_config = SecurityHeadersConfig(
+        environment=settings.mgx_env,
+        content_security_policy=(
+            "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'"
+            if settings.mgx_env == "production"
+            else None
+        ),
+        enable_hsts=settings.mgx_env == "production",
+    )
+    app.add_middleware(SecurityHeadersMiddleware, config=security_headers_config)
+
+    # Add exception handler to ensure appropriate CORS headers are present on errors.
+    from fastapi import Request
     from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
     from starlette.exceptions import HTTPException as StarletteHTTPException
-    
+
+    def _cors_headers_for_request(request: Request) -> dict[str, str]:
+        headers: dict[str, str] = {
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+
+        if "*" in cors_origins:
+            headers["Access-Control-Allow-Origin"] = "*"
+            return headers
+
+        origin = request.headers.get("origin")
+        if origin and origin in cors_origins:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Vary"] = "Origin"
+            if allow_credentials:
+                headers["Access-Control-Allow-Credentials"] = "true"
+
+        return headers
+
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
-        """Global exception handler that ensures CORS headers are always present."""
+        """Global exception handler with safe error detail and CORS headers."""
         import traceback
+
         error_trace = traceback.format_exc()
         logger.error(
             "[global_exception_handler] Unhandled exception on %s %s: %s\n%s",
             request.method,
             request.url.path,
             str(exc),
-            error_trace
+            error_trace,
         )
-        
-        # Ensure CORS headers are always present
-        cors_headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-        }
-        
+
+        detail = "Internal server error" if settings.mgx_env == "production" else f"Internal server error: {exc}"
+
         return JSONResponse(
             status_code=500,
-            content={"detail": f"Internal server error: {str(exc)}"},
-            headers=cors_headers
+            content={"detail": detail},
+            headers=_cors_headers_for_request(request),
         )
-    
+
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         """HTTP exception handler with CORS headers."""
@@ -341,21 +374,15 @@ def create_app() -> FastAPI:
             request.method,
             request.url.path,
             exc.status_code,
-            exc.detail
+            exc.detail,
         )
-        
-        cors_headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-        }
-        
+
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail},
-            headers=cors_headers
+            headers=_cors_headers_for_request(request),
         )
-    
+
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError):
         """Validation exception handler with CORS headers."""
@@ -363,19 +390,13 @@ def create_app() -> FastAPI:
             "[validation_exception_handler] Validation error on %s %s: %s",
             request.method,
             request.url.path,
-            exc.errors()
+            exc.errors(),
         )
-        
-        cors_headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-        }
-        
+
         return JSONResponse(
             status_code=422,
             content={"detail": exc.errors()},
-            headers=cors_headers
+            headers=_cors_headers_for_request(request),
         )
 
     # Add structured logging middleware (replaces old RequestLoggingMiddleware)

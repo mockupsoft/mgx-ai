@@ -1,0 +1,11 @@
+# Production infrastructure entrypoint.
+#
+# This file is intended to be applied as a bundle (or referenced by a kustomization).
+# Individual components are split into separate manifests under k8s/production/.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    env: production
