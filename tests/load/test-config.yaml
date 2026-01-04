@@ -1,0 +1,255 @@
+# Load Test Configuration for MGX-AI Platform
+# Version: 1.0
+
+# Environment Configuration
+environments:
+  local:
+    base_url: "http://localhost:8000"
+    api_key: "test-api-key-local"
+    workspace_id: "test-workspace-local"
+    description: "Local development environment"
+    
+  staging:
+    base_url: "https://staging.mgx-ai.example.com"
+    api_key: "${STAGING_API_KEY}"  # From environment variable
+    workspace_id: "load-test-workspace"
+    description: "Staging environment for load testing"
+    
+  production:
+    base_url: "https://api.mgx-ai.example.com"
+    api_key: "${PROD_API_KEY}"  # From environment variable
+    workspace_id: "prod-load-test-workspace"
+    description: "Production environment (use with caution)"
+
+# Test Scenarios
+scenarios:
+  ramp-up:
+    script: "ramp-up.js"
+    duration: "14m"
+    max_vus: 1000
+    description: "Gradual load increase to 1000 concurrent users"
+    thresholds:
+      p95_latency: 3000  # ms
+      p99_latency: 5000  # ms
+      error_rate: 0.001  # 0.1%
+    
+  sustained:
+    script: "sustained.js"
+    duration: "64m"
+    max_vus: 1000
+    description: "Sustained load at 1000 concurrent users for 1 hour"
+    thresholds:
+      p50_latency: 1000  # ms
+      p95_latency: 3000  # ms
+      p99_latency: 5000  # ms
+      error_rate: 0.001  # 0.1%
+      completion_rate: 0.99  # 99%
+    
+  spike:
+    script: "spike.js"
+    duration: "35m"
+    max_vus: 2000
+    description: "Spike testing with rapid load changes"
+    thresholds:
+      p99_latency: 10000  # ms (more lenient during spikes)
+      error_rate: 0.01    # 1%
+      spike_error_rate: 0.02  # 2%
+    
+  endurance:
+    script: "endurance.js"
+    duration: "490m"  # 8 hours + ramp up/down
+    max_vus: 500
+    description: "Long-running stability test (8 hours)"
+    thresholds:
+      p99_latency: 5000  # ms
+      error_rate: 0.001  # 0.1%
+      connection_errors: 100  # Maximum connection errors
+
+# Monitoring Configuration
+monitoring:
+  prometheus:
+    enabled: true
+    endpoint: "http://localhost:9090"
+    
+  grafana:
+    enabled: true
+    endpoint: "http://localhost:3000"
+    dashboard_uid: "load-test-dashboard"
+    
+  datadog:
+    enabled: false
+    api_key: "${DATADOG_API_KEY}"
+    
+  custom_metrics:
+    - name: "task_creation_duration"
+      type: "trend"
+      description: "Time to create a task"
+      
+    - name: "task_execution_duration"
+      type: "trend"
+      description: "Time for task to complete"
+      
+    - name: "queue_depth"
+      type: "gauge"
+      description: "Number of tasks in queue"
+      
+    - name: "successful_tasks"
+      type: "counter"
+      description: "Number of successfully completed tasks"
+      
+    - name: "failed_tasks"
+      type: "counter"
+      description: "Number of failed tasks"
+
+# Resource Monitoring
+resources:
+  check_interval: 30  # seconds
+  
+  thresholds:
+    cpu_percent: 85
+    memory_percent: 90
+    disk_percent: 85
+    
+  services:
+    - name: "api-server"
+      type: "kubernetes"
+      namespace: "mgx-ai"
+      selector: "app=api-server"
+      
+    - name: "postgres"
+      type: "kubernetes"
+      namespace: "mgx-ai"
+      selector: "app=postgres"
+      
+    - name: "redis"
+      type: "kubernetes"
+      namespace: "mgx-ai"
+      selector: "app=redis"
+
+# Test Data Configuration
+test_data:
+  workspaces:
+    count: 100
+    prefix: "load-test-ws"
+    
+  agents:
+    count: 500
+    prefix: "load-test-agent"
+    providers: ["openai", "anthropic", "google", "local"]
+    
+  tasks:
+    history_count: 10000
+    types:
+      - code_review
+      - bug_fix
+      - feature_implementation
+      - test_generation
+      - documentation
+      - refactoring
+      - analysis
+
+# Reporting Configuration
+reporting:
+  output_format: ["json", "html", "junit"]
+  output_dir: "/home/engine/project/load_test_results"
+  
+  include:
+    - summary_statistics
+    - percentile_graphs
+    - error_analysis
+    - resource_utilization
+    - bottleneck_identification
+    
+  notifications:
+    slack:
+      enabled: false
+      webhook_url: "${SLACK_WEBHOOK_URL}"
+      channel: "#load-tests"
+      
+    email:
+      enabled: false
+      recipients: ["devops@example.com"]
+      smtp_server: "smtp.example.com"
+
+# Pre-Test Validation
+pre_test:
+  health_checks:
+    - endpoint: "/health/ready"
+      expected_status: 200
+      
+    - endpoint: "/health/status"
+      expected_status: 200
+      
+  warmup:
+    enabled: true
+    duration: "2m"
+    vus: 10
+    description: "Warm up caches and connections"
+
+# Post-Test Cleanup
+post_test:
+  cleanup:
+    enabled: true
+    delete_test_data: false  # Keep for analysis
+    
+  wait_period: 60  # seconds before cleanup
+  
+  final_checks:
+    - name: "System Recovery"
+      check: "health_status"
+      expected: "healthy"
+      
+    - name: "Queue Cleared"
+      check: "queue_depth"
+      expected_max: 100
+
+# Circuit Breaker Configuration
+circuit_breaker:
+  enabled: true
+  
+  stop_conditions:
+    - metric: "error_rate"
+      threshold: 0.10  # 10%
+      duration: "5m"
+      action: "stop"
+      
+    - metric: "p99_latency"
+      threshold: 30000  # 30s
+      duration: "5m"
+      action: "alert"
+      
+    - metric: "cpu_percent"
+      threshold: 95
+      duration: "3m"
+      action: "alert"
+
+# K6 Specific Options
+k6_options:
+  # Batch requests to reduce overhead
+  batch: 20
+  batch_per_host: 10
+  
+  # Connection reuse
+  no_connection_reuse: false
+  
+  # HTTP/2 support
+  http_debug: false
+  
+  # Timeouts
+  http_timeout: "30s"
+  
+  # Rate limiting (optional)
+  rate_limit: 0  # 0 = unlimited
+  
+  # VU lifecycle
+  graceful_stop: "30s"
+  setup_timeout: "60s"
+  teardown_timeout: "60s"
+
+# Tags for Filtering
+tags:
+  environment: "staging"
+  test_type: "load"
+  project: "mgx-ai"
+  phase: "3b"
+  team: "platform"
