@@ -64,7 +64,7 @@ jobs:
         coverage xml -o coverage.xml
 
     - name: Upload coverage to Codecov (if token available)
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v5
       if: ${{ secrets.CODECOV_TOKEN != '' }}
       with:
         file: ./coverage.xml
