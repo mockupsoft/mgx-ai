@@ -167,7 +167,7 @@ jobs:
         continue-on-error: true
       
       - name: Upload safety results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: safety-results
@@ -334,7 +334,7 @@ jobs:
           pytest tests/performance/test_performance.py -v --benchmark-json=benchmark-results.json
           
       - name: Upload performance results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: performance-results
           path: |

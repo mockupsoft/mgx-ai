@@ -73,7 +73,7 @@ jobs:
         fail_ci_if_error: false
 
     - name: Upload coverage artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v6
       with:
         name: coverage-reports-${{ matrix.python-version }}
         path: |
@@ -161,7 +161,7 @@ jobs:
 
     - name: Upload perf_reports artifacts
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v6
       with:
         name: perf-reports
         path: |
@@ -193,7 +193,7 @@ jobs:
         pytest --cov=mgx_agent --cov-report=html:htmlcov --cov-report=xml:coverage.xml --cov-report=term-missing
 
     - name: Upload HTML coverage report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v6
       with:
         name: coverage-html-report
         path: htmlcov/

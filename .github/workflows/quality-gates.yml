@@ -55,7 +55,7 @@ jobs:
 
       - name: Upload Bandit report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: bandit-report
           path: backend/bandit-report.json
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload security reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: security-reports
           path: |
@@ -114,7 +114,7 @@ jobs:
 
       - name: Upload secrets detection report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v6
         with:
           name: secrets-detection-report
           path: .secrets.detected.json
