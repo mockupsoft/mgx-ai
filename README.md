@@ -22,6 +22,7 @@ Built on **MetaGPT** with a **FastAPI** backend, **PostgreSQL** persistence, **R
 - [Features](#features) | [Quick Start](#quick-start) | [Architecture](#architecture) | [Testing](#testing--quality)
 - [API Docs](./docs/API.md) | [Deployment Guide](./DOCKER_DEPLOYMENT.md) | [CLI Guide](./docs/CLI.md)
 - [Workflow Guide](./docs/WORKFLOWS.md) | [Git Integration](./docs/GIT_AWARE_EXECUTION.md) | [Web Stack Support](./docs/WEB_STACK_SUPPORT.md)
+- [DeepSite Deploy](./docs/DEEPSITE_DEPLOY.md) | [LLM Providers](./docs/LLM_PROVIDERS.md) | [Sandbox Runner](./docs/SANDBOX_RUNNER.md)
 
 ---
 
@@ -172,26 +173,30 @@ Expected output:
 ### Core Services
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Client Interface                         │
-│              (CLI, REST API, WebSocket)                     │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────────┐
-│                  FastAPI Backend Layer                      │
-│  (Middleware, Validation, Event Broadcasting, API Routers)  │
-└──────────┬────────────────────┬──────────────┬──────────────┘
-           │                    │              │
-┌──────────▼──────┐  ┌──────────▼──────┐  ┌───▼────────┐
-│ Agent Engine    │  │ Workflow        │  │ Git        │
-│ (Multi-Agent    │  │ Orchestrator    │  │ Manager    │
-│  Coordination)  │  │ (DAG Resolver)  │  │            │
-└──────────┬──────┘  └──────────┬──────┘  └────┬───────┘
-           │                    │              │
-┌──────────▼────────────────────▼──────────────▼──────────────┐
-│                   Storage Layer                             │
-│  PostgreSQL (Metadata)  Redis (Cache/Queue)  MinIO (Files) │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────┐
+│                     Client Interface                          │
+│           (CLI, REST API, WebSocket, DeepSite UI)             │
+└───────────────────────┬───────────────────────────────────────┘
+                        │
+┌───────────────────────▼───────────────────────────────────────┐
+│                 FastAPI Backend Layer                         │
+│  (Auth Middleware, Validation, SSE/WS, API Routers)           │
+│  /api/mgx/*  /api/mgx/parallel  /api/deepsite/*               │
+└──────┬────────────────┬──────────────┬────────────────────────┘
+       │                │              │
+┌──────▼──────┐  ┌──────▼──────┐  ┌───▼────────────────────┐
+│ Agent Engine│  │ Workflow    │  │ Parallel Microservice   │
+│ (MGXStyle-  │  │ Orchestrator│  │ Orchestrator            │
+│  Team, Mike │  │ DAG Resolver│  │ DecomposeTask →         │
+│  Alex, Bob) │  │             │  │ bounded_gather →        │
+│ SemanticCache│  │             │  │ IntegrateServices       │
+└──────┬──────┘  └──────┬──────┘  └───┬────────────────────┘
+       │                │              │
+┌──────▼────────────────▼──────────────▼────────────────────────┐
+│                    Storage Layer                              │
+│  PostgreSQL (mgx_runs, workflows)   Redis (cache/queue)       │
+│  MinIO (artifacts)                  DinD (sandbox execution)  │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
@@ -355,7 +360,7 @@ tests/
 
 - **Minimum test count:** 130+ automated tests
 - **Coverage gate:** 80%+ for `mgx_agent/` modules
-- **Current status:** 310 tests, 89% passing, 71% coverage
+- **Current status:** 310+ tests (incl. 32 new parallel microservice unit tests)
 - **CI enforcement:** Fail on threshold violations
 
 ### Running Tests
@@ -377,6 +382,13 @@ pytest tests/performance
 
 # Verbose mode with timing
 pytest -v --durations=10
+```
+
+### Parallel Microservice Tests (no metagpt required)
+
+```bash
+python -m pytest backend/tests/unit/test_parallel_microservice.py -v --noconftest
+# 32 tests — ServiceSpec, DecomposeTask, IntegrateServices, ParallelRunResult
 ```
 
 ### Frontend (DeepSite) — Jest
@@ -432,6 +444,19 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxx
 # LLM Configuration
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx
+
+# Agent / Cache
+MGX_ENABLE_SEMANTIC_CACHE=1      # 0 to disable semantic response cache
+MGX_CACHE_BACKEND=memory          # memory | redis
+
+# Sandbox
+DISABLE_SANDBOX_TESTING=false     # true to skip Charlie container tests
+SANDBOX_SELF_HEAL_MAX_ATTEMPTS=2  # 0 = legacy single-pass WriteCode
+DOCKER_HOST=tcp://dind:2375       # set in docker-compose.override.yml
+
+# DeepSite
+DEEPSITE_JWT_SECRET=change-me
+DEEPSITE_ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 ### Production Checklist
@@ -553,21 +578,15 @@ Cursor rule files under **`.cursor/rules/`** summarize APIs and Docker/sandbox b
 - ✅ **Real-time WebSocket Updates** - Live chat messages, plan updates, execution progress
 - ✅ **Enhanced Response Quality** - Natural, conversational AI responses with temperature control
 
-### Recent Merged PRs
+### Recent Changes (2026)
 
-- **Feature/LLM-cache-layer** - Intelligent response caching with Redis support
-- **Phase-4-test-report-validation** - Enhanced test validation and reporting
-- **Feature-expose-api-events** - REST API for event streaming and management  
-- **Feat/workspaces-projects-multi-tenancy** - Production multi-tenant isolation
-- **Feat/github-repo-links** - GitHub repository linking automation
-- **Feat/mgx-cli-py-npm** - Dual CLI distribution (Python + NPM)
-- **Phase-9-multi-agent-production-validation** - Production validation framework
-- **Feat/workflow-engine-multi-agent** - Multi-agent workflow orchestration
-- **Docs-phase-10-workflow-update** - Comprehensive workflow documentation
-- **Feat/project-generator-scaffold** - Project scaffolding and templates
-- **Feat/phase-16-artifact-release-pipeline** - Artifact management and release
-- **Feat/phase-19-template-prompt-library** - Template library system
-- **Phase-25-observability-otel-logging** - OpenTelemetry integration
+- **feat: semantic cache + parallel microservice** — `SemanticCache`, `ParallelOrchestrator`, `POST /api/mgx/parallel`, DeepSite backend, MGX history & pipeline API, extended generator stacks (react_native, flutter, go_fiber), 32 new unit tests
+- **Feature/LLM-cache-layer** — Intelligent response caching with Redis support
+- **Feat/workflow-engine-multi-agent** — Multi-agent workflow orchestration
+- **Feat/project-generator-scaffold** — Project scaffolding and templates
+- **Phase-25-observability-otel-logging** — OpenTelemetry integration
+- **Feat/github-repo-links** — GitHub repository linking automation
+- **Feat/mgx-cli-py-npm** — Dual CLI distribution (Python + NPM)
 
 ### System Metrics
 
@@ -575,11 +594,14 @@ Cursor rule files under **`.cursor/rules/`** summarize APIs and Docker/sandbox b
 ┌─────────────────────────────────────────────────────────────┐
 │ Overall completion score:        9.8/10 → Production-Ready  │
 │ Production readiness:            Production-Ready           │
-│ Test suite:                      130+ automated tests       │
+│ Test suite:                      310+ automated tests       │
 │                                  80%+ coverage gate enforced│
 │ Backend API:                     FastAPI + async DB + WS    │
 │ Git-aware execution:             Branch/commit/PR automation│
 │ Self-hosted deployment:          Docker Compose ready       │
+│ Parallel microservice API:       POST /api/mgx/parallel     │
+│ Semantic cache:                  Enabled by default         │
+│ DeepSite AI web builder:         /deepsite UI + API         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -587,7 +609,7 @@ Cursor rule files under **`.cursor/rules/`** summarize APIs and Docker/sandbox b
 
 ## License & Credits
 
-Copyright (c) 2024 MGX AI Contributors.
+Copyright (c) 2026 MGX AI Contributors.
 
 Licensed under the MIT License - see [LICENSE](./LICENSE) file for details.
 
@@ -605,27 +627,40 @@ Built on [MetaGPT](https://github.com/geekan/MetaGPT) - Multi-Agent Meta Program
 - **[docs/GIT_AWARE_EXECUTION.md](./docs/GIT_AWARE_EXECUTION.md)** - Git integration
 - **[docs/CLI.md](./docs/CLI.md)** - Command-line interface
 - **[docs/TESTING.md](./docs/TESTING.md)** - Testing framework
+- **[docs/DEEPSITE_DEPLOY.md](./docs/DEEPSITE_DEPLOY.md)** - DeepSite AI web builder deployment
+- **[docs/LLM_PROVIDERS.md](./docs/LLM_PROVIDERS.md)** - LLM provider configuration
+- **[docs/SANDBOX_RUNNER.md](./docs/SANDBOX_RUNNER.md)** - Sandbox execution (Charlie + DinD)
+- **[docs/PERFORMANCE.md](./docs/PERFORMANCE.md)** - Performance benchmarks & tuning
 
 ### Examples
 
 - **[examples/workflows/](./examples/workflows/)** - Workflow examples
-- **[examples/tasks/](./examples/tasks/)** - Task examples by stack
-- **[examples/cli/](./examples/cli/)** - CLI usage examples
+- **[examples/fastapi_task.json](./examples/fastapi_task.json)** - FastAPI task example
+- **[examples/nextjs_task.json](./examples/nextjs_task.json)** - Next.js task example
+- **[examples/mgx_style_team.py](./examples/mgx_style_team.py)** - Python API usage
+- **[examples/web_stack_examples.json](./examples/web_stack_examples.json)** - Multi-stack examples
 
 ### API Reference
 
-- **Health:** `GET /health/`
-- **MGX history:** `GET /api/mgx/history`, `GET /api/mgx/history/{run_id}`, `DELETE /api/mgx/history/{run_id}`
-- **MGX pipeline:** `POST /api/mgx/pipeline`, `GET /api/mgx/pipeline`, `GET /api/mgx/pipeline/{pipeline_id}`
-- **MGX parallel:** `POST /api/mgx/parallel` (decompose → parallel teams → integrate), `GET /api/mgx/parallel/{task_id}`
-- **Workspaces:** `GET/POST /api/workspaces/`
-- **Projects:** `GET/POST /api/projects/`
-- **Tasks:** `GET/POST /api/tasks/`
-- **Runs:** `GET/POST /api/runs/`
-- **Workflows:** `GET/POST /api/workflows/`
-- **Repositories:** `GET/POST /api/repositories/`
+| Endpoint | Methods | Description |
+|----------|---------|-------------|
+| `/health/` | `GET` | Health check |
+| `/api/mgx/history` | `GET` | List mgx task runs |
+| `/api/mgx/history/{run_id}` | `GET` `DELETE` | Get / delete a run |
+| `/api/mgx/pipeline` | `POST` `GET` | Sequential multi-task pipeline |
+| `/api/mgx/pipeline/{id}` | `GET` | Pipeline step status |
+| `/api/mgx/parallel` | `POST` | Decompose → parallel teams → integrate |
+| `/api/mgx/parallel/{task_id}` | `GET` | Parallel task status + results |
+| `/api/deepsite/projects` | `GET` `POST` | DeepSite project CRUD |
+| `/api/deepsite/generate` | `POST` (SSE) | AI code generation stream |
+| `/api/workspaces/` | `GET` `POST` | Workspaces |
+| `/api/projects/` | `GET` `POST` | Projects |
+| `/api/tasks/` | `GET` `POST` | Tasks |
+| `/api/runs/` | `GET` `POST` | Runs |
+| `/api/workflows/` | `GET` `POST` | Workflows |
+| `/api/repositories/` | `GET` `POST` | Repository linking |
 
-Complete API documentation available at: `http://localhost:8000/docs`
+Complete interactive documentation: `http://localhost:8000/docs`
 
 ---
 
