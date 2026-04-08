@@ -329,11 +329,12 @@ class StackValidator:
             if not found:
                 errors.append(f"Stack '{stack_id}' requires directory: {req_dir}")
         
-        # Check required patterns (regex)
+        # Check required patterns (regex) — only warnings, not blocking errors
+        # These are best-practice suggestions (e.g. requirements.txt), not hard failures
         for pattern in required_patterns:
             found = any(re.search(pattern, path) for path in file_paths)
             if not found:
-                errors.append(f"Stack '{stack_id}' requires pattern: {pattern}")
+                errors.append(f"[WARN] Stack '{stack_id}' recommends pattern: {pattern}")
         
         return errors
     
@@ -551,10 +552,13 @@ def validate_output_constraints(
     if stack_spec:
         stack_id = stack_spec.stack_id
         
-        # Required files/dirs
+        # Required files/dirs (patterns are warnings, required_files/dirs are errors)
         required_errors = StackValidator.validate_required_files(file_paths, stack_id)
         for error in required_errors:
-            result.add_error(error)
+            if error.startswith("[WARN]"):
+                result.add_warning(error[7:].strip())
+            else:
+                result.add_error(error)
         
         # Forbidden files
         forbidden_errors = StackValidator.validate_forbidden_files(file_paths, stack_id)

@@ -139,6 +139,9 @@ class StackType(str, Enum):
     FASTAPI = "fastapi"  # FastAPI Python framework
     NEXTJS = "nextjs"  # Next.js React framework
     LARAVEL = "laravel"  # Laravel PHP framework
+    REACT_NATIVE = "react_native"  # React Native (TypeScript)
+    FLUTTER = "flutter"  # Flutter (Dart)
+    GO_FIBER = "go_fiber"  # Go Fiber HTTP framework
 
 
 class TemplateFeatureType(str, Enum):

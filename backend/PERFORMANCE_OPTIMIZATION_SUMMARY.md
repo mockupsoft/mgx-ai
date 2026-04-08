@@ -134,3 +134,11 @@ Tüm optimizasyonlar `backend/config.py` dosyasındaki ayarlarla kontrol edilebi
 
 
 
+
+
+
+
+
+
+
+

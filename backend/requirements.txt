@@ -22,7 +22,10 @@ metagpt>=0.8.0
 tenacity>=8.2.0
 
 # Async & Concurrency
-httpx>=0.24.0
+httpx>=0.24.0,<0.29.0
+
+# Google Gemini (DeepSite / LLM routing) — resmi google-genai SDK
+google-genai>=1.0.0
 asyncio-contextmanager>=1.0.0
 
 # WebSocket & Events
@@ -47,6 +50,15 @@ langsmith>=0.1.0
 
 # Structured Logging
 structlog>=23.0.0  # Structured logging with JSON support
+
+# Authentication & Security
+python-jose[cryptography]>=3.3.0  # JWT token handling
+passlib[bcrypt]>=1.7.4  # Password hashing with bcrypt
+email-validator>=2.0.0  # Email validation for Pydantic
+
+# LLM SDK - pin to versions compatible with httpx>=0.24
+anthropic>=0.40.0
+openai>=1.52.0
 
 # Type hints
 types-PyYAML>=6.0.0

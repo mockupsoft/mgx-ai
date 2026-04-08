@@ -111,6 +111,32 @@ class ModelRegistry:
                 "capabilities": ["code", "reasoning", "analysis", "long_context"],
             },
         },
+        "gemini": {
+            "gemini-2.0-flash": {
+                "max_tokens": 8192,
+                "context_window": 1048576,
+                "cost_per_1k_prompt": 0.000075,
+                "cost_per_1k_completion": 0.0003,
+                "latency_estimate_ms": 800,
+                "capabilities": ["code", "reasoning", "analysis", "long_context", "vision"],
+            },
+            "gemini-1.5-pro": {
+                "max_tokens": 8192,
+                "context_window": 2097152,
+                "cost_per_1k_prompt": 0.00125,
+                "cost_per_1k_completion": 0.005,
+                "latency_estimate_ms": 1500,
+                "capabilities": ["code", "reasoning", "analysis", "long_context", "vision"],
+            },
+            "gemini-1.5-flash": {
+                "max_tokens": 8192,
+                "context_window": 1048576,
+                "cost_per_1k_prompt": 0.000075,
+                "cost_per_1k_completion": 0.0003,
+                "latency_estimate_ms": 600,
+                "capabilities": ["code", "analysis", "long_context"],
+            },
+        },
         "mistral": {
             "mistral-large": {
                 "max_tokens": 4096,

@@ -37,6 +37,10 @@ from .issues import router as issues_router
 from .activity import router as activity_router
 from .branches import router as branches_router
 from .diffs import router as diffs_router
+from .auth import router as auth_router
+from .deepsite import router as deepsite_router
+from .mgx import router as mgx_router
+from .parallel import router as parallel_router
 
 
 __all__ = [
@@ -72,4 +76,8 @@ __all__ = [
     "activity_router",
     "branches_router",
     "diffs_router",
+    "auth_router",
+    "deepsite_router",
+    "mgx_router",
+    "parallel_router",
 ]

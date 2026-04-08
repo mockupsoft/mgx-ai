@@ -337,6 +337,97 @@ STACK_SPECS: Dict[str, StackSpec] = {
         file_extensions=[".vue", ".ts", ".css", ".json"]
     ),
     
+    "react-native": StackSpec(
+        stack_id="react-native",
+        name="React Native (TypeScript)",
+        category=StackCategory.FRONTEND,
+        language="ts",
+        test_framework="jest",
+        package_manager="npm",
+        linter_formatter="eslint+prettier",
+        project_layout={
+            "src/screens/": "Ekran bileşenleri",
+            "src/components/": "Ortak bileşenler",
+            "src/navigation/": "React Navigation yapılandırması",
+            "src/hooks/": "Custom hooks",
+            "src/services/": "API servisleri",
+            "App.tsx": "Ana uygulama bileşeni",
+            "package.json": "Bağımlılık tanımları",
+            "metro.config.js": "Metro bundler yapılandırması",
+        },
+        run_commands={
+            "dev": "npx react-native start",
+            "build": "npx react-native build-android",
+            "test": "npm test",
+            "start": "npx react-native run-android",
+        },
+        docker_templates=True,
+        ci_templates=True,
+        common_dependencies=["react-native", "@react-navigation/native", "react-native-screens"],
+        file_extensions=[".tsx", ".ts", ".json"],
+    ),
+    
+    "flutter": StackSpec(
+        stack_id="flutter",
+        name="Flutter (Dart)",
+        category=StackCategory.FRONTEND,
+        language="dart",
+        test_framework="flutter_test",
+        package_manager="pub",
+        linter_formatter="dart-format",
+        project_layout={
+            "lib/": "Dart kaynak kodu",
+            "lib/screens/": "Ekran widget'ları",
+            "lib/widgets/": "Ortak widget'lar",
+            "lib/services/": "API ve iş servisleri",
+            "lib/models/": "Veri modelleri",
+            "lib/main.dart": "Giriş noktası",
+            "pubspec.yaml": "Bağımlılık tanımları",
+            "test/": "Widget ve unit testler",
+        },
+        run_commands={
+            "dev": "flutter run",
+            "build": "flutter build apk",
+            "test": "flutter test",
+            "start": "flutter run --release",
+        },
+        docker_templates=True,
+        ci_templates=True,
+        common_dependencies=["flutter", "http", "provider", "shared_preferences"],
+        file_extensions=[".dart", ".yaml"],
+    ),
+    
+    "go-fiber": StackSpec(
+        stack_id="go-fiber",
+        name="Go + Fiber",
+        category=StackCategory.BACKEND,
+        language="go",
+        test_framework="go-test",
+        package_manager="go-modules",
+        linter_formatter="golangci-lint",
+        project_layout={
+            "cmd/": "Uygulama giriş noktaları",
+            "internal/handlers/": "HTTP handler'ları",
+            "internal/services/": "İş mantığı",
+            "internal/models/": "Veri modelleri",
+            "internal/middleware/": "Fiber middleware",
+            "config/": "Yapılandırma",
+            "go.mod": "Go modül tanımı",
+            "go.sum": "Bağımlılık kilitleme",
+            ".env.example": "Çevre değişkenleri örneği",
+        },
+        run_commands={
+            "dev": "go run cmd/main.go",
+            "build": "go build -o bin/app cmd/main.go",
+            "test": "go test ./...",
+            "start": "./bin/app",
+        },
+        docker_templates=True,
+        ci_templates=True,
+        common_dependencies=["github.com/gofiber/fiber/v2", "github.com/joho/godotenv"],
+        file_extensions=[".go", ".mod", ".sum"],
+    ),
+    
     # Vanilla HTML/CSS/JS Stack (No Framework)
     "vanilla-html": StackSpec(
         stack_id="vanilla-html",
@@ -433,6 +524,18 @@ def infer_stack_from_task(task: str) -> str:
         # If user specifically wants React/Vue/Next, don't use vanilla
         if not any(fw in task_lower for fw in ["react", "vue", "next", "angular", "svelte"]):
             return "vanilla-html"
+    
+    # Mobile / cross-platform (react-native before generic React web)
+    if (
+        "react native" in task_lower
+        or "react-native" in task_lower
+        or "reactnative" in task_lower
+    ):
+        return "react-native"
+    if "flutter" in task_lower or "dart" in task_lower:
+        return "flutter"
+    if ("go" in task_lower and ("fiber" in task_lower or "golang" in task_lower)) or "go-fiber" in task_lower:
+        return "go-fiber"
     
     # Backend - specific framework checks first
     if "nest" in task_lower or "nestjs" in task_lower:

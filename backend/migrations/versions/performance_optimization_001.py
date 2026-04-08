@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'performance_optimization_001'
-down_revision = None  # Update with latest revision
+down_revision = '006_workflow_api_foundation'
 branch_labels = None
 depends_on = None
 
@@ -99,6 +99,14 @@ def downgrade() -> None:
     op.drop_table('agent_communication_metrics')
     op.drop_table('token_usage_analytics')
     op.drop_table('performance_metrics')
+
+
+
+
+
+
+
+
 
 
 

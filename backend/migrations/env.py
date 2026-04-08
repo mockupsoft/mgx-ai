@@ -24,6 +24,7 @@ if project_root not in sys.path:
 from backend.config import settings
 from backend.db.models import Base
 from backend.db.models.entities import *  # Import all models for metadata
+from backend.db.models.mgx_run import MgxRun  # noqa: F401 — mgx_runs table metadata
 
 # Alembic Config object
 config = context.config

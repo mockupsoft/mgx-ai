@@ -1,0 +1,13 @@
+# React Native — CI/build only; local dev uses Metro on host.
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+ENV NODE_ENV=development
+
+CMD ["npm", "start"]

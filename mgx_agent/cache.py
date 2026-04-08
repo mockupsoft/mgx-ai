@@ -20,9 +20,9 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
-from typing import Any, List, Mapping, Optional, Tuple
+from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 
 class CacheBackend(str, Enum):
@@ -273,6 +273,117 @@ class RedisCache(ResponseCache):
         return self._stats
 
 
+def _l2_normalize(vec: Sequence[float]) -> List[float]:
+    s = sum(x * x for x in vec) ** 0.5
+    if s < 1e-12:
+        return list(vec)
+    return [x / s for x in vec]
+
+
+def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
+    if len(a) != len(b):
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(x * x for x in b) ** 0.5
+    if na < 1e-12 or nb < 1e-12:
+        return 0.0
+    return dot / (na * nb)
+
+
+class SemanticCache(ResponseCache):
+    """Wraps a ResponseCache with optional cosine-similarity lookup on text payloads.
+
+    Uses a lightweight bag-of-hashed-token embedding (no external models).
+    Call ``set(key, value, semantic_text=...)`` so lookup can match paraphrased tasks.
+    """
+
+    def __init__(
+        self,
+        base_cache: ResponseCache,
+        *,
+        similarity_threshold: float = 0.85,
+        max_semantic_entries: int = 4096,
+        embedding_dim: int = 256,
+    ):
+        if not (0.0 <= similarity_threshold <= 1.0):
+            raise ValueError("similarity_threshold must be in [0, 1]")
+        if max_semantic_entries < 1:
+            raise ValueError("max_semantic_entries must be >= 1")
+        self.base_cache = base_cache
+        self._similarity_threshold = similarity_threshold
+        self._max_semantic_entries = max_semantic_entries
+        self._dim = embedding_dim
+        self._lock = threading.RLock()
+        self._key_to_embedding: "OrderedDict[str, List[float]]" = OrderedDict()
+
+    def _simple_embedding(self, text: str) -> List[float]:
+        import re
+
+        if not text or not str(text).strip():
+            return [0.0] * self._dim
+        tokens = re.findall(r"\w+", str(text).lower())
+        vec = [0.0] * self._dim
+        if not tokens:
+            return vec
+        for t in tokens:
+            h = int(hashlib.md5(t.encode("utf-8")).hexdigest(), 16)
+            vec[h % self._dim] += 1.0
+        return _l2_normalize(vec)
+
+    def _find_similar(self, query_vec: Sequence[float]) -> Optional[str]:
+        best_key: Optional[str] = None
+        best_sim = -1.0
+        with self._lock:
+            items = list(self._key_to_embedding.items())
+        for key, emb in items:
+            sim = _cosine_similarity(query_vec, emb)
+            if sim > best_sim:
+                best_sim = sim
+                best_key = key
+        if best_key is not None and best_sim >= self._similarity_threshold:
+            return best_key
+        return None
+
+    def _remove_embedding(self, key: str) -> None:
+        with self._lock:
+            self._key_to_embedding.pop(key, None)
+
+    def drop_semantic_entry(self, key: str) -> None:
+        """Remove a key from the semantic index (e.g. when base entry was evicted)."""
+        self._remove_embedding(key)
+
+    def get(self, key: str) -> Optional[Any]:
+        return self.base_cache.get(key)
+
+    def set(self, key: str, value: Any, *, semantic_text: Optional[str] = None) -> None:
+        self.base_cache.set(key, value)
+        if semantic_text is None or not str(semantic_text).strip():
+            return
+        emb = self._simple_embedding(semantic_text)
+        with self._lock:
+            if key in self._key_to_embedding:
+                del self._key_to_embedding[key]
+            self._key_to_embedding[key] = emb
+            self._key_to_embedding.move_to_end(key)
+            while len(self._key_to_embedding) > self._max_semantic_entries:
+                self._key_to_embedding.popitem(last=False)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._key_to_embedding.clear()
+        self.base_cache.clear()
+
+    def keys(self) -> List[str]:
+        return self.base_cache.keys()
+
+    def stats(self) -> CacheStats:
+        st = self.base_cache.stats()
+        with self._lock:
+            idx = len(self._key_to_embedding)
+        return replace(st, backend=f"semantic:{st.backend}", size=st.size + idx)
+
+
 __all__ = [
     "CacheBackend",
     "CacheStats",
@@ -280,5 +391,6 @@ __all__ = [
     "NullCache",
     "InMemoryLRUTTLCache",
     "RedisCache",
+    "SemanticCache",
     "make_cache_key",
 ]

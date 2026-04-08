@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 
 revision = "phase_16_artifact_pipeline_001"
-down_revision = None
+down_revision = "phase_15_project_generator_001"
 branch_labels = None
 depends_on = None
 

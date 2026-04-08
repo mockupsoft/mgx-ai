@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+import logging
 
 import logging
 
@@ -36,8 +37,6 @@ def _provider_configured(provider: str) -> bool:
         return bool(settings.mistral_api_key)
     if provider == "together":
         return bool(settings.together_api_key)
-    if provider == "openrouter":
-        return bool(settings.openrouter_api_key)
     if provider == "ollama":
         return bool(settings.ollama_base_url)
     return False
@@ -381,6 +380,121 @@ async def ollama_health() -> Dict[str, Any]:
         "model_count": len(models),
         "models": models,
     }
+
+
+class ChatRequest(BaseModel):
+    messages: List[Dict[str, str]] = Field(
+        description="List of messages with 'role' and 'content' fields"
+    )
+    stream: bool = Field(default=True, description="Whether to stream the response")
+    temperature: float = Field(default=0.7, ge=0, le=2)
+    max_tokens: int = Field(default=2000, ge=1, le=32000)
+
+
+@router.post("/chat")
+async def chat_completion(request: ChatRequest):
+    """
+    Chat completion endpoint for ai-team model.
+    Uses the team provider's run_task_stream method for multi-agent conversations.
+    """
+    from backend.services import get_team_provider
+    from fastapi.responses import StreamingResponse
+    import json
+    
+    try:
+        logger.info(f"Received chat request with {len(request.messages)} messages, stream={request.stream}")
+        
+        # Extract the last user message
+        user_messages = [msg for msg in request.messages if msg.get("role") == "user"]
+        if not user_messages:
+            logger.warning("No user message found in request")
+            raise HTTPException(status_code=400, detail="No user message found")
+        
+        user_message = user_messages[-1]["content"]
+        logger.info(f"User message: {user_message[:100]}...")
+        
+        # Get system message if present
+        system_messages = [msg for msg in request.messages if msg.get("role") == "system"]
+        if system_messages:
+            system_prompt = system_messages[-1]["content"]
+            # Combine system and user message as task
+            task = f"{system_prompt}\n\n{user_message}"
+        else:
+            task = user_message
+        
+        logger.info(f"Getting team provider...")
+        provider = get_team_provider()
+        logger.info(f"Team provider obtained successfully")
+        
+        if request.stream:
+            # Use run_task_stream for multi-agent streaming
+            async def generate_stream():
+                try:
+                    logger.info(f"Starting task streaming for ai-team: {task[:100]}...")
+                    message_count = 0
+                    async for agent_message in provider.run_task_stream(task):
+                        message_count += 1
+                        # Format for DeepSite compatibility
+                        # DeepSite expects OpenAI-compatible format: {"choices": [{"delta": {"content": "..."}}]}
+                        content = agent_message.get("content", "")
+                        agent = agent_message.get("agent", "System")
+                        msg_type = agent_message.get("type", "message")
+                        
+                        # Skip status messages or empty content
+                        if msg_type == "status" or not content or not content.strip():
+                            continue
+                        
+                        # Format agent message for DeepSite
+                        # Prefix with agent name for clarity
+                        formatted_content = f"[{agent}]: {content}" if agent != "System" else content
+                        
+                        # Stream as OpenAI-compatible format
+                        yield f"data: {json.dumps({'choices': [{'delta': {'content': formatted_content}}]})}\n\n"
+                    
+                    logger.info(f"Task streaming completed. Total messages: {message_count}")
+                    # Send completion marker
+                    yield "data: [DONE]\n\n"
+                except Exception as e:
+                    logger.error(f"Chat completion streaming error: {e}", exc_info=True)
+                    error_msg = f"Error: {str(e)}"
+                    yield f"data: {json.dumps({'choices': [{'delta': {'content': error_msg}}]})}\n\n"
+                    yield "data: [DONE]\n\n"
+            
+            return StreamingResponse(
+                generate_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                }
+            )
+        else:
+            # Non-streaming response - collect all messages
+            all_messages = []
+            async for agent_message in provider.run_task_stream(task):
+                all_messages.append(agent_message)
+            
+            # Combine all agent messages into final response
+            final_content = "\n\n".join([
+                f"[{msg.get('agent', 'System')}]: {msg.get('content', '')}"
+                for msg in all_messages
+                if msg.get("type") != "status"  # Exclude status messages
+            ])
+            
+            return {
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": final_content
+                    }
+                }]
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Chat completion error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 __all__ = ["router"]

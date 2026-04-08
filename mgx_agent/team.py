@@ -23,7 +23,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Sequence, Any, Dict, Tuple
+from typing import List, Optional, Sequence, Any, Dict, Tuple, Mapping
 from enum import Enum
 
 from pydantic import BaseModel, Field, validator
@@ -56,6 +56,7 @@ from mgx_agent.cache import (
     InMemoryLRUTTLCache,
     NullCache,
     RedisCache,
+    SemanticCache,
     make_cache_key,
 )
 from mgx_agent.performance.async_tools import (
@@ -142,6 +143,22 @@ class TeamConfig(BaseModel):
     cache_log_hits: bool = Field(default=False, description="Cache hit logla")
     cache_log_misses: bool = Field(default=False, description="Cache miss logla")
     cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400, description="Cache TTL (saniye)")
+    enable_semantic_caching: bool = Field(
+        default=True,
+        description="Görev metnine göre vekil embedding ile semantic cache (MGX_ENABLE_SEMANTIC_CACHE ile kapatılabilir)",
+    )
+    semantic_cache_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Semantic eşleşme için kosinüs eşiği",
+    )
+    semantic_cache_max_index_entries: int = Field(
+        default=4096,
+        ge=64,
+        le=500_000,
+        description="Semantic indeks için üst sınır (LRU)",
+    )
     
     @validator('max_rounds')
     @classmethod
@@ -205,6 +222,14 @@ class TeamConfig(BaseModel):
 DEFAULT_CONFIG = TeamConfig()
 
 
+def _cache_payload_semantic_text(payload: Mapping[str, Any]) -> str:
+    """Metin semantic eşleşmesi için payload'tan stabil bir dize üretir."""
+    t = payload.get("task") or payload.get("content")
+    if t is not None and str(t).strip():
+        return str(t)
+    return json.dumps(dict(payload), sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
 # ============================================
 # GÖREV METRİKLERİ
 # ============================================
@@ -217,7 +242,7 @@ class TaskMetrics:
     success: bool = False
     complexity: str = "XS"
     token_usage: int = 0  # Şimdilik dummy - ileride gerçek değer
-    estimated_cost: float = 0.0  # Şimdilik dummy - ileride gerçek değer
+    estimated_cost: float = 0.0  # Tahmini API maliyeti (USD), registry tabanlı
     revision_rounds: int = 0
     cache_hits: int = 0
     cache_misses: int = 0
@@ -348,6 +373,7 @@ class MGXStyleTeam:
         
         # Config'den değerleri al
         self.output_dir_base = output_dir_base
+        self._last_output_dir: Optional[str] = None  # Son kaydedilen output/ alt dizini (DB geçmişi için)
         self.context = context_override if context_override is not None else Context()
         self.team = team_override if team_override is not None else Team(context=self.context)
         self.plan_approved = False
@@ -458,6 +484,28 @@ class MGXStyleTeam:
             logger.info(f"   cache_backend: {getattr(self.config, 'cache_backend', 'memory')}")
             logger.info(f"   cache_max_entries: {getattr(self.config, 'cache_max_entries', 1024)}")
             logger.info(f"   cache_ttl_seconds: {self.config.cache_ttl_seconds}")
+            logger.info(f"   enable_semantic_caching: {getattr(self.config, 'enable_semantic_caching', True)}")
+
+    def _semantic_cache_enabled(self) -> bool:
+        env = os.getenv("MGX_ENABLE_SEMANTIC_CACHE", "").strip().lower()
+        if env in ("0", "false", "no", "off"):
+            return False
+        if env in ("1", "true", "yes", "on"):
+            return True
+        return bool(getattr(self.config, "enable_semantic_caching", True))
+
+    def _maybe_wrap_semantic(self, base: ResponseCache) -> ResponseCache:
+        if not self._semantic_cache_enabled():
+            return base
+        if isinstance(base, NullCache):
+            return base
+        thr = float(getattr(self.config, "semantic_cache_similarity_threshold", 0.85))
+        max_idx = int(getattr(self.config, "semantic_cache_max_index_entries", 4096))
+        return SemanticCache(
+            base_cache=base,
+            similarity_threshold=thr,
+            max_semantic_entries=max_idx,
+        )
 
     def _init_cache(self) -> ResponseCache:
         """Initialize response cache based on config."""
@@ -473,16 +521,19 @@ class MGXStyleTeam:
         max_entries = int(getattr(self.config, "cache_max_entries", 1024))
         ttl_seconds = int(getattr(self.config, "cache_ttl_seconds", 3600))
 
+        def _wrap(base: ResponseCache) -> ResponseCache:
+            return self._maybe_wrap_semantic(base)
+
         if backend_raw == CacheBackend.REDIS.value:
             redis_url = getattr(self.config, "redis_url", None)
             if not redis_url:
                 logger.warning("⚠️ cache_backend=redis ama redis_url boş - cache devre dışı")
                 return NullCache()
             try:
-                return RedisCache(redis_url=redis_url, ttl_seconds=ttl_seconds)
+                return _wrap(RedisCache(redis_url=redis_url, ttl_seconds=ttl_seconds))
             except Exception as e:
                 logger.warning(f"⚠️ Redis cache init başarısız ({e}) - in-memory cache kullanılacak")
-                return InMemoryLRUTTLCache(max_entries=max_entries, ttl_seconds=ttl_seconds)
+                return _wrap(InMemoryLRUTTLCache(max_entries=max_entries, ttl_seconds=ttl_seconds))
 
         if use_global:
             if MGXStyleTeam._GLOBAL_RESPONSE_CACHE is None:
@@ -490,9 +541,9 @@ class MGXStyleTeam:
                     max_entries=max_entries,
                     ttl_seconds=ttl_seconds,
                 )
-            return MGXStyleTeam._GLOBAL_RESPONSE_CACHE
+            return _wrap(MGXStyleTeam._GLOBAL_RESPONSE_CACHE)
 
-        return InMemoryLRUTTLCache(max_entries=max_entries, ttl_seconds=ttl_seconds)
+        return _wrap(InMemoryLRUTTLCache(max_entries=max_entries, ttl_seconds=ttl_seconds))
 
     async def cached_llm_call(
         self,
@@ -542,6 +593,33 @@ class MGXStyleTeam:
                 pass
             return decode(cached) if decode else cached
 
+        # Try semantic cache if available
+        if isinstance(self._cache, SemanticCache):
+            try:
+                payload_text = _cache_payload_semantic_text(payload)
+                if payload_text.strip():
+                    semantic_key = self._cache._find_similar(
+                        self._cache._simple_embedding(payload_text)
+                    )
+                    if semantic_key:
+                        semantic_cached = self._cache.base_cache.get(semantic_key)
+                        if semantic_cached is None:
+                            self._cache.drop_semantic_entry(semantic_key)
+                        else:
+                            self._cache_hits += 1
+                            logger.debug(f"⚡ Semantic cache hit: {role}/{action}")
+                            try:
+                                from mgx_agent.performance.profiler import get_active_profiler
+
+                                prof = get_active_profiler()
+                                if prof is not None:
+                                    prof.record_cache(True)
+                            except Exception:
+                                pass
+                            return decode(semantic_cached) if decode else semantic_cached
+            except Exception as e:
+                logger.debug(f"Semantic cache lookup failed: {e}")
+
         self._cache_misses += 1
         if getattr(self.config, "cache_log_misses", False):
             logger.info(f"🐢 Cache miss: {role}/{action}")
@@ -557,7 +635,10 @@ class MGXStyleTeam:
         result = await compute()
         to_store = encode(result) if encode else result
         try:
-            self._cache.set(key, to_store)
+            if isinstance(self._cache, SemanticCache):
+                self._cache.set(key, to_store, semantic_text=_cache_payload_semantic_text(payload))
+            else:
+                self._cache.set(key, to_store)
         except Exception as e:
             logger.debug(f"Cache set hatası: {e}")
         return result
@@ -601,7 +682,10 @@ class MGXStyleTeam:
             return
         key = make_cache_key(role=role, action=action, payload=payload)
         try:
-            self._cache.set(key, value)
+            if isinstance(self._cache, SemanticCache):
+                self._cache.set(key, value, semantic_text=_cache_payload_semantic_text(payload))
+            else:
+                self._cache.set(key, value)
         except Exception:
             pass
 
@@ -1022,6 +1106,107 @@ class MGXStyleTeam:
         base["investment"] *= multiplier
         return base
     
+    async def _execute_with_early_termination(self, max_rounds: int) -> int:
+        """
+        Execute with early termination if task is completed.
+        
+        Args:
+            max_rounds: Maximum rounds to execute
+        
+        Returns:
+            Actual number of rounds executed
+        """
+        actual_rounds = 0
+        
+        for round_num in range(1, max_rounds + 1):
+            await self.team.run(n_round=1)
+            actual_rounds += 1
+            
+            # Check if task is completed (early termination)
+            if self._is_task_completed():
+                logger.info(f"✅ Task completed early after {actual_rounds} rounds (max: {max_rounds})")
+                break
+            
+            # Check budget exhaustion
+            if self._check_budget_exhaustion():
+                logger.warning(f"⚠️ Budget exhausted after {actual_rounds} rounds")
+                break
+        
+        return actual_rounds
+    
+    def _is_task_completed(self) -> bool:
+        """
+        Check if task is completed based on results.
+        
+        Returns:
+            True if task appears to be completed
+        """
+        try:
+            code, tests, review = self._collect_raw_results()
+            
+            # Simple heuristic: if we have code, tests, and positive review, consider it done
+            has_code = code and len(code.strip()) > 100
+            has_tests = tests and len(tests.strip()) > 50
+            has_positive_review = review and (
+                "approved" in review.lower() or 
+                "complete" in review.lower() or
+                "good" in review.lower()
+            )
+            
+            return has_code and has_tests and has_positive_review
+        except Exception:
+            return False
+    
+    def _check_budget_exhaustion(self) -> bool:
+        """
+        Check if budget is exhausted.
+        
+        Returns:
+            True if budget is exhausted
+        """
+        # This is a placeholder - in production, check actual budget
+        # For now, always return False
+        return False
+    
+    def _calculate_optimal_rounds(self, complexity: str, budget: float) -> int:
+        """
+        Calculate optimal number of rounds based on complexity and budget.
+        
+        Args:
+            complexity: Task complexity (XS, S, M, L, XL)
+            budget: Available budget in USD
+        
+        Returns:
+            Optimal number of rounds (with 95%+ accuracy target)
+        """
+        # Base rounds by complexity (optimized for accuracy)
+        complexity_rounds = {
+            "XS": 1,
+            "S": 2,
+            "M": 3,
+            "L": 5,
+            "XL": 8,
+        }
+        
+        base_rounds = complexity_rounds.get(complexity, 3)
+        
+        # Adjust based on budget (more budget = more rounds possible)
+        # Optimized estimate: $0.40 per round (reduced from $0.50 for better efficiency)
+        budget_rounds = int(budget / 0.40)
+        
+        # Use minimum of complexity-based and budget-based
+        optimal = min(base_rounds, budget_rounds)
+        
+        # Ensure within config limits
+        optimal = max(1, min(optimal, self.config.max_rounds))
+        
+        # Add safety margin for accuracy (95%+ target)
+        # For complex tasks, add one extra round if budget allows
+        if complexity in ("L", "XL") and budget > optimal * 0.40:
+            optimal = min(optimal + 1, self.config.max_rounds)
+        
+        return optimal
+    
     def _get_complexity_from_plan(self) -> str:
         """Son plan mesajından complexity'yi çek"""
         if hasattr(self, 'last_plan') and self.last_plan:
@@ -1044,10 +1229,7 @@ class MGXStyleTeam:
         """
         Gerçek token kullanımını hesapla
         
-        NOT: Şu an için token sayısı yeterli. İleride gerçek maliyet hesaplaması için:
-        - TeamConfig'e price_per_million_tokens alanı eklenebilir
-        - estimated_cost = total_tokens / 1_000_000 * model_price_per_million
-        - Şimdilik investment'ı maliyet kabul etmek pratik
+        Tahmini maliyet için execute() sonunda _calculate_real_cost() kullanılır (ModelRegistry).
         """
         total_tokens = 0
         
@@ -1071,6 +1253,63 @@ class MGXStyleTeam:
         
         # Fallback: gerçek değer bulunamazsa tahmini döndür
         return total_tokens if total_tokens > 0 else 1000
+
+    def _calculate_token_breakdown(self) -> Tuple[int, int]:
+        """MetaGPT cost_manager'dan prompt ve completion token sayılarını topla."""
+        prompt_total = 0
+        completion_total = 0
+        if hasattr(self.team, "env") and hasattr(self.team.env, "roles"):
+            for role in self.team.env.roles.values():
+                if hasattr(role, "llm") and role.llm:
+                    if hasattr(role.llm, "cost_manager"):
+                        cost_mgr = role.llm.cost_manager
+                        if hasattr(cost_mgr, "total_prompt_tokens"):
+                            prompt_total += int(cost_mgr.total_prompt_tokens or 0)
+                        if hasattr(cost_mgr, "total_completion_tokens"):
+                            completion_total += int(cost_mgr.total_completion_tokens or 0)
+                    elif hasattr(role.llm, "usage"):
+                        usage = role.llm.usage
+                        if hasattr(usage, "prompt_tokens"):
+                            prompt_total += int(usage.prompt_tokens or 0)
+                        if hasattr(usage, "completion_tokens"):
+                            completion_total += int(usage.completion_tokens or 0)
+        return prompt_total, completion_total
+
+    def _calculate_real_cost(
+        self,
+        budget: Dict[str, Any],
+        prompt_tokens: int,
+        completion_tokens: int,
+    ) -> float:
+        """
+        Tahmini API maliyeti (USD). Model fiyatları ModelRegistry'den; yoksa Gemini Flash varsayılanı.
+        prompt_tokens ve completion_tokens execute() içinde (gerekirse 60/40) doldurulur.
+        """
+        model_name = (
+            os.environ.get("GEMINI_MODEL")
+            or os.environ.get("GEMINI__DEFAULT_MODEL")
+            or "gemini-2.0-flash"
+        )
+        cost_usd = 0.0
+        try:
+            from backend.services.llm.registry import ModelRegistry
+
+            cfg = ModelRegistry.get_model_config("gemini", model_name)
+            if cfg:
+                cost_usd = (prompt_tokens / 1000.0) * cfg.cost_per_1k_prompt + (
+                    completion_tokens / 1000.0
+                ) * cfg.cost_per_1k_completion
+        except Exception as e:
+            logger.debug(f"ModelRegistry maliyet hesaplanamadı: {e}")
+
+        if cost_usd <= 0.0:
+            # Registry yok veya model eşleşmedi: Gemini 2.0 Flash yaklaşık fiyatları ($/1K)
+            cp, cc = 0.000075, 0.0003
+            cost_usd = (prompt_tokens / 1000.0) * cp + (completion_tokens / 1000.0) * cc
+
+        if cost_usd <= 0.0:
+            return float(budget.get("investment", 0.0))
+        return round(cost_usd, 6)
     
     async def execute(self, n_round: int = None, max_revision_rounds: int = None) -> str:
         """Görevi çalıştır
@@ -1098,9 +1337,10 @@ class MGXStyleTeam:
         budget = self._tune_budget(complexity)
         metric.complexity = complexity
         
-        # n_round parametresi verilmemişse budget'tan al
+        # n_round parametresi verilmemişse budget-aware calculation yap
         if n_round is None:
-            n_round = budget["n_round"]
+            n_round = self._calculate_optimal_rounds(complexity, budget["investment"])
+            logger.debug(f"Calculated optimal rounds: {n_round} (complexity: {complexity}, budget: ${budget['investment']})")
         
         # Kullanıcıya görünen bilgi print ile (logger.debug arka planda log dosyasına gider)
         print_phase_header("Görev Yürütme", "🚀")
@@ -1137,8 +1377,9 @@ class MGXStyleTeam:
                         "mgx.phase": "main_development",
                     },
                 ) as span:
-                    await self.team.run(n_round=n_round)
-
+                    # Dynamic round calculation with early termination
+                    actual_rounds = await self._execute_with_early_termination(n_round)
+                    
                     # Charlie'nin çalışması için ek bir round (MetaGPT'nin normal akışı)
                     # Manuel tetikleme hacklerini kaldırdık - sadece team.run() kullanıyoruz
                     logger.debug("🔍 Charlie'nin review yapması için ek round çalıştırılıyor...")
@@ -1147,7 +1388,8 @@ class MGXStyleTeam:
                     set_span_attributes(
                         span,
                         {
-                            "mgx.exec.rounds": int(n_round),
+                            "mgx.exec.rounds": int(actual_rounds),
+                            "mgx.exec.early_terminated": actual_rounds < n_round,
                         },
                     )
             
@@ -1163,6 +1405,7 @@ class MGXStyleTeam:
             # Review sonucunu kontrol et
             revision_count = 0
             last_review_hash = None  # Sonsuz döngü önleme - LLM'nin aynı yorumları tekrar etme sorununa karşı
+            self._current_revision_round = 0  # Charlie'nin cache key'ini per-round farklılaştırmak için
             
             while revision_count < max_revision_rounds:
                 code, tests, review = self._collect_raw_results()
@@ -1188,6 +1431,7 @@ class MGXStyleTeam:
                 # Review'da "DEĞİŞİKLİK GEREKLİ" var mı kontrol et
                 if "DEĞİŞİKLİK GEREKLİ" in review.upper():
                     revision_count += 1
+                    self._current_revision_round = revision_count  # Charlie cache bypass için
                     
                     # KORUMA 2: Maksimum düzeltme turu kontrolü
                     # Sonsuz döngüyü önlemek için hard limit
@@ -1313,9 +1557,15 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             metric.cache_hits = self._cache_hits
             metric.cache_misses = self._cache_misses
             
-            # Gerçek token kullanımını hesapla
-            metric.token_usage = self._calculate_token_usage()
-            metric.estimated_cost = budget["investment"]
+            # Token kullanımı ve tahmini API maliyeti (investment yerine registry tabanlı)
+            prompt_tok, completion_tok = self._calculate_token_breakdown()
+            total_tokens = prompt_tok + completion_tok
+            if total_tokens == 0:
+                total_tokens = self._calculate_token_usage()
+                prompt_tok = int(total_tokens * 0.6)
+                completion_tok = total_tokens - prompt_tok
+            metric.token_usage = total_tokens
+            metric.estimated_cost = self._calculate_real_cost(budget, prompt_tok, completion_tok)
             
             # Start profiling result persistence phase
             if self._profiler:
@@ -1533,75 +1783,63 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
         output_dir = f"{self.output_dir_base}/mgx_team_{timestamp}"
         os.makedirs(output_dir, exist_ok=True)
         
-        files_saved = []
-        
+        header = f"# MGX Style Team tarafından üretildi\n# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+
+        def _extract_file_manifest(raw: str) -> list:
+            """FILE: manifest formatından (path, content) listesi çıkar."""
+            files = []
+            current_file = None
+            current_lines = []
+            for line in raw.split('\n'):
+                if line.startswith('FILE: '):
+                    if current_file is not None:
+                        content = '\n'.join(current_lines).rstrip()
+                        # Strip any surrounding code fences
+                        content = re.sub(r'^```[a-zA-Z]*\s*', '', content.lstrip(), count=1)
+                        content = re.sub(r'\n?```\s*$', '', content.rstrip())
+                        files.append((current_file, content.strip()))
+                    current_file = line[6:].strip()
+                    current_lines = []
+                elif current_file is not None:
+                    current_lines.append(line)
+            if current_file is not None:
+                content = '\n'.join(current_lines).rstrip()
+                content = re.sub(r'^```[a-zA-Z]*\s*', '', content.lstrip(), count=1)
+                content = re.sub(r'\n?```\s*$', '', content.rstrip())
+                files.append((current_file, content.strip()))
+            return files
+
+        def _extract_code_blocks(raw: str) -> list:
+            """Markdown code fence'lerinden içerik çıkar (language tag dahil)."""
+            # Match any language tag: ```py, ```python, ```js etc.
+            return [b.strip() for b in re.findall(r'```[a-zA-Z]*\s*(.*?)```', raw, re.DOTALL) if b.strip()]
+
         # Kod dosyasını kaydet
         if code:
-            # HTML kod bloklarını çıkar ve kaydet
-            html_blocks = re.findall(r'```html\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
-            for i, block in enumerate(html_blocks):
-                if block.strip():
-                    filename = "index.html" if i == 0 else f"page_{i}.html"
-                    html_path = f"{output_dir}/{filename}"
-                    self._safe_write_file(html_path, block.strip())
-                    files_saved.append(filename)
-                    logger.info(f"💾 HTML dosyası yazıldı: {html_path}")
+            if 'FILE:' in code:
+                # FILE manifest formatı — her dosyayı ayrı kaydet
+                for fpath, fcontent in _extract_file_manifest(code):
+                    fname = os.path.basename(fpath)
+                    dest = f"{output_dir}/{fname}"
+                    self._safe_write_file(dest, header + fcontent + "\n")
+            else:
+                # Düz kod bloğu
+                code_blocks = _extract_code_blocks(code)
+                main_py_content = header + ('\n\n'.join(code_blocks) if code_blocks else code) + "\n"
+                self._safe_write_file(f"{output_dir}/main.py", main_py_content)
 
-            # CSS kod bloklarını çıkar ve kaydet
-            css_blocks = re.findall(r'```css\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
-            for i, block in enumerate(css_blocks):
-                if block.strip():
-                    filename = "style.css" if i == 0 else f"style_{i}.css"
-                    css_path = f"{output_dir}/{filename}"
-                    self._safe_write_file(css_path, block.strip())
-                    files_saved.append(filename)
-                    logger.info(f"💾 CSS dosyası yazıldı: {css_path}")
-
-            # JavaScript kod bloklarını çıkar ve kaydet
-            js_blocks = re.findall(r'```(?:javascript|js)\s*(.*?)\s*```', code, re.DOTALL | re.IGNORECASE)
-            for i, block in enumerate(js_blocks):
-                if block.strip():
-                    filename = "script.js" if i == 0 else f"script_{i}.js"
-                    js_path = f"{output_dir}/{filename}"
-                    self._safe_write_file(js_path, block.strip())
-                    files_saved.append(filename)
-                    logger.info(f"💾 JavaScript dosyası yazıldı: {js_path}")
-
-            # Python kod bloklarını çıkar (eğer HTML/CSS/JS yoksa)
-            if not (html_blocks or css_blocks or js_blocks):
-                python_blocks = re.findall(r'```(?:python)?\s*(.*?)\s*```', code, re.DOTALL)
-                
-                main_py_path = f"{output_dir}/main.py"
-                main_py_content = "# MGX Style Team tarafından üretildi\n"
-                main_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                
-                if python_blocks:
-                    for block in python_blocks:
-                        if block.strip():
-                            main_py_content += block.strip() + "\n\n"
-                else:
-                    main_py_content += code
-                
-                self._safe_write_file(main_py_path, main_py_content)
-                files_saved.append("main.py")
-        
         # Test dosyasını kaydet
         if tests:
-            test_blocks = re.findall(r'```(?:python)?\s*(.*?)\s*```', tests, re.DOTALL)
-            
-            test_py_path = f"{output_dir}/test_main.py"
-            test_py_content = "# MGX Style Team tarafından üretildi - TEST DOSYASI\n"
-            test_py_content += f"# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            if test_blocks:
-                for block in test_blocks:
-                    if block.strip():
-                        test_py_content += block.strip() + "\n\n"
+            test_header = f"# MGX Style Team tarafından üretildi - TEST DOSYASI\n# Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            if 'FILE:' in tests:
+                for fpath, fcontent in _extract_file_manifest(tests):
+                    fname = os.path.basename(fpath)
+                    dest = f"{output_dir}/{fname}"
+                    self._safe_write_file(dest, test_header + fcontent + "\n")
             else:
-                test_py_content += tests
-            
-            self._safe_write_file(test_py_path, test_py_content)
-            files_saved.append("test_main.py")
+                test_blocks = _extract_code_blocks(tests)
+                test_py_content = test_header + ('\n\n'.join(test_blocks) if test_blocks else tests) + "\n"
+                self._safe_write_file(f"{output_dir}/test_main.py", test_py_content)
         
         # Review dosyasını kaydet
         if review:
@@ -1609,11 +1847,49 @@ MEVCUT KOD (İYİLEŞTİRİLECEK):
             review_content = "# Kod İnceleme Raporu\n\n"
             review_content += f"**Tarih:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             review_content += review
-            
             self._safe_write_file(review_path, review_content)
-            files_saved.append("review.md")
-        
-        logger.info(f"📁 Dosyalar kaydedildi: {output_dir}/ - {', '.join(files_saved)}")
+
+        # requirements.txt yoksa Python importlarından otomatik oluştur
+        req_path = f"{output_dir}/requirements.txt"
+        if not os.path.exists(req_path) and code:
+            _STDLIB = {
+                "os", "sys", "re", "json", "time", "datetime", "math", "random",
+                "pathlib", "typing", "collections", "itertools", "functools",
+                "asyncio", "threading", "subprocess", "shutil", "copy",
+                "hashlib", "base64", "io", "struct", "abc", "enum",
+                "dataclasses", "contextlib", "warnings", "logging", "unittest",
+                "http", "urllib", "email", "html", "xml", "csv", "sqlite3",
+            }
+            _PYPI_MAP = {
+                "fastapi": "fastapi>=0.100.0",
+                "uvicorn": "uvicorn[standard]>=0.20.0",
+                "pydantic": "pydantic>=2.0.0",
+                "starlette": "starlette>=0.27.0",
+                "httpx": "httpx>=0.24.0",
+                "requests": "requests>=2.28.0",
+                "flask": "flask>=3.0.0",
+                "django": "django>=4.2.0",
+                "sqlalchemy": "sqlalchemy>=2.0.0",
+                "pytest": "pytest>=7.0.0",
+                "numpy": "numpy>=1.24.0",
+                "pandas": "pandas>=2.0.0",
+                "aiofiles": "aiofiles>=23.0.0",
+            }
+            # importları topla
+            imports = set(re.findall(r'^(?:import|from)\s+([a-zA-Z_][a-zA-Z0-9_]*)', code, re.MULTILINE))
+            reqs = []
+            for imp in sorted(imports):
+                if imp in _STDLIB:
+                    continue
+                pkg = _PYPI_MAP.get(imp, imp)
+                if pkg and pkg not in reqs:
+                    reqs.append(pkg)
+            if reqs:
+                self._safe_write_file(req_path, "\n".join(reqs) + "\n")
+                logger.info(f"📦 requirements.txt otomatik oluşturuldu: {reqs}")
+
+        logger.info(f"📁 Tüm dosyalar kaydedildi: {output_dir}/")
+        self._last_output_dir = output_dir
     
     def get_progress(self) -> str:
         """İlerleme durumunu al"""
@@ -1844,37 +2120,8 @@ async def main(human_reviewer: bool = False, custom_task: str = None):
     print("=" * 50)
 
 
-async def incremental_main(requirement: str, project_path: str = None, fix_bug: bool = False, ask_confirmation: bool = True):
-    """
-    Artımlı geliştirme modu
-    
-    Args:
-        requirement: Yeni gereksinim veya bug açıklaması
-        project_path: Mevcut proje yolu
-        fix_bug: True ise bug düzeltme modu
-        ask_confirmation: True ise plan onayı bekle (sessiz mod için False)
-    """
-    mode = "🐛 BUG DÜZELTME" if fix_bug else "➕ YENİ ÖZELLİK"
-    
-    print(f"""
-    ╔══════════════════════════════════════════════════════════╗
-    ║        MGX STYLE - INCREMENTAL DEVELOPMENT               ║
-    ║                                                          ║
-    ║  {mode:^52} ║
-    ╚══════════════════════════════════════════════════════════╝
-    """)
-    
-    mgx_team = MGXStyleTeam(human_reviewer=False)
-    
-    if project_path:
-        print(f"\n📁 Proje: {project_path}")
-        print(mgx_team.get_project_summary(project_path))
-    
-    result = await mgx_team.run_incremental(requirement, project_path, fix_bug, ask_confirmation)
-    print(result)
-
-
-if __name__ == "__main__":
+def cli_main():
+    """CLI entry point - parses arguments and runs appropriate mode."""
     import argparse
     
     parser = argparse.ArgumentParser(
@@ -1960,3 +2207,37 @@ if __name__ == "__main__":
             print(f"\n📝 ÖZEL GÖREV: {args.task}\n")
         
         asyncio.run(main(human_reviewer=args.human, custom_task=args.task))
+
+
+async def incremental_main(requirement: str, project_path: str = None, fix_bug: bool = False, ask_confirmation: bool = True):
+    """
+    Artımlı geliştirme modu
+    
+    Args:
+        requirement: Yeni gereksinim veya bug açıklaması
+        project_path: Mevcut proje yolu
+        fix_bug: True ise bug düzeltme modu
+        ask_confirmation: True ise plan onayı bekle (sessiz mod için False)
+    """
+    mode = "🐛 BUG DÜZELTME" if fix_bug else "➕ YENİ ÖZELLİK"
+    
+    print(f"""
+    ╔══════════════════════════════════════════════════════════╗
+    ║        MGX STYLE - INCREMENTAL DEVELOPMENT               ║
+    ║                                                          ║
+    ║  {mode:^52} ║
+    ╚══════════════════════════════════════════════════════════╝
+    """)
+    
+    mgx_team = MGXStyleTeam(human_reviewer=False)
+    
+    if project_path:
+        print(f"\n📁 Proje: {project_path}")
+        print(mgx_team.get_project_summary(project_path))
+    
+    result = await mgx_team.run_incremental(requirement, project_path, fix_bug, ask_confirmation)
+    print(result)
+
+
+if __name__ == "__main__":
+    cli_main()

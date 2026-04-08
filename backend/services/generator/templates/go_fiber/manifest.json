@@ -1,0 +1,37 @@
+{
+  "name": "Go + Fiber API",
+  "stack": "go_fiber",
+  "version": "1.0.0",
+  "description": "High-performance HTTP API with Go Fiber",
+  "files": {
+    "go.mod": "go_fiber/go.mod.template",
+    "cmd/main.go": "go_fiber/cmd/main.go.template",
+    "internal/handlers/health.go": "go_fiber/internal/handlers/health.go.template",
+    "Dockerfile": "go_fiber/Dockerfile.template",
+    ".env.example": "go_fiber/.env.example.template",
+    "README.md": "go_fiber/README.md.template"
+  },
+  "scripts": {
+    "dev": "go run cmd/main.go",
+    "build": "go build -o bin/app cmd/main.go",
+    "test": "go test ./...",
+    "start": "./bin/app",
+    "lint": "golangci-lint run",
+    "format": "gofmt -w ."
+  },
+  "env_vars": [
+    "PORT",
+    "APP_ENV",
+    "DATABASE_URL"
+  ],
+  "default_features": ["testing", "logging"],
+  "supported_features": [
+    "auth",
+    "database",
+    "logging",
+    "validation",
+    "testing",
+    "docker",
+    "api_docs"
+  ]
+}

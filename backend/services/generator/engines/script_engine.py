@@ -43,7 +43,31 @@ class ScriptEngine:
                 "start": "php artisan serve --host=0.0.0.0 --port=8000",
                 "lint": "php-cs-fixer fix --dry-run --diff",
                 "format": "php-cs-fixer fix"
-            }
+            },
+            "react_native": {
+                "dev": "npx react-native start",
+                "build": "npx react-native build-android",
+                "test": "npm test",
+                "start": "npx react-native run-android",
+                "lint": "eslint . --ext .ts,.tsx",
+                "format": "prettier --write \"src/**/*.{ts,tsx}\""
+            },
+            "flutter": {
+                "dev": "flutter run",
+                "build": "flutter build apk",
+                "test": "flutter test",
+                "start": "flutter run --release",
+                "lint": "dart analyze",
+                "format": "dart format lib test"
+            },
+            "go_fiber": {
+                "dev": "go run cmd/main.go",
+                "build": "go build -o bin/app cmd/main.go",
+                "test": "go test ./...",
+                "start": "./bin/app",
+                "lint": "golangci-lint run",
+                "format": "gofmt -w ."
+            },
         }
 
     async def generate_scripts(
@@ -65,7 +89,7 @@ class ScriptEngine:
         await self._generate_shell_scripts(scripts_dir, stack, custom_settings)
         
         # Generate package.json scripts (for Node.js stacks)
-        if stack in ["express_ts", "nextjs"]:
+        if stack in ["express_ts", "nextjs", "react_native"]:
             await self._generate_npm_scripts(project_path, stack, custom_settings)
         
         # Generate Makefile for common commands
@@ -185,12 +209,16 @@ format: ## Format code
 install: ## Install dependencies
 """
         
-        if stack in ["express_ts", "nextjs"]:
+        if stack in ["express_ts", "nextjs", "react_native"]:
             makefile_content += "\t@npm install\n"
         elif stack == "fastapi":
             makefile_content += "\t@pip install -r requirements.txt\n"
         elif stack == "laravel":
             makefile_content += "\t@composer install\n"
+        elif stack == "flutter":
+            makefile_content += "\t@flutter pub get\n"
+        elif stack == "go_fiber":
+            makefile_content += "\t@go mod download\n"
         else:
             makefile_content += "\t@echo 'Install command not defined for this stack'\n"
         
@@ -268,6 +296,29 @@ fi
 # Start development server
 echo "🔧 Starting Next.js development server on port {port}..."
 npm run dev
+"""
+        elif stack == "react_native":
+            return f"""#!/bin/bash
+# React Native — Metro bundler
+echo "🚀 Starting {project_name} (React Native)..."
+if [ ! -d "node_modules" ]; then
+    npm install
+fi
+npx react-native start
+"""
+        elif stack == "flutter":
+            return f"""#!/bin/bash
+# Flutter development
+echo "🚀 Starting {project_name} (Flutter)..."
+flutter pub get
+flutter run
+"""
+        elif stack == "go_fiber":
+            return f"""#!/bin/bash
+# Go Fiber API
+echo "🚀 Starting {project_name} on port {port}..."
+export PORT={port}
+go run cmd/main.go
 """
         elif stack == "laravel":
             return f"""#!/bin/bash
@@ -390,6 +441,24 @@ php artisan optimize
 
 echo "✅ Build completed successfully!"
 """
+        elif stack == "react_native":
+            return f"""#!/bin/bash
+echo "🔨 Building {project_name} (React Native Android)..."
+npx react-native build-android
+echo "✅ Build completed successfully!"
+"""
+        elif stack == "flutter":
+            return f"""#!/bin/bash
+echo "🔨 Building {project_name} (Flutter APK)..."
+flutter build apk
+echo "✅ Build completed successfully!"
+"""
+        elif stack == "go_fiber":
+            return f"""#!/bin/bash
+echo "🔨 Building {project_name} (Go)..."
+go build -o bin/app cmd/main.go
+echo "✅ Build completed successfully!"
+"""
         else:
             return f"""#!/bin/bash
 # Build script for {project_name}
@@ -448,6 +517,24 @@ echo "🧪 Running tests for {project_name}..."
 # Run PHPUnit tests
 phpunit
 
+echo "✅ Tests completed!"
+"""
+        elif stack == "react_native":
+            return f"""#!/bin/bash
+echo "🧪 Running tests for {project_name}..."
+npm test
+echo "✅ Tests completed!"
+"""
+        elif stack == "flutter":
+            return f"""#!/bin/bash
+echo "🧪 Running tests for {project_name}..."
+flutter test
+echo "✅ Tests completed!"
+"""
+        elif stack == "go_fiber":
+            return f"""#!/bin/bash
+echo "🧪 Running tests for {project_name}..."
+go test ./...
 echo "✅ Tests completed!"
 """
         else:

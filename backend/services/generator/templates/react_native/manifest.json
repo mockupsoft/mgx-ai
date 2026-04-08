@@ -1,0 +1,34 @@
+{
+  "name": "React Native (TypeScript)",
+  "stack": "react_native",
+  "version": "1.0.0",
+  "description": "Cross-platform mobile app with React Native",
+  "files": {
+    "package.json": "react_native/package.json.template",
+    "App.tsx": "react_native/App.tsx.template",
+    "src/screens/HomeScreen.tsx": "react_native/src/screens/HomeScreen.tsx.template",
+    "metro.config.js": "react_native/metro.config.js.template",
+    "Dockerfile": "react_native/Dockerfile.template",
+    "README.md": "react_native/README.md.template"
+  },
+  "scripts": {
+    "dev": "npx react-native start",
+    "build": "npx react-native build-android",
+    "test": "npm test",
+    "start": "npx react-native run-android",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\""
+  },
+  "env_vars": [
+    "NODE_ENV",
+    "API_BASE_URL"
+  ],
+  "default_features": ["testing"],
+  "supported_features": [
+    "auth",
+    "logging",
+    "testing",
+    "docker",
+    "api_docs"
+  ]
+}

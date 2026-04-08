@@ -12,8 +12,9 @@ LLM çağrıları yapan Action sınıfları:
 
 import os
 import re
+import uuid
 from datetime import datetime, timezone
-from typing import List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from metagpt.actions import Action
@@ -240,6 +241,7 @@ Dil: {language}
 {constraints_section}
 
 {review_section}
+{sandbox_failure_section}
 
 {strict_mode_instructions}
 
@@ -330,19 +332,43 @@ SEÇENEK 2 - Code Block (tek dosya için):
             if constraints:
                 constraints_section = f"\nKısıtlamalar:\n" + "\n".join(f"- {c}" for c in constraints)
             
-            # Review notları
-            review_section = ""
-            revision_instructions = ""
-            if review_notes and review_notes.strip():
-                review_section = f"""
+            max_sandbox_heal = int(
+                (os.getenv("SANDBOX_SELF_HEAL_MAX_ATTEMPTS") or "2").strip() or "2"
+            )
+            use_sandbox_self_heal = (
+                max_sandbox_heal > 0
+                and os.getenv("DISABLE_SANDBOX_TESTING", "").lower()
+                not in ("true", "1", "yes")
+            )
+
+            sandbox_failure_notes = ""
+            heal_remaining = max_sandbox_heal if use_sandbox_self_heal else 0
+
+            # Review notları + sandbox self-heal (dış döngü heal_remaining ile yenilenir)
+            def _build_review_sections(
+                notes: str, sandbox_fb: str
+            ) -> Tuple[str, str, str]:
+                review_section = ""
+                revision_instructions = ""
+                if notes and notes.strip():
+                    review_section = f"""
 Review Notları (İyileştirme Önerileri):
-{review_notes}
+{notes}
 """
-                revision_instructions = f"""
-ÖNEMLİ: Bu bir düzeltme turu. Yukarıdaki review notlarını dikkate alarak mevcut kodu GÜNCELLE / İYİLEŞTİR.
+                sandbox_failure_section = ""
+                if sandbox_fb and sandbox_fb.strip():
+                    sandbox_failure_section = f"""
+Sandbox testi (önceki deneme) başarısız — aşağıdaki çıktıya göre kodu ve testleri düzelt:
+{sandbox_fb}
+"""
+                combined_any = (notes or "").strip() or (sandbox_fb or "").strip()
+                if combined_any:
+                    revision_instructions = f"""
+ÖNEMLİ: Bu bir düzeltme turu. Yukarıdaki notları (review ve/veya sandbox çıktısı) dikkate alarak mevcut kodu GÜNCELLE / İYİLEŞTİR.
 Orijinal görevi unutma: {instruction}
 """
-            
+                return review_section, sandbox_failure_section, revision_instructions
+
             # Strict mode
             strict_mode_instructions = ""
             if strict_mode:
@@ -358,85 +384,152 @@ Orijinal görevi unutma: {instruction}
                     expected_structure=expected_structure
                 )
             
-            # Main generation loop with validation retry
-            validation_retry_count = 0
             final_output = None
             validation_result = None
-            
-            while validation_retry_count <= max_validation_retries:
-                prompt = self.PROMPT_TEMPLATE.format(
-                    instruction=instruction,
-                    plan=plan,
-                    stack_name=stack_name,
-                    language=language,
-                    constraints_section=constraints_section,
-                    review_section=review_section,
-                    strict_mode_instructions=strict_mode_instructions,
-                    file_format_instructions=file_format_instructions,
-                    revision_instructions=revision_instructions
-                )
-                rsp = await aask_with_observability(self, prompt)
-                
-                # Parse output based on mode
-                if strict_mode:
-                    output = rsp  # FILE manifest formatında
-                else:
-                    output = self._parse_code(rsp, language)
-                
-                # Run validation if enabled
-                if enable_validation:
-                    validation_result = validate_output_constraints(
-                        generated_output=output,
-                        stack_spec=spec,
-                        constraints=constraints,
-                        strict_mode=strict_mode
+
+            while True:
+                (
+                    review_section,
+                    sandbox_failure_section,
+                    revision_instructions,
+                ) = _build_review_sections(review_notes, sandbox_failure_notes)
+
+                # Main generation loop with validation retry
+                validation_retry_count = 0
+                validation_result = None
+
+                while validation_retry_count <= max_validation_retries:
+                    prompt = self.PROMPT_TEMPLATE.format(
+                        instruction=instruction,
+                        plan=plan,
+                        stack_name=stack_name,
+                        language=language,
+                        constraints_section=constraints_section,
+                        review_section=review_section,
+                        sandbox_failure_section=sandbox_failure_section,
+                        strict_mode_instructions=strict_mode_instructions,
+                        file_format_instructions=file_format_instructions,
+                        revision_instructions=revision_instructions,
                     )
-                    
-                    if validation_result.is_valid:
-                        logger.info(f"✅ Output validation passed: {validation_result.summary()}")
-                        final_output = output
-                        break
+                    rsp = await aask_with_observability(self, prompt)
+
+                    # Parse output based on mode
+                    if strict_mode:
+                        output = rsp  # FILE manifest formatında
                     else:
-                        # Validation failed
-                        logger.warning(f"❌ Output validation failed (attempt {validation_retry_count + 1}/{max_validation_retries + 1})")
-                        logger.warning(f"Errors: {len(validation_result.errors)}, Warnings: {len(validation_result.warnings)}")
-                        
-                        for i, error in enumerate(validation_result.errors[:5], 1):
-                            logger.warning(f"  {i}. {error}")
-                        
-                        if validation_retry_count < max_validation_retries:
-                            # Build revision prompt with validation errors
-                            revision_prompt = build_revision_prompt(validation_result, instruction)
-                            review_notes = revision_prompt
-                            validation_retry_count += 1
-                            logger.info(f"🔄 Retrying with validation error feedback...")
-                        else:
-                            # Max retries reached
-                            logger.error(f"❌ Validation failed after {max_validation_retries + 1} attempts")
-                            logger.error("Returning output with validation errors (marked as NEEDS_INFO)")
+                        output = self._parse_code(rsp, language)
+
+                    # Run validation if enabled
+                    if enable_validation:
+                        validation_result = validate_output_constraints(
+                            generated_output=output,
+                            stack_spec=spec,
+                            constraints=constraints,
+                            strict_mode=strict_mode,
+                        )
+
+                        if validation_result.is_valid:
+                            logger.info(
+                                f"✅ Output validation passed: {validation_result.summary()}"
+                            )
                             final_output = output
                             break
-                else:
-                    # Validation disabled
-                    final_output = output
-                    break
-            
-            # Log final validation status
-            if enable_validation and validation_result and not validation_result.is_valid:
-                error_summary = "\n".join(f"  - {e}" for e in validation_result.errors)
-                logger.error(
-                    f"⚠️ WriteCode returning output with validation errors:\n{error_summary}\n"
-                    f"Task may require manual intervention (NEEDS_INFO)"
+                        else:
+                            logger.warning(
+                                f"❌ Output validation failed (attempt {validation_retry_count + 1}/{max_validation_retries + 1})"
+                            )
+                            logger.warning(
+                                f"Errors: {len(validation_result.errors)}, Warnings: {len(validation_result.warnings)}"
+                            )
+
+                            for i, error in enumerate(validation_result.errors[:5], 1):
+                                logger.warning(f"  {i}. {error}")
+
+                            if validation_retry_count < max_validation_retries:
+                                revision_prompt = build_revision_prompt(
+                                    validation_result, instruction
+                                )
+                                review_notes = revision_prompt
+                                (
+                                    review_section,
+                                    sandbox_failure_section,
+                                    revision_instructions,
+                                ) = _build_review_sections(
+                                    review_notes, sandbox_failure_notes
+                                )
+                                validation_retry_count += 1
+                                logger.info(
+                                    "🔄 Retrying with validation error feedback..."
+                                )
+                            else:
+                                logger.error(
+                                    f"❌ Validation failed after {max_validation_retries + 1} attempts"
+                                )
+                                logger.error(
+                                    "Returning output with validation errors (marked as NEEDS_INFO)"
+                                )
+                                final_output = output
+                                break
+                    else:
+                        final_output = output
+                        break
+
+                # Log final validation status
+                if (
+                    enable_validation
+                    and validation_result
+                    and not validation_result.is_valid
+                ):
+                    error_summary = "\n".join(
+                        f"  - {e}" for e in validation_result.errors
+                    )
+                    logger.error(
+                        f"⚠️ WriteCode output validation errors:\n{error_summary}\n"
+                        f"Task may require manual intervention (NEEDS_INFO)"
+                    )
+
+                if final_output and "FILE:" in final_output:
+                    final_output = self._format_output(
+                        final_output, target_stack, language
+                    )
+
+                if not use_sandbox_self_heal:
+                    await self._execute_sandbox_testing(
+                        final_output, target_stack, language
+                    )
+                    return final_output
+
+                ok, detail = await run_sandbox_project_result(
+                    final_output, target_stack
                 )
-            
-            # Auto-format output if in FILE manifest mode
-            if final_output and "FILE:" in final_output:
-                final_output = self._format_output(final_output, target_stack, language)
-            
-            # Phase 11: Sandbox execution integration
-            await self._execute_sandbox_testing(final_output, target_stack, language)
-            
-            return final_output
+                if ok:
+                    if detail.get("skipped"):
+                        logger.debug(
+                            "execute_project atlandı (manifest/import); legacy sandbox"
+                        )
+                        await self._execute_sandbox_testing(
+                            final_output, target_stack, language
+                        )
+                    else:
+                        logger.info(
+                            "✅ Sandbox (execute_project) + kalite kapıları geçti"
+                        )
+                    return final_output
+
+                logger.warning(
+                    "⚠️ Sandbox veya kalite kapıları başarısız (self-heal denemesi)"
+                )
+                if heal_remaining <= 0:
+                    logger.warning(
+                        "⚠️ SANDBOX_SELF_HEAL_MAX_ATTEMPTS tükendi; son çıktı dönülüyor"
+                    )
+                    return final_output
+
+                heal_remaining -= 1
+                sandbox_failure_notes = build_sandbox_self_heal_feedback(detail)
+                logger.info(
+                    f"🔄 Sandbox self-heal: kalan deneme hakkı ≈ {heal_remaining}"
+                )
         except Exception as e:
             logger.error(f"❌ WriteCode hatası: {e}")
             raise
@@ -852,7 +945,14 @@ Orijinal görevi unutma: {instruction}
             content = '\n'.join(current_content).rstrip()
             files.append((current_file, content))
         
-        return files
+        # Strip markdown code fences from each file content
+        cleaned = []
+        for path, content in files:
+            # Remove opening ```lang or ``` at start, closing ``` at end
+            stripped = re.sub(r'^```[a-zA-Z]*\s*', '', content.lstrip(), count=1)
+            stripped = re.sub(r'\n?```\s*$', '', stripped.rstrip())
+            cleaned.append((path, stripped.strip()))
+        return cleaned
     
     @staticmethod
     def _parse_code(rsp: str, language: str = "python") -> str:
@@ -1089,6 +1189,303 @@ class MyTest extends TestCase
             raise
 
 
+class RunSandboxTests(Action):
+    """
+    Üretilen FILE manifestindeki tüm dosyaları sandbox'ta (DinD + execute_project)
+    çalıştırır; Charlie'nin ReviewCode prompt'una eklenecek Markdown özet döndürür.
+    """
+
+    name: str = "RunSandboxTests"
+
+    def _stack_to_project_language(self, target_stack: str) -> str:
+        """PROJECT_BASE_IMAGES / SandboxRunner dil anahtarı."""
+        ts = (target_stack or "").lower().strip()
+        if not ts:
+            return "python"
+        if any(
+            x in ts
+            for x in (
+                "go-fiber",
+                "go_fiber",
+                "golang",
+            )
+        ) or ("go" in ts and "fiber" in ts):
+            return "go"
+        if "flutter" in ts or ts in ("dart",):
+            return "dart"
+        if any(
+            x in ts
+            for x in (
+                "react-native",
+                "react_native",
+                "nextjs",
+                "nestjs",
+                "express",
+                "react-vite",
+                "vue-vite",
+                "vanilla-html",
+            )
+        ):
+            return "javascript"
+        if "laravel" in ts or "php" in ts:
+            return "php"
+        if "fastapi" in ts or "django" in ts or "python" in ts:
+            return "python"
+        return "python"
+
+    def _pick_test_command(
+        self,
+        target_stack: str,
+        files: List[Tuple[str, str]],
+        project_lang: str,
+    ) -> str:
+        ts = (target_stack or "").lower()
+        if project_lang == "go":
+            return "go test ./..."
+        if project_lang == "dart":
+            return "flutter test"
+
+        wc_lang = project_lang
+        if project_lang == "node":
+            wc_lang = "javascript"
+
+        wc = WriteCode()
+        cmd = wc._determine_test_command(files, wc_lang, target_stack or "")
+        if cmd:
+            return cmd
+
+        if project_lang == "javascript" or "react" in ts or "next" in ts:
+            return "npm test -- --passWithNoTests 2>/dev/null || npm test || node --check $(ls *.js 2>/dev/null | head -1)"
+        if project_lang == "php":
+            return "php -l index.php 2>/dev/null || true"
+        return "python -m pytest 2>/dev/null || python -m py_compile main.py 2>/dev/null || python -m compileall -q ."
+
+    def _format_report(self, result: dict) -> str:
+        ok = bool(result.get("success")) or result.get("exit_code") == 0
+        dur = result.get("duration_ms", 0)
+        exit_c = result.get("exit_code", "?")
+        status_tr = "Başarılı" if ok else "Başarısız"
+        emoji = "✅" if ok else "❌"
+        stdout = (result.get("stdout") or "").strip()
+        stderr = (result.get("stderr") or "").strip()
+        err_msg = (result.get("error_message") or "").strip()
+
+        def _trunc(s: str, n: int = 6000) -> str:
+            if len(s) <= n:
+                return s
+            return s[:n] + f"\n... ({len(s) - n} karakter daha kesildi)"
+
+        lines = [
+            "## Sandbox Test Sonuçları (gerçek çalıştırma)",
+            f"- **Durum:** {emoji} {status_tr} (exit_code={exit_c}, süre≈{dur}ms)",
+        ]
+        if err_msg and not ok:
+            lines.append(f"- **Hata:** {_trunc(err_msg, 500)}")
+        if stdout:
+            lines.append(f"- **Stdout:**\n```\n{_trunc(stdout)}\n```")
+        if stderr:
+            lines.append(f"- **Stderr:**\n```\n{_trunc(stderr)}\n```")
+        if not stdout and not stderr and ok:
+            lines.append("- **Çıktı:** (boş veya sadece log)")
+        return "\n".join(lines)
+
+    async def run(self, code: str, target_stack: str = None) -> str:
+        if _env_flag("DISABLE_SANDBOX_TESTING"):
+            return (
+                "## Sandbox Test Sonuçları\n"
+                "- **Durum:** Devre dışı (`DISABLE_SANDBOX_TESTING`)\n"
+            )
+
+        files = WriteCode._parse_file_manifest(code)
+        if not files:
+            return (
+                "## Sandbox Test Sonuçları\n"
+                "- **Durum:** Dosya manifesti yok; sandbox çalıştırılmadı.\n"
+            )
+
+        pl_lang = self._stack_to_project_language(target_stack or "")
+        test_cmd = self._pick_test_command(target_stack or "", files, pl_lang)
+
+        try:
+            from backend.services.sandbox import get_sandbox_runner
+
+            runner = get_sandbox_runner()
+        except ImportError:
+            return (
+                "## Sandbox Test Sonuçları\n"
+                "- **Durum:** `backend.services.sandbox` yüklenemedi (import hatası).\n"
+            )
+        except Exception as e:
+            return (
+                "## Sandbox Test Sonuçları\n"
+                f"- **Durum:** SandboxRunner başlatılamadı: `{e}`\n"
+            )
+
+        files_dict = {fp: content for fp, content in files}
+        execution_id = str(uuid.uuid4())
+
+        try:
+            result = await runner.execute_project(
+                execution_id=execution_id,
+                files=files_dict,
+                test_command=test_cmd,
+                language=pl_lang,
+                timeout=120.0,
+                memory_limit_mb=1024,
+                workspace_id="mgx-charlie-sandbox",
+                project_id=execution_id,
+            )
+        except Exception as e:
+            return (
+                "## Sandbox Test Sonuçları\n"
+                f"- **Durum:** Çalıştırma hatası: `{e}`\n"
+            )
+
+        return self._format_report(result)
+
+    async def run_detailed(
+        self,
+        code: str,
+        target_stack: Optional[str] = None,
+        *,
+        workspace_id: str = "mgx-writecode-sandbox",
+        run_quality_gates: bool = True,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        execute_project + isteğe bağlı quality gates; (genel başarı, detay dict) döner.
+        Charlie Markdown'ı için `run`; Alex self-heal için `run_detailed`.
+        """
+        detail: Dict[str, Any] = {
+            "skipped": False,
+            "reason": None,
+            "sandbox_result": None,
+            "quality_gates_passed": None,
+            "quality_gate_raw": None,
+        }
+
+        if _env_flag("DISABLE_SANDBOX_TESTING"):
+            detail["skipped"] = True
+            detail["reason"] = "DISABLE_SANDBOX_TESTING"
+            return True, detail
+
+        files = WriteCode._parse_file_manifest(code)
+        if not files:
+            detail["skipped"] = True
+            detail["reason"] = "no_file_manifest"
+            return True, detail
+
+        pl_lang = self._stack_to_project_language(target_stack or "")
+        test_cmd = self._pick_test_command(target_stack or "", files, pl_lang)
+
+        try:
+            from backend.services.sandbox import get_sandbox_runner
+
+            runner = get_sandbox_runner()
+        except ImportError:
+            detail["skipped"] = True
+            detail["reason"] = "sandbox_import"
+            return True, detail
+        except Exception as e:
+            detail["sandbox_result"] = {"error_message": str(e)}
+            return False, detail
+
+        files_dict = {fp: content for fp, content in files}
+        execution_id = str(uuid.uuid4())
+
+        try:
+            result = await runner.execute_project(
+                execution_id=execution_id,
+                files=files_dict,
+                test_command=test_cmd,
+                language=pl_lang,
+                timeout=120.0,
+                memory_limit_mb=1024,
+                workspace_id=workspace_id,
+                project_id=execution_id,
+            )
+        except Exception as e:
+            detail["sandbox_result"] = {
+                "success": False,
+                "stderr": str(e),
+                "exit_code": 1,
+            }
+            return False, detail
+
+        detail["sandbox_result"] = result
+        sandbox_ok = bool(result.get("success")) or result.get("exit_code") == 0
+
+        if not sandbox_ok:
+            return False, detail
+
+        if not run_quality_gates:
+            detail["quality_gates_passed"] = None
+            return True, detail
+
+        wc = WriteCode()
+        qg_ok = await wc._run_quality_gates_after_sandbox(
+            files=files,
+            workspace_id=workspace_id,
+            project_id=execution_id,
+            task_run_id=None,
+        )
+        detail["quality_gates_passed"] = qg_ok
+        if not qg_ok:
+            detail["quality_gate_raw"] = {
+                "message": "Quality gates reported blocking failures or evaluation error",
+            }
+            return False, detail
+
+        return True, detail
+
+
+def build_sandbox_self_heal_feedback(detail: Dict[str, Any], max_chars: int = 8000) -> str:
+    """LLM geri bildirimi: sandbox + (varsa) kalite kapısı özeti."""
+    if detail.get("skipped"):
+        return ""
+
+    parts: List[str] = []
+    sr = detail.get("sandbox_result") or {}
+    if sr:
+        exit_c = sr.get("exit_code", "?")
+        parts.append(f"exit_code={exit_c}")
+        if sr.get("error_message"):
+            parts.append(f"hata: {sr.get('error_message')}")
+        out = (sr.get("stdout") or "").strip()
+        err = (sr.get("stderr") or "").strip()
+        if out:
+            parts.append("stdout:\n" + out[: max_chars // 2])
+        if err:
+            parts.append("stderr:\n" + err[: max_chars // 2])
+
+    if detail.get("quality_gates_passed") is False:
+        parts.append(
+            "Kalite kapıları başarısız: "
+            + str(detail.get("quality_gate_raw") or "blocking failures")
+        )
+
+    text = "\n\n".join(parts)
+    if len(text) > max_chars:
+        return text[:max_chars] + f"\n... ({len(text) - max_chars} karakter kesildi)"
+    return text
+
+
+async def run_sandbox_project_result(
+    code: str,
+    target_stack: Optional[str],
+    *,
+    workspace_id: str = "mgx-writecode-sandbox",
+    run_quality_gates: bool = True,
+) -> Tuple[bool, Dict[str, Any]]:
+    """Charlie ile aynı execute_project yolu; Alex self-heal döngüsü için."""
+    rs = RunSandboxTests()
+    return await rs.run_detailed(
+        code,
+        target_stack,
+        workspace_id=workspace_id,
+        run_quality_gates=run_quality_gates,
+    )
+
+
 class ReviewCode(Action):
     """Kodu incele ve geri bildirim ver (stack-aware)"""
     
@@ -1098,11 +1495,11 @@ class ReviewCode(Action):
     
     Testler:
     {tests}
-    
+    {sandbox_section}
     Stack: {stack_name}
     {stack_specific_checks}
     
-    Bu kodu ve testleri DİKKATLİCE incele:
+    Bu kodu ve testleri DİKKATLİCE incele (varsa Sandbox bölümü gerçek konteyner çalıştırmasıdır):
     1. Kod kalitesi nasıl? Hata yönetimi var mı? Input validation var mı?
     2. Test coverage yeterli mi? Edge case'ler test edilmiş mi?
     3. Docstring'ler/Comment'ler var mı? Kod dokümantasyonu yeterli mi?
@@ -1180,7 +1577,13 @@ Kontrol listesi (Vue-Vite):
         return checks.get(stack_id, "")
     
     @llm_retry()
-    async def run(self, code: str, tests: str, target_stack: str = None) -> str:
+    async def run(
+        self,
+        code: str,
+        tests: str,
+        target_stack: str = None,
+        sandbox_report: str = None,
+    ) -> str:
         try:
             # Stack bilgisi
             from .stack_specs import get_stack_spec
@@ -1196,10 +1599,15 @@ Kontrol listesi (Vue-Vite):
             else:
                 stack_name = "Python"
                 stack_specific_checks = ""
+
+            sandbox_section = ""
+            if sandbox_report and str(sandbox_report).strip():
+                sandbox_section = "\n\n" + str(sandbox_report).strip()
             
             prompt = self.PROMPT_TEMPLATE.format(
                 code=code,
                 tests=tests,
+                sandbox_section=sandbox_section,
                 stack_name=stack_name,
                 stack_specific_checks=stack_specific_checks
             )

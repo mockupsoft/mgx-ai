@@ -1,0 +1,31 @@
+{
+  "name": "Flutter (Dart)",
+  "stack": "flutter",
+  "version": "1.0.0",
+  "description": "Cross-platform mobile and desktop apps with Flutter",
+  "files": {
+    "pubspec.yaml": "flutter/pubspec.yaml.template",
+    "lib/main.dart": "flutter/lib/main.dart.template",
+    "lib/screens/home_screen.dart": "flutter/lib/screens/home_screen.dart.template",
+    "README.md": "flutter/README.md.template"
+  },
+  "scripts": {
+    "dev": "flutter run",
+    "build": "flutter build apk",
+    "test": "flutter test",
+    "start": "flutter run --release",
+    "lint": "dart analyze",
+    "format": "dart format lib test"
+  },
+  "env_vars": [
+    "API_BASE_URL"
+  ],
+  "default_features": ["testing"],
+  "supported_features": [
+    "auth",
+    "database",
+    "logging",
+    "testing",
+    "docker"
+  ]
+}

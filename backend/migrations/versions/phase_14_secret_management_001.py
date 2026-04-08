@@ -2,7 +2,7 @@
 """Migration script for Secret Management and Encryption System
 
 Revision ID: phase_14_secret_management_001
-Revises: 
+Revises: performance_optimization_001
 Create Date: 2024-12-17 14:30:00
 
 """
@@ -12,6 +12,12 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import func
 from enum import Enum
+
+# revision identifiers, used by Alembic.
+revision = 'phase_14_secret_management_001'
+down_revision = 'performance_optimization_001'
+branch_labels = None
+depends_on = None
 
 # Create ENUM types for secret management
 secret_type_enum = postgresql.ENUM(
@@ -40,11 +46,11 @@ secret_audit_action_enum = postgresql.ENUM(
 def upgrade():
     """Create secret management tables."""
     
-    # Create ENUM types
-    secret_type_enum.create(op.get_bind())
-    secret_rotation_policy_enum.create(op.get_bind())
-    secret_backend_enum.create(op.get_bind())
-    secret_audit_action_enum.create(op.get_bind())
+    # Create ENUM types (checkfirst to avoid errors if already exists)
+    secret_type_enum.create(op.get_bind(), checkfirst=True)
+    secret_rotation_policy_enum.create(op.get_bind(), checkfirst=True)
+    secret_backend_enum.create(op.get_bind(), checkfirst=True)
+    secret_audit_action_enum.create(op.get_bind(), checkfirst=True)
     
     # Create secrets table
     op.create_table(

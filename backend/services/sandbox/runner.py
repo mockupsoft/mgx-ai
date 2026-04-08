@@ -9,6 +9,8 @@ and multi-language support for safe code execution.
 import asyncio
 import json
 import logging
+import os
+import shlex
 import time
 import uuid
 from pathlib import Path
@@ -87,12 +89,23 @@ class SandboxRunner:
     DEFAULT_CPU_LIMIT = "1.0"
     DEFAULT_TIMEOUT = 30.0
     
-    # Supported base images
+    # Supported base images (single-file execute_code)
     BASE_IMAGES = {
         "javascript": "mgx-sandbox-node:latest",
-        "python": "mgx-sandbox-python:latest", 
+        "python": "mgx-sandbox-python:latest",
         "php": "mgx-sandbox-php:latest",
         "docker": "mgx-sandbox-node:latest",  # For Docker-in-Docker scenarios
+    }
+
+    # Public images for multi-file project tests (pullable inside DinD without custom build)
+    PROJECT_BASE_IMAGES = {
+        "javascript": "node:20-alpine",
+        "node": "node:20-alpine",
+        "python": "python:3.11-slim-bookworm",
+        "php": "php:8.2-cli-alpine",
+        "go": "golang:1.22-alpine",
+        "dart": "ghcr.io/cirruslabs/flutter:stable",
+        "docker": "node:20-alpine",
     }
     
     def __init__(self, docker_client: Optional["docker.DockerClient"] = None):
@@ -113,7 +126,11 @@ class SandboxRunner:
                 raise SandboxRunnerError(
                     "Docker SDK for Python is not installed. Install 'docker' or provide a docker_client."
                 )
-            docker_client = docker.from_env()
+            docker_host = os.getenv("DOCKER_HOST", "").strip()
+            if docker_host:
+                docker_client = docker.DockerClient(base_url=docker_host)
+            else:
+                docker_client = docker.from_env()
 
         self.docker_client = docker_client
         self.executor_factory = ExecutorFactory()
@@ -256,7 +273,211 @@ class SandboxRunner:
                     shutil.rmtree(workdir, ignore_errors=True)
             except Exception as e:
                 logger.warning(f"Failed to cleanup workdir {workdir}: {e}")
-    
+
+    def _normalize_project_language(self, language: str) -> str:
+        key = (language or "python").lower().strip()
+        aliases = {
+            "js": "javascript",
+            "ts": "javascript",
+            "typescript": "javascript",
+            "py": "python",
+        }
+        return aliases.get(key, key)
+
+    async def _maybe_pull_image(self, image: str) -> None:
+        """Pull base image when SANDBOX_IMAGES_PULL_ON_DEMAND is enabled."""
+        if os.getenv("SANDBOX_IMAGES_PULL_ON_DEMAND", "true").lower() not in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            return
+        try:
+            await asyncio.to_thread(self.docker_client.images.pull, image)
+            logger.info(f"Pulled sandbox image: {image}")
+        except Exception as e:
+            logger.warning(f"Image pull skipped or failed for {image}: {e}")
+
+    def _build_project_container_config(
+        self,
+        base_image: str,
+        workdir: str,
+        test_command: str,
+        timeout: float,
+        memory_limit_mb: int,
+        workspace_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Container config for full-project runs: network bridge, writable root,
+        root user (install deps in /workspace). Isolation is DinD + disposable container.
+        """
+        mem_limit = f"{memory_limit_mb}m"
+        cpu_limit = int(timeout * 1000)
+
+        volumes = {
+            workdir: {
+                "bind": "/workspace",
+                "mode": "rw",
+            }
+        }
+
+        env = {
+            "SANDBOX_EXECUTION_ID": str(uuid.uuid4()),
+            "SANDBOX_TIMEOUT": str(int(timeout)),
+            "SANDBOX_MEMORY_LIMIT": str(memory_limit_mb),
+            "SANDBOX_WORKSPACE_ID": workspace_id or "",
+            "SANDBOX_PROJECT_ID": project_id or "",
+        }
+
+        inner_cmd = f"cd /workspace && {test_command}"
+        wrapped_command = f"timeout {int(timeout)}s sh -c {shlex.quote(inner_cmd)}"
+
+        return {
+            "image": base_image,
+            "command": wrapped_command,
+            "working_dir": "/workspace",
+            "environment": env,
+            "volumes": volumes,
+            "mem_limit": mem_limit,
+            "mem_reservation": f"{memory_limit_mb // 2}m",
+            "cpu_period": 100000,
+            "cpu_quota": cpu_limit,
+            "cpu_shares": 512,
+            "network_mode": "bridge",
+            "security_opt": self.DEFAULT_SECURITY_OPTS.copy(),
+            "read_only": False,
+            "tmpfs": {
+                "/tmp": "rw,nosuid,size=200m",
+            },
+            "cap_drop": ["ALL"],
+            "cap_add": ["NET_BIND_SERVICE"],
+            "ulimits": [
+                {"name": "nofile", "soft": 4096, "hard": 8192},
+                {"name": "nproc", "soft": 256, "hard": 512},
+            ],
+            "detach": False,
+            "remove": True,
+        }
+
+    async def execute_project(
+        self,
+        execution_id: str,
+        files: Dict[str, str],
+        test_command: str,
+        language: str,
+        timeout: float = 120.0,
+        memory_limit_mb: int = 1024,
+        workspace_id: Optional[str] = None,
+        project_id: Optional[str] = None,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """
+        Write all project files under a temp dir and run ``test_command`` in a disposable
+        container (Docker daemon: host or DinD via DOCKER_HOST).
+        """
+        lang = self._normalize_project_language(language)
+        if lang not in self.PROJECT_BASE_IMAGES:
+            raise SandboxRunnerError(
+                f"Unsupported project language: {language}. "
+                f"Supported: {', '.join(sorted(self.PROJECT_BASE_IMAGES.keys()))}"
+            )
+
+        base_image = self.PROJECT_BASE_IMAGES[lang]
+        start_time = time.time()
+        workdir = Path(f"/tmp/sandbox_project_{execution_id}")
+
+        try:
+            if not files:
+                raise SandboxRunnerError("execute_project: files dict is empty")
+
+            workdir.mkdir(parents=True, exist_ok=True)
+            for rel_path, content in files.items():
+                p = Path(rel_path)
+                if ".." in p.parts:
+                    logger.warning("Skipping unsafe sandbox path: %s", rel_path)
+                    continue
+                safe_rel = str(p).lstrip("/")
+                dest = workdir / safe_rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content if content is not None else "", encoding="utf-8")
+
+            await self._maybe_pull_image(base_image)
+
+            executor = self.executor_factory.get_executor("python")
+
+            container_config = self._build_project_container_config(
+                base_image=base_image,
+                workdir=str(workdir),
+                test_command=test_command,
+                timeout=timeout,
+                memory_limit_mb=memory_limit_mb,
+                workspace_id=workspace_id,
+                project_id=project_id,
+            )
+
+            result = await self._execute_in_container(
+                execution_id=execution_id,
+                container_config=container_config,
+                executor=executor,
+                timeout=timeout,
+            )
+
+            duration_ms = int((time.time() - start_time) * 1000)
+            result["duration_ms"] = duration_ms
+            result["success"] = result.get("exit_code") == 0
+
+            await self._store_execution_record(
+                execution_id=execution_id,
+                result=result,
+                workspace_id=workspace_id,
+                project_id=project_id,
+                language=lang,
+            )
+
+            logger.info(
+                f"execute_project {execution_id} completed in {duration_ms}ms "
+                f"(exit={result.get('exit_code')})"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"execute_project {execution_id} failed: {e}")
+            duration_ms = int((time.time() - start_time) * 1000)
+            result = {
+                "success": False,
+                "stdout": "",
+                "stderr": f"execute_project failed: {str(e)}",
+                "exit_code": 1,
+                "duration_ms": duration_ms,
+                "resource_usage": {
+                    "max_memory_mb": 0,
+                    "cpu_percent": 0,
+                    "network_io": 0,
+                    "disk_io": 0,
+                },
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            }
+            await self._store_execution_record(
+                execution_id=execution_id,
+                result=result,
+                workspace_id=workspace_id,
+                project_id=project_id,
+                language=lang,
+            )
+            return result
+
+        finally:
+            try:
+                if workdir.exists():
+                    import shutil
+
+                    shutil.rmtree(workdir, ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup project workdir {workdir}: {e}")
+
     def _build_container_config(
         self,
         base_image: str,

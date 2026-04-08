@@ -19,7 +19,7 @@ GitHub-related environment variables:
 
 from typing import Optional
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_validator, AliasChoices
 from pydantic_settings import BaseSettings
 
 
@@ -97,7 +97,10 @@ class Settings(BaseSettings):
 
     # Performance Optimization Settings
     enable_prompt_optimization: bool = Field(default=True, description="Enable prompt optimization and compression")
-    enable_semantic_caching: bool = Field(default=False, description="Enable semantic caching (requires embeddings)")
+    enable_semantic_caching: bool = Field(
+        default=True,
+        description="Semantic response cache (hafif vekil embedding; MGX_ENABLE_SEMANTIC_CACHE=0 ile kapat)",
+    )
     semantic_cache_similarity_threshold: float = Field(default=0.85, ge=0.0, le=1.0, description="Semantic cache similarity threshold")
     enable_early_termination: bool = Field(default=True, description="Enable early termination when task is completed")
     enable_performance_profiling: bool = Field(default=False, description="Enable performance profiling")
@@ -124,6 +127,20 @@ class Settings(BaseSettings):
     )
     debug: bool = Field(default=False, description="Debug mode")
     log_level: str = Field(default="INFO", description="Logging level")
+    
+    # Authentication Settings
+    jwt_secret_key: str = Field(
+        default="change-me-in-production-please-use-strong-secret-key",
+        description="JWT secret key for authentication tokens (use strong random key in production)",
+        validation_alias=AliasChoices("jwt_secret_key", "JWT_SECRET", "JWT_SECRET_KEY"),
+    )
+    deepsite_skip_auth: bool = Field(
+        default=True,
+        description=(
+            "If true, DeepSite API uses a shared anonymous DB user without JWT. "
+            "Forced off when MGX_ENV=production."
+        ),
+    )
 
     # Feature Flags
     feature_flags_config_path: str = Field(
@@ -226,7 +243,7 @@ class Settings(BaseSettings):
     # LLM Provider Settings
     llm_default_provider: str = Field(
         default="openai",
-        description="Default LLM provider: openai | anthropic | mistral | ollama | together | openrouter"
+        description="Default LLM provider: openai | anthropic | mistral | ollama | together | gemini | openrouter"
     )
     llm_routing_strategy: str = Field(
         default="balanced",
@@ -253,21 +270,19 @@ class Settings(BaseSettings):
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
     mistral_api_key: Optional[str] = Field(default=None, description="Mistral AI API key")
     together_api_key: Optional[str] = Field(default=None, description="Together AI API key")
-    ollama_base_url: str = Field(
-        default="http://localhost:11434",
-        description="Ollama server base URL"
+    google_api_key: Optional[str] = Field(default=None, description="Google Gemini API key")
+    gemini_model: str = Field(
+        default="gemini-2.0-flash",
+        description="Gemini model name (e.g., gemini-2.0-flash, gemini-pro)"
     )
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         description="OpenRouter API base URL"
     )
-    
-    # Google Gemini Settings
-    google_api_key: Optional[str] = Field(default=None, description="Google AI Studio API key for Gemini")
-    gemini_model: str = Field(
-        default="gemini-2.0-flash",
-        description="Gemini model to use"
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        description="Ollama server base URL"
     )
     
     # Knowledge Base & Vector Database Settings
@@ -327,6 +342,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
+        if self.mgx_env.lower() == "production":
+            object.__setattr__(self, "deepsite_skip_auth", False)
+
         if self.mgx_env.lower() != "production":
             return self
 

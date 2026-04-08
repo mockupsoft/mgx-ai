@@ -76,7 +76,7 @@ async def create_workspace(
         workspace_id=workspace.id,
         name=DEFAULT_PROJECT_NAME,
         slug=DEFAULT_PROJECT_SLUG,
-        project_metadata={},
+        meta_data={},
     )
     session.add(default_project)
     await session.flush()

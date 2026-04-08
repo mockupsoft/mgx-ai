@@ -30,6 +30,7 @@ from .providers import (
     OllamaProvider,
     TogetherAIProvider,
     OpenRouterProvider,
+    GeminiProvider,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,15 @@ class LLMService:
                 base_url=settings.openrouter_base_url,
             )
             logger.info("OpenRouter provider initialized")
-        
+
+        # Google Gemini
+        if settings.google_api_key:
+            providers["gemini"] = GeminiProvider(
+                api_key=settings.google_api_key,
+                default_model=settings.gemini_model or "gemini-2.0-flash",
+            )
+            logger.info("Gemini provider initialized")
+
         # Ollama (local) - Always initialize as fallback option
         # Even if llm_prefer_local is False, Ollama should be available as a fallback
         try:

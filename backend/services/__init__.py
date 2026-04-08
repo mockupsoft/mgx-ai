@@ -45,6 +45,14 @@ from .pipeline import (
     ArtifactBuildResult,
     PublishTargets,
 )
+from .mgx_pipeline import (
+    PipelineRecord,
+    PipelineRegistry,
+    PipelineStep,
+    build_pipeline_runner,
+    get_pipeline_registry,
+    run_sequential,
+)
 
 __all__ = [
     'MGXTeamProvider', 
@@ -80,4 +88,10 @@ __all__ = [
     'ArtifactBuildConfig',
     'ArtifactBuildResult',
     'PublishTargets',
+    'PipelineStep',
+    'PipelineRecord',
+    'PipelineRegistry',
+    'get_pipeline_registry',
+    'run_sequential',
+    'build_pipeline_runner',
 ]

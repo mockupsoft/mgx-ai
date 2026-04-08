@@ -10,8 +10,12 @@ Initializes FastAPI application with:
 """
 
 import logging
+import warnings
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+
+# MetaGPT / google-generativeai içindeki FutureWarning (deprecated SDK) gürültüsünü azalt
+warnings.filterwarnings("ignore", category=FutureWarning, module="metagpt")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +63,10 @@ from backend.routers import (
     activity_router,
     branches_router,
     diffs_router,
+    auth_router,
+    deepsite_router,
+    mgx_router,
+    parallel_router,
 )
 from backend.routers.performance import router as performance_router
 
@@ -131,6 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     app.state.langsmith_logger = get_langsmith_logger(obs_config)
 
     # Initialize team provider (lazy import to avoid Pydantic validation errors)
+    team_provider = None
     try:
         from backend.services import MGXTeamProvider
         team_provider = MGXTeamProvider(config=None)  # Uses default config
@@ -239,11 +248,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
         logger.error(f"Error stopping task runner: {str(e)}")
     
     # Shutdown team provider
-    try:
-        await team_provider.shutdown()
-        logger.info("✓ MGXTeamProvider shutdown")
-    except Exception as e:
-        logger.error(f"Error shutting down team provider: {str(e)}")
+    if team_provider is not None:
+        try:
+            await team_provider.shutdown()
+            logger.info("✓ MGXTeamProvider shutdown")
+        except Exception as e:
+            logger.error(f"Error shutting down team provider: {str(e)}")
     
     logger.info("FastAPI Application Shutdown Complete")
     logger.info("=" * 60)
@@ -276,9 +286,13 @@ def create_app() -> FastAPI:
     cors_origins = [
         "http://localhost",
         "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
         "http://localhost:8000",
         "http://127.0.0.1",
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
         "http://127.0.0.1:8000",
     ]
     
@@ -501,6 +515,16 @@ def create_app() -> FastAPI:
     
     app.include_router(diffs_router)
     logger.info("✓ Registered: diffs_router")
+    
+    app.include_router(auth_router)
+    logger.info("✓ Registered: auth_router")
+    
+    app.include_router(deepsite_router)
+    app.include_router(mgx_router)
+    logger.info("✓ Registered: deepsite_router")
+
+    app.include_router(parallel_router)
+    logger.info("✓ Registered: parallel_router")
     
     app.include_router(performance_router)
     logger.info("✓ Registered: performance_router")

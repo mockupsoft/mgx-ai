@@ -80,6 +80,7 @@ from .entities import (
     EscalationMetric,
     GitHubWebhookEvent,
 )
+from .mgx_run import MgxRun
 # AI Evaluation Framework - import from entities_evaluation
 from .entities_evaluation import (
     EvaluationScenario,
@@ -171,4 +172,5 @@ __all__ = [
     "ApprovalHistory",
     # GitHub Integration Models
     "GitHubWebhookEvent",
+    "MgxRun",
 ]

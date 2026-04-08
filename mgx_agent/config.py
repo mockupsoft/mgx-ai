@@ -120,6 +120,22 @@ class TeamConfig(BaseModel):
     cache_log_hits: bool = Field(default=False, description="Cache hit logla")
     cache_log_misses: bool = Field(default=False, description="Cache miss logla")
     cache_ttl_seconds: int = Field(default=3600, ge=60, le=86400, description="Cache TTL (saniye)")
+    enable_semantic_caching: bool = Field(
+        default=True,
+        description="Vekil embedding ile semantic cache (MGX_ENABLE_SEMANTIC_CACHE ile kapatılabilir)",
+    )
+    semantic_cache_similarity_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        description="Semantic eşleşme kosinüs eşiği",
+    )
+    semantic_cache_max_index_entries: int = Field(
+        default=4096,
+        ge=64,
+        le=500_000,
+        description="Semantic indeks üst sınırı (LRU)",
+    )
     
     @validator('max_rounds')
     def validate_max_rounds(cls, v):

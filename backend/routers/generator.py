@@ -98,6 +98,10 @@ class FeatureListResponse(BaseModel):
 router = APIRouter(prefix="/api/generator", tags=["Project Generator"])
 
 
+def _valid_stack_options() -> str:
+    return ", ".join(sorted(s.value for s in StackType))
+
+
 @router.get("/templates", response_model=List[TemplateListResponse])
 async def list_templates(
     stack: Optional[str] = None,
@@ -115,7 +119,7 @@ async def list_templates(
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid stack type: {stack}. Valid options: express_ts, fastapi, nextjs, laravel"
+                    detail=f"Invalid stack type: {stack}. Valid options: {_valid_stack_options()}",
                 )
         
         templates = await template_manager.list_templates(stack_type)
@@ -171,7 +175,7 @@ async def generate_project(
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid stack type: {request.stack}. Valid options: express_ts, fastapi, nextjs, laravel"
+                detail=f"Invalid stack type: {request.stack}. Valid options: {_valid_stack_options()}",
             )
         
         # Initialize generator
@@ -301,7 +305,7 @@ async def list_features(
             except ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid stack type: {stack}. Valid options: express_ts, fastapi, nextjs, laravel"
+                    detail=f"Invalid stack type: {stack}. Valid options: {_valid_stack_options()}",
                 )
         
         features = await template_manager.list_features(stack_type)
@@ -362,7 +366,10 @@ def get_stack_description(stack: str) -> str:
         "express_ts": "Express.js with TypeScript - RESTful API server",
         "fastapi": "FastAPI Python framework - Modern Python web framework",
         "nextjs": "Next.js React framework - Full-stack React framework",
-        "laravel": "Laravel PHP framework - PHP web application framework"
+        "laravel": "Laravel PHP framework - PHP web application framework",
+        "react_native": "React Native - Cross-platform mobile (TypeScript)",
+        "flutter": "Flutter - Cross-platform UI (Dart)",
+        "go_fiber": "Go Fiber - High-performance HTTP API",
     }
     return descriptions.get(stack, "Unknown stack type")
 

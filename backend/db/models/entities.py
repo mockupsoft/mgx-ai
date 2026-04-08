@@ -458,7 +458,7 @@ class AgentInstance(Base, TimestampMixin, SerializationMixin):
     definition_id = Column(String(36), ForeignKey("agent_definitions.id", ondelete="RESTRICT"), nullable=False, index=True)
 
     name = Column(String(255), nullable=False, comment="Instance name (can differ from definition)")
-    status = Column(SQLEnum(AgentStatus, values_callable=lambda x: [e.value for e in x]), nullable=False, default=AgentStatus.IDLE, index=True)
+    status = Column(SQLEnum(AgentStatus), nullable=False, default=AgentStatus.IDLE, index=True)
 
     config = Column(JSON, nullable=False, default=dict, comment="Instance-specific configuration")
     state = Column(JSON, comment="Current runtime state")
@@ -571,7 +571,7 @@ class AgentMessage(Base, TimestampMixin, SerializationMixin):
         index=True,
     )
 
-    direction = Column(SQLEnum(AgentMessageDirection, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
+    direction = Column(SQLEnum(AgentMessageDirection), nullable=False, index=True)
     payload = Column(JSON, nullable=False, default=dict)
 
     correlation_id = Column(String(255), index=True)
@@ -1156,11 +1156,45 @@ class User(Base, TimestampMixin, SerializationMixin):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
+    username = Column(String(255), unique=True, index=True, nullable=False)
+    password_hash = Column(String(255), nullable=False, comment="Bcrypt hashed password")
     full_name = Column(String(255), nullable=True)
     is_active = Column(Boolean, default=True)
+    email_verified = Column(Boolean, default=False, nullable=False)
+    last_login = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    deepsite_projects = relationship("DeepSiteProject", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
-        return f"<User(id={self.id}, email='{self.email}')>"
+        return f"<User(id={self.id}, email='{self.email}', username='{self.username}')>"
+
+
+class DeepSiteProject(Base, TimestampMixin, SerializationMixin):
+    """DeepSite project model for storing user projects."""
+    
+    __tablename__ = "deepsite_projects"
+    
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()), index=True)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(255), nullable=False, unique=True, index=True)
+    description = Column(Text, nullable=True)
+    pages = Column(JSON, nullable=False, default=list, comment="List of Page objects with path and html")
+    files = Column(JSON, nullable=False, default=list, comment="List of File objects")
+    commits = Column(JSON, nullable=False, default=list, comment="List of Commit objects")
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    # Relationships
+    user = relationship("User", back_populates="deepsite_projects")
+    
+    __table_args__ = (
+        Index("idx_deepsite_projects_user_id", "user_id"),
+        Index("idx_deepsite_projects_slug", "slug"),
+    )
+    
+    def __repr__(self) -> str:
+        return f"<DeepSiteProject(id={self.id}, user_id='{self.user_id}', name='{self.name}', slug='{self.slug}')>"
 
 
 class UserRole(Base, TimestampMixin, SerializationMixin):
@@ -1426,7 +1460,6 @@ class TemplateFeature(Base, TimestampMixin, SerializationMixin):
     
     __table_args__ = (
         Index("idx_template_features_type", "feature_type"),
-        Index("idx_template_features_stacks", "compatible_stacks"),
     )
 
     def __repr__(self) -> str:
@@ -2055,7 +2088,6 @@ class KnowledgeItem(Base, TimestampMixin, SerializationMixin):
         Index("idx_knowledge_items_embedding_id", "embedding_id"),
         Index("idx_knowledge_items_relevance_score", "relevance_score"),
         Index("idx_knowledge_items_usage_count", "usage_count"),
-        Index("idx_knowledge_items_tags", "tags", postgresql_using="gin"),
         Index("idx_knowledge_items_created_at", "created_at"),
         Index("idx_knowledge_items_updated_at", "updated_at"),
     )
@@ -2520,6 +2552,8 @@ __all__ = [
     "QualityGateStatus",
     "GateSeverity",
     "Role",
+    "User",
+    "DeepSiteProject",
     "UserRole",
     "Permission",
     "AuditLog",

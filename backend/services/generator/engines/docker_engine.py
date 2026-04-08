@@ -12,9 +12,11 @@ class DockerEngine:
     def __init__(self):
         self.stack_dockerfiles = {
             "express_ts": "express_ts/Dockerfile.template",
-            "fastapi": "fastapi/Dockerfile.template", 
+            "fastapi": "fastapi/Dockerfile.template",
             "nextjs": "nextjs/Dockerfile.template",
             "laravel": "laravel/Dockerfile.template",
+            "react_native": "react_native/Dockerfile.template",
+            "go_fiber": "go_fiber/Dockerfile.template",
         }
 
     async def generate_docker_files(
@@ -161,6 +163,44 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\
 # Start the application
 CMD ["npm", "start"]
 """
+        elif stack == "react_native":
+            dockerfile_content = f"""# React Native — Metro / tooling (CI)
+FROM node:20-bookworm-slim
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+
+EXPOSE 8081
+CMD ["npm", "start"]
+"""
+        elif stack == "flutter":
+            dockerfile_content = """# Flutter — SDK image (CI: analyze / test)
+FROM ghcr.io/cirruslabs/flutter:stable
+WORKDIR /app
+COPY pubspec.yaml ./
+RUN flutter pub get
+COPY . .
+CMD ["flutter", "analyze"]
+"""
+        elif stack == "go_fiber":
+            dockerfile_content = f"""# Go Fiber Dockerfile
+FROM golang:1.22-bookworm AS builder
+WORKDIR /src
+COPY go.mod ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/app ./cmd/main.go
+
+FROM gcr.io/distroless/base-debian12:nonroot
+WORKDIR /app
+COPY --from=builder /out/app ./app
+ENV PORT={port}
+EXPOSE {port}
+USER nonroot:nonroot
+ENTRYPOINT ["./app"]
+"""
         else:
             # Generic Dockerfile
             dockerfile_content = f"""# Generic Dockerfile
@@ -301,6 +341,25 @@ CMD ["echo", "Container started successfully"]
                 ".next",
                 "out",
                 "dist",
+            ]
+        elif stack == "react_native":
+            stack_specific_ignore = [
+                "android/build",
+                "android/.gradle",
+                "ios/Pods",
+                "ios/build",
+            ]
+        elif stack == "flutter":
+            stack_specific_ignore = [
+                "build",
+                ".dart_tool",
+                ".flutter-plugins",
+                ".flutter-plugins-dependencies",
+            ]
+        elif stack == "go_fiber":
+            stack_specific_ignore = [
+                "bin",
+                "vendor",
             ]
         
         all_ignore = common_ignore + stack_specific_ignore

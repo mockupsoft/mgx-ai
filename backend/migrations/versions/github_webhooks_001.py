@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = 'github_webhooks_001'
-down_revision = 'file_level_approval_001'  # Update to latest migration
+down_revision = 'phase_21_knowledge_base_rag_001'
 branch_labels = None
 depends_on = None
 

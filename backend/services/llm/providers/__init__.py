@@ -7,6 +7,7 @@ from .mistral_provider import MistralProvider
 from .ollama_provider import OllamaProvider
 from .together_provider import TogetherAIProvider
 from .openrouter_provider import OpenRouterProvider
+from .gemini_provider import GeminiProvider
 
 __all__ = [
     "OpenAIProvider",
@@ -15,4 +16,5 @@ __all__ = [
     "OllamaProvider",
     "TogetherAIProvider",
     "OpenRouterProvider",
+    "GeminiProvider",
 ]

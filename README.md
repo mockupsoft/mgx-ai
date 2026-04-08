@@ -2,7 +2,7 @@
 
 **AI-powered, multi-agent software engineering system with production-ready backend, workflow orchestration, and Git-aware code execution.**
 
-Built on **MetaGPT** with a **FastAPI** backend, **PostgreSQL** persistence, **Redis** caching, and **MinIO** artifact storage. Supports 8 web stacks with deterministic constraints, automated testing, and enterprise-grade observability.
+Built on **MetaGPT** with a **FastAPI** backend, **PostgreSQL** persistence, **Redis** caching, and **MinIO** artifact storage. Supports multiple web and mobile-oriented stacks (including extended generator targets such as React Native, Flutter, and Go Fiber), deterministic constraints, automated testing, optional **Docker-in-Docker** sandbox runs for reviewer feedback, and enterprise-grade observability.
 
 | Badge | Status |
 |-------|--------|
@@ -10,7 +10,7 @@ Built on **MetaGPT** with a **FastAPI** backend, **PostgreSQL** persistence, **R
 | CI Tests | ![Test Suite](https://github.com/mockupsoft/mgx-ai/actions/workflows/tests.yml/badge.svg) |
 | Coverage | ![codecov](https://codecov.io/gh/mockupsoft/mgx-ai/branch/main/graph/badge.svg) |
 | License | ![license](https://img.shields.io/github/license/mockupsoft/mgx-ai) |
-| Python | ![python](https://img.shields.io/badge/python-3.9%2B-blue) |
+| Python | ![python](https://img.shields.io/badge/python-3.11%2B-blue) |
 | Backend | ![fastapi](https://img.shields.io/badge/FastAPI-async-009688) |
 | CLI (PyPI) | ![pypi](https://img.shields.io/pypi/v/mgx-cli) |
 | CLI (npm) | ![npm](https://img.shields.io/npm/v/@mgxai/cli) |
@@ -61,7 +61,42 @@ Enterprise observability with OpenTelemetry tracing, structured logging, metrics
 Dual CLI distribution via PyPI (`pip install mgx-cli`) and npm (`npm install -g @mgxai/cli`). Unified interface for task execution, workflow management, and system administration.
 
 ### ✅ Docker Self-Hosted Deployment
-Production-ready Docker Compose stack with PostgreSQL, Redis, MinIO (S3-compatible), and optional Kafka. Health checks, persistence, backups, and security hardening included.
+Production-ready Docker Compose stack with PostgreSQL, Redis, MinIO (S3-compatible), optional Kafka, and a **`docker:dind`** sidecar for isolated sandbox execution when the API container uses `DOCKER_HOST` (see development `docker-compose.override.yml`). Health checks, persistence, backups, and security hardening included.
+
+### ✅ MGX Task History & Pipeline API
+PostgreSQL-backed **`mgx_runs`** table for persisting multi-agent task outcomes; REST endpoints under **`/api/mgx/history`** (list, get, delete). **Sequential multi-task pipeline** via **`/api/mgx/pipeline`** using the in-process `BackgroundTaskRunner` and `mgx_pipeline` service (pipeline state is in-memory across restarts).
+
+### ✅ Parallel Microservice Orchestration
+Decompose a high-level task into independent microservices using LLM reasoning, develop each service in **parallel** with separate `MGXStyleTeam` instances (bounded concurrency via `bounded_gather`), then let Mike integrate the results. Output includes `docker-compose.yml`, `nginx/nginx.conf`, `service-contracts.md`, and `README.md`. Trigger via `POST /api/mgx/parallel`; poll status at `GET /api/mgx/parallel/{task_id}`.
+
+```http
+POST /api/mgx/parallel
+{
+  "task": "Build a SaaS platform with auth, billing, and dashboard",
+  "max_concurrent": 3
+}
+
+# Response:
+{ "task_id": "abc123", "status": "pending", "message": "Task submitted." }
+
+GET /api/mgx/parallel/abc123
+# Returns services[], integration_files{}, stats{total, succeeded, failed}
+```
+
+### ✅ Semantic Response Cache
+Lightweight proxy embedding (MD5 token-frequency + cosine similarity) for deduplicating near-identical LLM prompts without external model dependencies. Enabled by default (`MGX_ENABLE_SEMANTIC_CACHE=0` to disable). Configurable similarity threshold via `TeamConfig.semantic_cache_similarity_threshold` (default 0.85).
+
+### ✅ Extended Project Generator Stacks
+Beyond classic web templates, the backend generator supports **`react_native`**, **`flutter`**, and **`go_fiber`** (`StackType`, manifests under `backend/services/generator/templates/`, aligned with `mgx_agent/stack_specs.py` for the agent layer).
+
+### ✅ DeepSite Frontend & Jest
+Next.js App Router UI under **`/deepsite`** with component tests (`frontend/jest.config.ts`, `jest.setup.ts`, `frontend/__tests__/components/deepsite-v2/`).
+
+### ✅ Charlie Sandbox (Real Container Tests)
+Before LLM code review, **`RunSandboxTests`** can execute the generated file manifest inside **`SandboxRunner.execute_project`** (multi-file project, public base images, optional image pull). Wired in **`mgx_agent/roles.py`** (Charlie) and integrated into **`ReviewCode`** prompts. Disable with **`DISABLE_SANDBOX_TESTING=true`**.
+
+### ✅ Alex Sandbox Self-Heal (WriteCode)
+When **`SANDBOX_SELF_HEAL_MAX_ATTEMPTS`** is greater than zero (default **2**), **`WriteCode`** runs the same **`execute_project`** path plus quality gates via **`run_sandbox_project_result` / `RunSandboxTests.run_detailed`**. On failure, stderr/stdout are fed back into the generation prompt for a limited number of retries. Set **`SANDBOX_SELF_HEAL_MAX_ATTEMPTS=0`** to keep only the legacy single-pass **`_execute_sandbox_testing`** behavior.
 
 ---
 
@@ -172,7 +207,7 @@ Expected output:
 
 ### Technology Stack
 
-- **Runtime**: Python 3.9+, MetaGPT framework
+- **Runtime**: Python 3.11+, MetaGPT framework (see also project rules / Docker images)
 - **Backend**: FastAPI, Async SQLAlchemy, Alembic migrations
 - **Database**: PostgreSQL 16+ (metadata, workflows, tasks)
 - **Cache/Queue**: Redis 7+ (LLM caching, background jobs)
@@ -191,22 +226,29 @@ Full architecture details: **[BACKEND_README.md](./BACKEND_README.md)**
 ```
 mgx-ai/
 ├── mgx_agent/                 # Core agent runtime
-│   ├── actions.py            # Code generation actions
-│   ├── roles.py              # Agent role definitions
+│   ├── actions.py            # Code generation, ReviewCode, RunSandboxTests, …
+│   ├── roles.py              # Agent role definitions (Charlie runs sandbox before review)
 │   ├── team.py               # Multi-agent orchestration
+│   ├── stack_specs.py        # STACK_SPECS + infer_stack_from_task
 │   ├── config.py             # Configuration management
-│   ├── cache.py              # LLM caching layer
+│   ├── cache.py              # LLM caching layer (InMemoryLRU, Redis, SemanticCache)
 │   ├── guardrails.py         # Output validation
 │   ├── diff_writer.py        # Safe patch application
 │   ├── formatters.py         # Stack-aware formatting
-│   └── cli.py                # CLI interface
+│   ├── cli.py                # CLI interface
+│   └── microservice/         # Parallel microservice orchestration
+│       ├── models.py         # ServiceSpec, ServiceResult, ParallelRunResult
+│       ├── decomposer.py     # DecomposeTask (LLM → List[ServiceSpec])
+│       ├── integrator.py     # IntegrateServices (LLM → docker-compose + nginx + README)
+│       └── orchestrator.py   # ParallelOrchestrator (bounded_gather coordination)
 ├── backend/                   # FastAPI backend service
 │   ├── app/                  # FastAPI application
-│   ├── routers/              # API route handlers
-│   ├── services/             # Business logic services
-│   ├── db/                   # Database models & migrations
+│   ├── routers/              # API route handlers (mgx: history, pipeline; parallel: /api/mgx/parallel)
+│   ├── services/             # Business logic (mgx_history, mgx_pipeline, parallel_pipeline, sandbox, generator, …)
+│   ├── db/                   # Database models & migrations (e.g. mgx_runs)
 │   ├── schemas.py            # Pydantic schemas
 │   └── config.py             # Backend configuration
+├── frontend/                  # Next.js (MGX dashboard, DeepSite)
 ├── tests/                     # Comprehensive test suite
 │   ├── unit/                 # Unit tests
 │   ├── integration/          # Integration tests
@@ -337,6 +379,18 @@ pytest tests/performance
 pytest -v --durations=10
 ```
 
+### Frontend (DeepSite) — Jest
+
+From `frontend/`:
+
+```bash
+npm test
+# or scoped:
+npx jest __tests__/components/deepsite-v2/editor/
+```
+
+Uses `jest-environment-jsdom` and polyfills in `jest.setup.ts` for stream/fetch-related tests.
+
 ### CI/CD Pipeline
 
 GitHub Actions workflow with multiple jobs:
@@ -466,6 +520,20 @@ Full contributing guide: **[CONTRIBUTING.md](./CONTRIBUTING.md)**
 
 ## Recent Updates
 
+### 2026 — Platform additions (this repository)
+
+- **MGX persistence**: `mgx_runs` table + **`/api/mgx/history`** (list/detail/delete).
+- **Multi-task pipeline**: **`/api/mgx/pipeline`** — sequential tasks via `mgx_pipeline` + `BackgroundTaskRunner` (in-memory pipeline registry).
+- **Generator stacks**: **`react_native`**, **`flutter`**, **`go_fiber`** templates and `StackType` / `stack_specs` alignment.
+- **DeepSite Jest**: Editor/Ask-AI component test skeletons under `frontend/__tests__/components/deepsite-v2/`.
+- **Alembic**: New migrations require a one-time `alembic upgrade head` per environment when schema changes (not on every app restart).
+- **Charlie + DinD**: `RunSandboxTests` + `SandboxRunner.execute_project`; Compose **`dind`** service and dev **`DOCKER_HOST=tcp://dind:2375`** for isolated Docker runs inside the stack.
+- **Alex sandbox self-heal**: `WriteCode` + **`SANDBOX_SELF_HEAL_MAX_ATTEMPTS`** — retries generation with sandbox/quality-gate feedback (`run_sandbox_project_result`).
+- **Semantic cache**: `SemanticCache` in `mgx_agent/cache.py` — proxy embedding (hash-based) + cosine similarity, enabled by default; `MGX_ENABLE_SEMANTIC_CACHE=0` to disable.
+- **Parallel microservice orchestration**: `mgx_agent/microservice/` — LLM-driven task decomposition → concurrent `MGXStyleTeam` instances per service → integration output (docker-compose, nginx, README). API: `POST /api/mgx/parallel`.
+
+Cursor rule files under **`.cursor/rules/`** summarize APIs and Docker/sandbox behavior (e.g. `mgx-api.mdc`, `docker-run.mdc`, `project-overview.mdc`).
+
 ### Completed Phases: 1-11+
 
 **Production-Ready Milestones:**
@@ -547,6 +615,9 @@ Built on [MetaGPT](https://github.com/geekan/MetaGPT) - Multi-Agent Meta Program
 ### API Reference
 
 - **Health:** `GET /health/`
+- **MGX history:** `GET /api/mgx/history`, `GET /api/mgx/history/{run_id}`, `DELETE /api/mgx/history/{run_id}`
+- **MGX pipeline:** `POST /api/mgx/pipeline`, `GET /api/mgx/pipeline`, `GET /api/mgx/pipeline/{pipeline_id}`
+- **MGX parallel:** `POST /api/mgx/parallel` (decompose → parallel teams → integrate), `GET /api/mgx/parallel/{task_id}`
 - **Workspaces:** `GET/POST /api/workspaces/`
 - **Projects:** `GET/POST /api/projects/`
 - **Tasks:** `GET/POST /api/tasks/`
@@ -558,4 +629,4 @@ Complete API documentation available at: `http://localhost:8000/docs`
 
 ---
 
-**Status:** Production-Ready 🚀 | **Latest Release:** v1.0.0 | **Last Updated:** December 2024
+**Status:** Production-Ready 🚀 | **Latest Release:** v1.0.0 | **Last Updated:** April 2026

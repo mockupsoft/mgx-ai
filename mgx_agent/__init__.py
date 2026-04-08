@@ -20,6 +20,7 @@ from .cache import (
     InMemoryLRUTTLCache,
     NullCache,
     RedisCache,
+    SemanticCache,
     make_cache_key,
 )
 
@@ -53,6 +54,16 @@ from .roles import (
 # Team
 from .team import MGXStyleTeam
 
+# Microservice (Parallel Orchestration)
+from .microservice import (
+    ParallelOrchestrator,
+    DecomposeTask,
+    IntegrateServices,
+    ServiceSpec,
+    ServiceResult,
+    ParallelRunResult,
+)
+
 # Performance (Async Tools)
 from .performance.async_tools import (
     AsyncTimer,
@@ -75,6 +86,7 @@ __all__ = [
     'InMemoryLRUTTLCache',
     'NullCache',
     'RedisCache',
+    'SemanticCache',
     'make_cache_key',
 
     # Metrics
@@ -102,6 +114,14 @@ __all__ = [
     
     # Team
     'MGXStyleTeam',
+
+    # Microservice
+    'ParallelOrchestrator',
+    'DecomposeTask',
+    'IntegrateServices',
+    'ServiceSpec',
+    'ServiceResult',
+    'ParallelRunResult',
     
     # Performance
     'AsyncTimer',

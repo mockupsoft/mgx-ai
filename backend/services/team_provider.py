@@ -10,6 +10,7 @@ import asyncio
 import logging
 import os
 import yaml
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, TYPE_CHECKING, Callable
 from contextlib import asynccontextmanager
@@ -140,10 +141,12 @@ class MGXTeamProvider:
                             
                             # Determine LLM config based on provider
                             if default_provider == "gemini":
+                                gemini_model_name = getattr(settings, 'gemini_model', 'gemini-2.0-flash')
+                                os.environ["GEMINI_MODEL"] = gemini_model_name
                                 llm_config = {
                                     "api_type": "gemini",
                                     "api_key": os.environ.get("GOOGLE_API_KEY", ""),
-                                    "model": os.environ.get("GEMINI_MODEL", "gemini-2.0-flash"),
+                                    "model": gemini_model_name,
                                 }
                             elif default_provider == "ollama":
                                 llm_config = {
@@ -305,6 +308,62 @@ class MGXTeamProvider:
                         raise RuntimeError(f"mgx_agent not available: {e}")
         
         return self._team
+
+    async def _persist_mgx_run_history(
+        self,
+        task: str,
+        team: Any,
+        started_at: datetime,
+        completed_at: datetime,
+        status: str,
+        plan_text: Optional[str] = None,
+    ) -> Optional[str]:
+        """Kaydet: mgx_runs tablosu (sessiz hata). Dönen: mgx_runs.id veya None."""
+        try:
+            from backend.services.mgx_history import persist_mgx_run
+
+            complexity = None
+            metric = None
+            if getattr(team, "metrics", None):
+                metric = team.metrics[-1]
+                complexity = getattr(metric, "complexity", None)
+
+            results_summary: Dict[str, Any] = {
+                "output_dir": getattr(team, "_last_output_dir", None),
+            }
+            if metric is not None:
+                results_summary.update(
+                    {
+                        "token_usage": metric.token_usage,
+                        "estimated_cost": metric.estimated_cost,
+                        "revision_rounds": metric.revision_rounds,
+                        "cache_hits": metric.cache_hits,
+                        "cache_misses": metric.cache_misses,
+                        "success": metric.success,
+                        "error_message": metric.error_message or None,
+                    }
+                )
+
+            plan_summary = None
+            if plan_text:
+                plan_summary = {"preview": plan_text[:8000]}
+
+            duration = (completed_at - started_at).total_seconds()
+
+            return await persist_mgx_run(
+                task=task,
+                status=status,
+                complexity=complexity,
+                output_dir=getattr(team, "_last_output_dir", None),
+                plan_summary=plan_summary,
+                results_summary=results_summary,
+                duration=duration,
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+        except Exception as e:
+            logger.debug("MGX history persist skipped: %s", e)
+            return None
     
     async def run_task(
         self, 
@@ -323,6 +382,8 @@ class MGXTeamProvider:
         """
         team = await self.get_team()
         logger.info(f"Running task: {task[:50]}...")
+        started_at = datetime.now(timezone.utc)
+        plan: Optional[str] = None
         
         try:
             # First analyze and plan the task
@@ -338,16 +399,181 @@ class MGXTeamProvider:
             logger.info("Executing plan...")
             result = await team.execute()
             logger.info(f"Task completed successfully")
+            completed_at = datetime.now(timezone.utc)
+            run_id = await self._persist_mgx_run_history(
+                task, team, started_at, completed_at, "success", plan_text=plan
+            )
             return {
                 "status": "success",
                 "result": result,
                 "plan": plan,
+                "run_id": run_id,
             }
         except Exception as e:
             logger.error(f"Task failed: {str(e)}", exc_info=True)
+            completed_at = datetime.now(timezone.utc)
+            run_id = await self._persist_mgx_run_history(
+                task, team, started_at, completed_at, "error", plan_text=plan
+            )
             return {
                 "status": "error",
                 "error": str(e),
+                "run_id": run_id,
+            }
+    
+    async def run_task_stream(self, task: str):
+        """
+        Run a task through the team with streaming agent messages.
+        
+        Args:
+            task: Task description
+            
+        Yields:
+            Dict with agent messages in DeepSite-compatible format:
+            {
+                "agent": "Mike|Alex|Bob|Charlie",
+                "content": "Message content...",
+                "type": "message|plan|code|test|review",
+                "timestamp": "ISO timestamp"
+            }
+        """
+        from mgx_agent.adapter import MetaGPTAdapter
+        
+        team = await self.get_team()
+        logger.info(f"Running task with streaming: {task[:50]}...")
+        stream_started = datetime.now(timezone.utc)
+        plan: Optional[str] = None
+        
+        # Track seen messages to avoid duplicates
+        seen_message_ids = set()
+        
+        def get_message_id(msg):
+            """Generate unique ID for a message"""
+            content = getattr(msg, 'content', str(msg))
+            role = getattr(msg, 'role', 'unknown')
+            return f"{role}:{hash(content[:100])}"
+        
+        def get_agent_name(role_name: str) -> str:
+            """Map role name to agent name"""
+            role_map = {
+                "TeamLeader": "Mike",
+                "Engineer": "Alex",
+                "Tester": "Bob",
+                "Reviewer": "Charlie"
+            }
+            return role_map.get(role_name, role_name)
+        
+        def get_message_type(role_name: str, cause_by: Any) -> str:
+            """Determine message type based on role and action"""
+            if role_name == "TeamLeader":
+                return "plan"
+            elif role_name == "Engineer":
+                return "code"
+            elif role_name == "Tester":
+                return "test"
+            elif role_name == "Reviewer":
+                return "review"
+            return "message"
+        
+        def collect_new_messages(team_instance):
+            """Collect new messages from team environment"""
+            new_messages = []
+            if hasattr(team_instance, 'team') and hasattr(team_instance.team, 'env'):
+                if hasattr(team_instance.team.env, 'roles'):
+                    for role in team_instance.team.env.roles.values():
+                        mem_store = MetaGPTAdapter.get_memory_store(role)
+                        if mem_store:
+                            messages = MetaGPTAdapter.get_messages(mem_store)
+                            for msg in messages:
+                                msg_id = get_message_id(msg)
+                                if msg_id not in seen_message_ids:
+                                    seen_message_ids.add(msg_id)
+                                    role_name = getattr(msg, 'role', 'unknown')
+                                    agent_name = get_agent_name(role_name)
+                                    cause_by = getattr(msg, 'cause_by', None)
+                                    msg_type = get_message_type(role_name, cause_by)
+                                    content = getattr(msg, 'content', str(msg))
+                                    
+                                    if content and len(content.strip()) > 0:
+                                        new_messages.append({
+                                            "agent": agent_name,
+                                            "content": content,
+                                            "type": msg_type,
+                                            "timestamp": datetime.utcnow().isoformat() + "Z"
+                                        })
+            return new_messages
+        
+        try:
+            # Phase 1: Analyze and Plan
+            yield {
+                "agent": "System",
+                "content": "Görev analiz ediliyor...",
+                "type": "status",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+            
+            plan = await team.analyze_and_plan(task)
+            
+            # Stream plan message
+            plan_messages = collect_new_messages(team)
+            for msg in plan_messages:
+                yield msg
+            
+            # Auto-approve the plan
+            if hasattr(team, 'approve_plan'):
+                team.approve_plan()
+                yield {
+                    "agent": "System",
+                    "content": "Plan onaylandı, görev yürütülüyor...",
+                    "type": "status",
+                    "timestamp": datetime.utcnow().isoformat() + "Z"
+                }
+            
+            # Phase 2: Execute
+            # Execute in background and periodically check for new messages
+            import asyncio
+            
+            execution_task = asyncio.create_task(team.execute())
+            
+            # Poll for new messages while execution is running
+            while not execution_task.done():
+                await asyncio.sleep(0.5)  # Check every 500ms
+                new_messages = collect_new_messages(team)
+                for msg in new_messages:
+                    yield msg
+            
+            # Wait for execution to complete
+            result = await execution_task
+            
+            # Collect any remaining messages
+            final_messages = collect_new_messages(team)
+            for msg in final_messages:
+                yield msg
+            
+            # Final status
+            yield {
+                "agent": "System",
+                "content": "Görev tamamlandı!",
+                "type": "status",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+
+            stream_completed = datetime.now(timezone.utc)
+            await self._persist_mgx_run_history(
+                task, team, stream_started, stream_completed, "success", plan_text=plan
+            )
+            
+        except Exception as e:
+            logger.error(f"Task streaming failed: {str(e)}", exc_info=True)
+            stream_completed = datetime.now(timezone.utc)
+            await self._persist_mgx_run_history(
+                task, team, stream_started, stream_completed, "error", plan_text=plan
+            )
+            yield {
+                "agent": "System",
+                "content": f"Hata: {str(e)}",
+                "type": "error",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
             }
     
     async def simple_chat(self, message: str) -> Dict[str, Any]:

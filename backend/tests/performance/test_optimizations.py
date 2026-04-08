@@ -4,7 +4,7 @@
 import pytest
 import asyncio
 from backend.services.llm.prompt_optimizer import PromptOptimizer, get_prompt_optimizer
-from backend.mgx_agent.cache import InMemoryLRUTTLCache, SemanticCache
+from mgx_agent.cache import InMemoryLRUTTLCache, SemanticCache
 
 
 @pytest.mark.performance
@@ -67,23 +67,27 @@ class TestCacheOptimization:
     """Tests for cache optimization."""
     
     def test_semantic_cache_finds_similar(self):
-        """Test that semantic cache finds similar prompts."""
+        """Semantic indeks: yakın metinlerde ikinci anahtar üzerinden eşleşme."""
         base_cache = InMemoryLRUTTLCache(max_entries=100, ttl_seconds=3600)
         semantic_cache = SemanticCache(
             base_cache=base_cache,
-            similarity_threshold=0.75,
-            enable_fuzzy_matching=True,
+            similarity_threshold=0.45,
+            max_semantic_entries=500,
         )
-        
-        # Store a prompt
-        key1 = "test_key_1"
-        value1 = "Create a function to calculate sum"
-        semantic_cache.set(key1, value1)
-        
-        # Try to find similar (should work with lower threshold)
-        # Note: This is a simplified test - real semantic matching would use embeddings
-        result = semantic_cache.get(key1)
-        assert result == value1
+
+        key1 = "mgx:v1:role:action:aaa"
+        value1 = {"ok": True}
+        text1 = "add two numbers together and return the sum"
+        semantic_cache.set(key1, value1, semantic_text=text1)
+
+        assert semantic_cache.get(key1) == value1
+
+        key2 = "mgx:v1:role:action:bbb"
+        query_text = "sum two numbers together return total"
+        qvec = semantic_cache._simple_embedding(query_text)
+        hit_key = semantic_cache._find_similar(qvec)
+        assert hit_key == key1
+        assert semantic_cache.base_cache.get(hit_key) == value1
     
     def test_cache_hit_rate_improvement(self):
         """Test that cache configuration improves hit rate."""
@@ -117,7 +121,7 @@ class TestTurnCalculation:
     
     def test_optimal_rounds_calculation(self):
         """Test optimal rounds calculation."""
-        from backend.mgx_agent.team import MGXStyleTeam, TeamConfig
+        from mgx_agent.team import MGXStyleTeam, TeamConfig
         
         config = TeamConfig(max_rounds=10)
         team = MGXStyleTeam(config=config)
@@ -137,7 +141,7 @@ class TestTurnCalculation:
     
     def test_early_termination_detection(self):
         """Test early termination detection."""
-        from backend.mgx_agent.team import MGXStyleTeam, TeamConfig
+        from mgx_agent.team import MGXStyleTeam, TeamConfig
         
         config = TeamConfig(max_rounds=10)
         team = MGXStyleTeam(config=config)
@@ -205,6 +209,14 @@ async def test_async_execution_performance():
     # Parallel should be faster (at least 2x improvement expected)
     assert parallel_time < sequential_time
     assert len(results_par) == 5
+
+
+
+
+
+
+
+
 
 
 

@@ -12,7 +12,7 @@ from backend.db.engine import get_session
 from backend.services.cost.llm_tracker import get_llm_tracker
 from backend.services.cost.optimizer import get_cost_optimizer
 # Lazy import to avoid Pydantic validation errors during module import
-# from backend.mgx_agent.performance.profiler import get_active_profiler
+# from mgx_agent.performance.profiler import get_active_profiler
 from backend.routers.deps import get_workspace_context, WorkspaceContext
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ async def get_performance_metrics(
     # Get active profiler metrics if available (lazy import)
     profiler_metrics = None
     try:
-        from backend.mgx_agent.performance.profiler import get_active_profiler
+        from mgx_agent.performance.profiler import get_active_profiler
         profiler = get_active_profiler()
         if profiler:
             profiler_metrics = profiler.to_run_metrics()
@@ -122,7 +122,7 @@ async def get_optimization_recommendations(
     # Get performance bottlenecks from profiler (lazy import)
     bottlenecks = []
     try:
-        from backend.mgx_agent.performance.profiler import get_active_profiler
+        from mgx_agent.performance.profiler import get_active_profiler
         profiler = get_active_profiler()
         if profiler:
             bottlenecks = profiler.get_performance_bottlenecks()

@@ -16,6 +16,7 @@ Açık kaynak MetaGPT'yi MGX'e benzer şekilde çalıştıran örnek.
 # Lokal geliştirme: examples klasöründen çalışırken metagpt paketini bul
 
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -38,7 +39,9 @@ from mgx_agent.actions import (
     WriteCode,
     WriteTest,
     ReviewCode,
+    RunSandboxTests,
 )
+from mgx_agent.stack_specs import infer_stack_from_task
 from mgx_agent.performance.async_tools import AsyncTimer, with_timeout
 
 
@@ -734,28 +737,67 @@ class Charlie(RelevantMemoryMixin, Role):
         else:
             # LLM modu
             print_step_progress(1, 4, "Kod kalitesi kontrol ediliyor...", role=self)
-            print_step_progress(2, 4, "Test coverage değerlendiriliyor...", role=self)
             
             team_ref = getattr(self, "_team_ref", None)
             code_in = code if code else "No code found"
             tests_in = tests if tests else "No tests found"
 
+            disable_sandbox = os.getenv("DISABLE_SANDBOX_TESTING", "").lower() in (
+                "true",
+                "1",
+                "yes",
+            )
+
+            if not disable_sandbox:
+                print_step_progress(2, 4, "Sandbox (DinD) testleri çalıştırılıyor...", role=self)
+            else:
+                print_step_progress(2, 4, "Test coverage değerlendiriliyor...", role=self)
+
+            target_stack = None
+            if team_ref is not None:
+                spec = team_ref.get_task_spec()
+                task_text = (spec or {}).get("task") or ""
+                if task_text.strip():
+                    target_stack = infer_stack_from_task(task_text)
+            if not target_stack and code_in and code_in != "No code found":
+                target_stack = infer_stack_from_task(code_in[:800])
+
+            sandbox_report = ""
+            if not disable_sandbox:
+                try:
+                    sandbox_action = RunSandboxTests()
+                    sandbox_action.llm = self.llm
+                    sandbox_report = await sandbox_action.run(code_in, target_stack)
+                except Exception as e:
+                    logger.warning(f"⚠️ Charlie sandbox: {e}")
+                    sandbox_report = f"## Sandbox Test Sonuçları\n- **Durum:** Hata: `{e}`\n"
+
             async def _compute_review() -> str:
                 review_action = ReviewCode()
                 review_action.llm = self.llm
-                return await review_action.run(code_in, tests_in)
+                return await review_action.run(
+                    code_in,
+                    tests_in,
+                    target_stack,
+                    sandbox_report=sandbox_report,
+                )
 
             print_step_progress(3, 4, "Review raporu hazırlanıyor...", role=self)
 
             if team_ref is not None and hasattr(team_ref, "cached_llm_call"):
+                # revision_round payload'a eklenir → her tur için cache key farklı olur
+                # (cache hit'den eski review dönme sorununu önler)
+                revision_round = getattr(team_ref, "_current_revision_round", 0)
                 review = await team_ref.cached_llm_call(
                     role=self.profile,
                     action="ReviewCode",
                     payload={
                         "code": code_in,
                         "tests": tests_in,
+                        "revision_round": revision_round,
                     },
                     compute=_compute_review,
+                    bypass_cache=not disable_sandbox,
                 )
             else:
                 review = await _compute_review()
