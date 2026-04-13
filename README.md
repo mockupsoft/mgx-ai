@@ -90,8 +90,16 @@ Lightweight proxy embedding (MD5 token-frequency + cosine similarity) for dedupl
 ### ✅ Extended Project Generator Stacks
 Beyond classic web templates, the backend generator supports **`react_native`**, **`flutter`**, and **`go_fiber`** (`StackType`, manifests under `backend/services/generator/templates/`, aligned with `mgx_agent/stack_specs.py` for the agent layer).
 
-### ✅ DeepSite Frontend & Jest
-Next.js App Router UI under **`/deepsite`** with component tests (`frontend/jest.config.ts`, `jest.setup.ts`, `frontend/__tests__/components/deepsite-v2/`).
+### ✅ DeepSite v2 — Editor, MGX Bridge & Preview
+- **UI** (`/deepsite`, Next.js App Router): Chat / Preview / Files sekmeleri; çok dosyalı projelerde `FILE:` manifestinden dosya listesi ve kod görüntüleyicide kaydırma; HTML içinde birleşik dosya biçimi için ayrıştırma.
+- **MGX köprüsü** ([`backend/services/deepsite/mgx_bridge.py`](backend/services/deepsite/mgx_bridge.py)): `MGXStyleTeam` NDJSON/SSE akışı, üretilen dosyaların projeye kaydı; Laravel stack’lerde üretim sonrası **tam katman** uyarısı (routes/controllers/views); MGX çıktısı boşsa **yalnızca HTML stack** için direkt LLM fallback — Laravel/Web App için yanlışlıkla tek sayfa HTML üretilmez; direkt LLM yolu `get_llm_service` için doğru import: `backend.services.llm.llm_service`.
+- **Önizleme çalıştırıcı** ([`backend/services/deepsite/project_runner.py`](backend/services/deepsite/project_runner.py)): eksik route/view/controller katmanlarında güvenli mock önizleme; tam projelerde Docker tabanlı canlı önizleme.
+- **Ajan becerileri** ([`backend/services/deepsite/skills/`](backend/services/deepsite/skills/)): Laravel için `mike-planner.md` (entity → route → view planı), `alex-laravel.md`, genişletilmiş `laravel-blade-architect.md`, `security-review.md` içinde tamamlanma maddeleri.
+- **Bildirimler**: [Sonner](https://sonner.emilkowal.ski/) `Toaster` varsayılan süre + kapanabilirlik ([`frontend/app/providers.tsx`](frontend/app/providers.tsx)).
+- **Testler**: Jest (`frontend/jest.config.ts`, `jest.setup.ts`, `frontend/__tests__/components/deepsite-v2/`).
+
+### ✅ Charlie — Laravel Tamamlanma Kapısı (ReviewCode)
+[`mgx_agent/actions.py`](mgx_agent/actions.py) içindeki `ReviewCode._get_stack_checks("laravel-blade")` önce **dosya varlığı** kontrol eder (`routes/web.php`, `app/Http/Controllers/`, `resources/views/`, `layouts/app.blade.php`). Eksikse `STACK_COMPLIANCE = [FAIL]` ve `DEĞİŞİKLİK GEREKLİ` — [`mgx_agent/team.py`](mgx_agent/team.py) revizyon döngüsü Alex’e geri döner (varsayılan `max_revision_rounds`).
 
 ### ✅ Charlie Sandbox (Real Container Tests)
 Before LLM code review, **`RunSandboxTests`** can execute the generated file manifest inside **`SandboxRunner.execute_project`** (multi-file project, public base images, optional image pull). Wired in **`mgx_agent/roles.py`** (Charlie) and integrated into **`ReviewCode`** prompts. Disable with **`DISABLE_SANDBOX_TESTING=true`**.
@@ -459,6 +467,10 @@ DEEPSITE_JWT_SECRET=change-me
 DEEPSITE_ALLOWED_ORIGINS=http://localhost:3000
 ```
 
+**DeepSite canlı önizleme (test / screenshot):** Çok dosyalı stack’lerde `POST /api/deepsite/projects/{id}/run` yanıtındaki `url` alanı genelde `http://localhost:<port>` şeklindedir; DinD üzerinde `docker-compose.override.yml` ile `9100-9999` aralığı host’a map edilir. Tarayıcı veya otomasyon ile bu URL’ye giderek veya editördeki Preview iframe’i ile arayüzü doğrulayabilirsiniz.
+
+**PNG ekran görüntüsü (Playwright):** Konteyner çalışırken `GET /api/deepsite/projects/{id}/screenshot` (Next üzerinden: aynı yol, `Authorization` ile) PNG döner. Sorgu parametreleri: `full_page`, `width`, `height`, `wait_ms`. Backend’de `pip install playwright` ve `playwright install chromium` gerekir; Docker imajında Chromium yoksa endpoint 501/503 ile kurulum notu döner.
+
 ### Production Checklist
 
 - [ ] Generate secure secrets using OpenSSL
@@ -547,6 +559,8 @@ Full contributing guide: **[CONTRIBUTING.md](./CONTRIBUTING.md)**
 
 ### 2026 — Platform additions (this repository)
 
+- **DeepSite v2**: Chat / Preview / Files; dosya manifesti ayrıştırma; Sonner toast süreleri; `mgx_bridge` Laravel tamamlanma uyarısı ve HTML-only fallback’in yalnızca HTML stack’e sınırlandırılması; `get_llm_service` import düzeltmesi; `project_runner` eksik Laravel için mock önizleme.
+- **Charlie Laravel gate**: `ReviewCode` içinde `laravel-blade` için route/controller/view/layout varlık kontrolü + revizyon tetikleyicisi.
 - **MGX persistence**: `mgx_runs` table + **`/api/mgx/history`** (list/detail/delete).
 - **Multi-task pipeline**: **`/api/mgx/pipeline`** — sequential tasks via `mgx_pipeline` + `BackgroundTaskRunner` (in-memory pipeline registry).
 - **Generator stacks**: **`react_native`**, **`flutter`**, **`go_fiber`** templates and `StackType` / `stack_specs` alignment.
@@ -580,6 +594,7 @@ Cursor rule files under **`.cursor/rules/`** summarize APIs and Docker/sandbox b
 
 ### Recent Changes (2026)
 
+- **feat: DeepSite v2 + Laravel kalite kapıları** — Editor sekmeleri ve dosya görüntüleyici; `mgx_bridge` tamamlanma kontrolü ve stack-doğru fallback; `ReviewCode` Laravel dosya varlığı hard gate; `project_runner` mock/canlı önizleme ayrımı; beceri dosyaları (`mike-planner`, `alex-laravel`, `laravel-blade-architect`); Sonner `duration` / `closeButton`.
 - **feat: semantic cache + parallel microservice** — `SemanticCache`, `ParallelOrchestrator`, `POST /api/mgx/parallel`, DeepSite backend, MGX history & pipeline API, extended generator stacks (react_native, flutter, go_fiber), 32 new unit tests
 - **Feature/LLM-cache-layer** — Intelligent response caching with Redis support
 - **Feat/workflow-engine-multi-agent** — Multi-agent workflow orchestration
@@ -652,6 +667,8 @@ Built on [MetaGPT](https://github.com/geekan/MetaGPT) - Multi-Agent Meta Program
 | `/api/mgx/parallel` | `POST` | Decompose → parallel teams → integrate |
 | `/api/mgx/parallel/{task_id}` | `GET` | Parallel task status + results |
 | `/api/deepsite/projects` | `GET` `POST` | DeepSite project CRUD |
+| `/api/deepsite/projects/{id}/run` | `POST` | Proje önizlemesi için Docker konteyneri başlatır; yanıtta `url` (iframe / tarayıcı) |
+| `/api/deepsite/projects/{id}/screenshot` | `GET` | Canlı önizleme PNG (Playwright; konteyner çalışır olmalı) |
 | `/api/deepsite/generate` | `POST` (SSE) | AI code generation stream |
 | `/api/workspaces/` | `GET` `POST` | Workspaces |
 | `/api/projects/` | `GET` `POST` | Projects |
