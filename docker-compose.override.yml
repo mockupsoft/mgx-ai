@@ -27,15 +27,27 @@ services:
       # Sandbox: üretilen projeyi DinD içinde çalıştır (host soketi yerine)
       DOCKER_HOST: tcp://dind:2375
       SANDBOX_IMAGES_PULL_ON_DEMAND: "true"
+      # DeepSite Project Runner — port aralığı
+      PROJECT_PREVIEW_PORT_MIN: "9100"
+      PROJECT_PREVIEW_PORT_MAX: "9999"
+      PROJECT_PREVIEW_HOST: "localhost"
     volumes:
       # Mount code directories for hot reload
       - ./backend:/app/backend
       - ./mgx_agent:/app/mgx_agent
+      # Project runner için geçici proje dizini
+      - /tmp/deepsite_projects:/tmp/deepsite_projects
     command: uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/backend
     # Build cache is kept for faster development builds
     build:
       cache_from:
         - mgx-agent:latest
+
+  # DinD: proje container'ları bu servis üzerinden çalışır
+  dind:
+    ports:
+      # Mevcut sandbox portuna ek olarak proje preview port aralığı
+      - "9100-9999:9100-9999"
 
   # =============================================================================
   # Frontend - Development with hot reload
@@ -44,17 +56,17 @@ services:
     image: node:20-alpine
     container_name: mgx-frontend
     working_dir: /app
-    command: sh -c "npm install && npm run dev -- -p 3002 -H 0.0.0.0"
+    # .next önbelleğini siler ve 3002'de başlatır (eski anonymous volume cache sorunu önlenir)
+    command: sh -c "npm install && rm -rf .next && npx next dev -p 3002 -H 0.0.0.0"
     ports:
       - "3002:3002"
     depends_on:
       mgx-ai:
         condition: service_healthy
     volumes:
-      # Mount frontend directory for hot reload
+      # Mount frontend directory for hot reload; .next ayrı volume YOK — host ile senkron
       - ./frontend:/app
       - /app/node_modules
-      - /app/.next
     environment:
       - NODE_ENV=development
       - PORT=3002

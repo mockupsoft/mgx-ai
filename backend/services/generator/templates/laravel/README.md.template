@@ -1,0 +1,49 @@
+# Laravel Project
+
+Laravel 11 + Blade + PostgreSQL 16
+
+## Quick Start
+
+```bash
+# 1. Install dependencies
+composer install
+
+# 2. Configure environment
+cp .env.example .env
+php artisan key:generate
+
+# 3. Set up PostgreSQL connection in .env
+# DB_CONNECTION=pgsql
+# DB_HOST=127.0.0.1
+# DB_PORT=5432
+# DB_DATABASE=laravel
+# DB_USERNAME=postgres
+# DB_PASSWORD=secret
+
+# 4. Run migrations
+php artisan migrate
+
+# 5. Start development server
+php artisan serve
+```
+
+## Docker
+
+```bash
+docker-compose up -d
+```
+
+## Testing
+
+```bash
+php artisan test
+```
+
+## Stack
+
+- **PHP**: 8.3+
+- **Laravel**: 11.x
+- **Database**: PostgreSQL 16
+- **Auth**: Laravel Sanctum
+- **Permissions**: spatie/laravel-permission
+- **Frontend**: Blade + Tailwind CSS

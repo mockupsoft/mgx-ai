@@ -63,4 +63,7 @@ openai>=1.52.0
 # Type hints
 types-PyYAML>=6.0.0
 
+# DeepSite preview (screenshot endpoint) — tarayıcı: `playwright install chromium`
+playwright>=1.42.0
+
 # Development/Testing tools are in requirements-dev.txt

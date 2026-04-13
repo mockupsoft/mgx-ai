@@ -1428,8 +1428,20 @@ class MGXStyleTeam:
                     break
                 last_review_hash = review_hash
                 
-                # Review'da "DEĞİŞİKLİK GEREKLİ" var mı kontrol et
-                if "DEĞİŞİKLİK GEREKLİ" in review.upper():
+                # Review'da revision trigger var mı kontrol et (Türkçe + İngilizce)
+                _REVISION_TRIGGERS = [
+                    "DEĞİŞİKLİK GEREKLİ",
+                    "CHANGES REQUIRED",
+                    "NEEDS REVISION",
+                    "NEEDS_REVISION",
+                    "REVISION NEEDED",
+                    "REVISION REQUIRED",
+                    "NEEDS CHANGES",
+                    "NOT APPROVED",
+                    "REQUIRES CHANGES",
+                ]
+                _review_upper = review.upper()
+                if any(trigger in _review_upper for trigger in _REVISION_TRIGGERS):
                     revision_count += 1
                     self._current_revision_round = revision_count  # Charlie cache bypass için
                     

@@ -24,6 +24,7 @@ class StackCategory(str, Enum):
     """Stack kategorileri"""
     BACKEND = "backend"
     FRONTEND = "frontend"
+    FULLSTACK = "fullstack"
     DEVOPS = "devops"
 
 
@@ -455,6 +456,126 @@ STACK_SPECS: Dict[str, StackSpec] = {
         file_extensions=[".html", ".css", ".js"]
     ),
     
+    # ── Golden Path Stacks ────────────────────────────────────────────────────
+    # Bu stack'ler Web / Mobile / Special mod için tanımlı golden path'lerdir.
+    # Varsayılan: Laravel + PostgreSQL zorunlu.
+
+    "laravel-blade": StackSpec(
+        stack_id="laravel-blade",
+        name="Laravel + Blade + PostgreSQL (Web Mode)",
+        category=StackCategory.FULLSTACK,
+        language="php",
+        test_framework="phpunit",
+        package_manager="composer",
+        linter_formatter="pint",
+        project_layout={
+            "app/Models/": "Eloquent modelleri",
+            "app/Http/Controllers/": "Web & API controller'ları",
+            "app/Http/Requests/": "FormRequest doğrulama",
+            "resources/views/": "Blade şablonları",
+            "resources/views/components/": "Blade bileşenleri",
+            "database/migrations/": "PostgreSQL migration'ları",
+            "routes/web.php": "Web route'ları",
+            "routes/api.php": "API route'ları",
+            "config/": "Uygulama konfigürasyonları",
+            "tests/Feature/": "Feature testleri",
+            "tests/Unit/": "Unit testleri",
+            "composer.json": "Bağımlılıklar",
+            ".env.example": "Çevre değişkenleri",
+        },
+        run_commands={
+            "dev": "php artisan serve",
+            "build": "composer install && npm run build",
+            "test": "php artisan test",
+            "start": "php artisan serve",
+        },
+        docker_templates=True,
+        ci_templates=True,
+        common_dependencies=[
+            "laravel/framework",
+            "laravel/sanctum",
+            "spatie/laravel-permission",
+        ],
+        file_extensions=[".php", ".blade.php", ".sql"],
+    ),
+
+    "flutter-laravel": StackSpec(
+        stack_id="flutter-laravel",
+        name="Flutter + Laravel API + PostgreSQL (Mobile Mode)",
+        category=StackCategory.FULLSTACK,
+        language="dart",
+        test_framework="flutter_test",
+        package_manager="pub",
+        linter_formatter="dart-format",
+        project_layout={
+            "lib/features/": "Feature-based modüller",
+            "lib/core/": "Shared servisler & yardımcılar",
+            "lib/shared/": "Ortak widget'lar",
+            "lib/app/": "Router & theme tanımları",
+            "lib/main.dart": "Giriş noktası",
+            "pubspec.yaml": "Flutter bağımlılıkları",
+            "test/": "Widget ve unit testler",
+            "backend/app/Http/Controllers/Api/": "Laravel API controller'ları",
+            "backend/app/Http/Resources/": "API resource sınıfları",
+            "backend/database/migrations/": "PostgreSQL migration'ları",
+        },
+        run_commands={
+            "dev": "flutter run",
+            "build": "flutter build apk",
+            "test": "flutter test",
+            "start": "flutter run --release",
+        },
+        docker_templates=True,
+        ci_templates=True,
+        common_dependencies=[
+            "flutter",
+            "riverpod",
+            "dio",
+            "flutter_secure_storage",
+            "go_router",
+        ],
+        file_extensions=[".dart", ".yaml", ".php"],
+    ),
+
+    "laravel-react": StackSpec(
+        stack_id="laravel-react",
+        name="Laravel API + React + PostgreSQL (Special Mode)",
+        category=StackCategory.FULLSTACK,
+        language="ts",
+        test_framework="vitest",
+        package_manager="npm",
+        linter_formatter="eslint+prettier",
+        project_layout={
+            "src/features/": "Feature-based React modülleri",
+            "src/components/": "Ortak bileşenler",
+            "src/hooks/": "Custom React hooks",
+            "src/lib/api/": "Axios / TanStack Query istemcisi",
+            "src/stores/": "Zustand store'ları",
+            "src/App.tsx": "Ana uygulama",
+            "backend/app/Http/Controllers/Api/": "Laravel API controller'ları",
+            "backend/config/cors.php": "CORS konfigürasyonu",
+            "backend/database/migrations/": "PostgreSQL migration'ları",
+            "backend/routes/api.php": "API route'ları",
+        },
+        run_commands={
+            "dev": "npm run dev",
+            "build": "npm run build",
+            "test": "npm test",
+            "start": "npm run preview",
+        },
+        docker_templates=True,
+        ci_templates=True,
+        common_dependencies=[
+            "react",
+            "react-router-dom",
+            "@tanstack/react-query",
+            "zustand",
+            "axios",
+            "tailwindcss",
+        ],
+        file_extensions=[".tsx", ".ts", ".php", ".sql"],
+    ),
+
     # DevOps Stacks
     "devops-docker": StackSpec(
         stack_id="devops-docker",
@@ -516,60 +637,204 @@ def get_stack_spec(stack_id: str) -> Optional[StackSpec]:
 
 
 def infer_stack_from_task(task: str) -> str:
-    """Görev açıklamasından stack tahmin et"""
+    """
+    Görev açıklamasından stack tahmin et.
+
+    Öncelik sırası:
+    1. Vanilla HTML (açık HTML/statik sayfa isteği, framework yok)
+    2. Golden path stacks (laravel-blade, flutter-laravel, laravel-react)
+    3. Mobile (react-native, flutter)
+    4. Spesifik backend/frontend framework'ler
+    5. Genel anahtar kelimeler
+    6. Varsayılan: fastapi
+    """
     task_lower = task.lower()
-    
-    # Vanilla HTML/CSS/JS - check first (simple web pages without frameworks)
-    if any(kw in task_lower for kw in ["html", "vanilla", "static page", "basit web", "basit sayfa", "sayaç", "counter", "hesap makinesi", "calculator", "form", "landing page"]):
-        # If user specifically wants React/Vue/Next, don't use vanilla
-        if not any(fw in task_lower for fw in ["react", "vue", "next", "angular", "svelte"]):
+
+    # 1. Vanilla HTML — açık talep + framework yok
+    _vanilla_kws = [
+        "html", "vanilla", "static page", "basit web", "basit sayfa",
+        "sayaç", "counter", "hesap makinesi", "calculator", "landing page",
+        "tek sayfa", "single page html",
+    ]
+    _framework_kws = ["react", "vue", "next", "angular", "svelte", "laravel", "flutter"]
+    if any(kw in task_lower for kw in _vanilla_kws):
+        if not any(fw in task_lower for fw in _framework_kws):
             return "vanilla-html"
-    
-    # Mobile / cross-platform (react-native before generic React web)
-    if (
-        "react native" in task_lower
-        or "react-native" in task_lower
-        or "reactnative" in task_lower
-    ):
+
+    # 2. Golden path stacks — flutter + laravel birlikte → flutter-laravel
+    _flutter_kws = ["flutter", "dart", "mobil uygulama", "android uygulama", "ios uygulama",
+                    "mobile app", "mobil app"]
+    _laravel_kws = ["laravel", "blade", "php"]
+    _react_kws = ["react", "spa", "single page app", "dashboard", "frontend", "vite"]
+    _web_app_kws = ["web uygulaması", "web application", "web app", "tam stack", "full stack",
+                    "fullstack"]
+
+    is_flutter = any(kw in task_lower for kw in _flutter_kws)
+    is_laravel = any(kw in task_lower for kw in _laravel_kws)
+    is_react = any(kw in task_lower for kw in _react_kws)
+    is_web_app = any(kw in task_lower for kw in _web_app_kws)
+
+    if is_flutter and is_laravel:
+        return "flutter-laravel"
+    if is_flutter:
+        return "flutter-laravel"  # Flutter → golden path (Laravel backend)
+    if is_laravel and is_react:
+        return "laravel-react"
+    if is_laravel:
+        return "laravel-blade"   # Laravel → golden path (Blade)
+    if is_react and is_web_app:
+        return "laravel-react"   # Full-stack React → golden path
+
+    # 3. Mobile (React Native)
+    if "react native" in task_lower or "react-native" in task_lower or "reactnative" in task_lower:
         return "react-native"
-    if "flutter" in task_lower or "dart" in task_lower:
-        return "flutter"
+
+    # 4. Go
     if ("go" in task_lower and ("fiber" in task_lower or "golang" in task_lower)) or "go-fiber" in task_lower:
         return "go-fiber"
-    
-    # Backend - specific framework checks first
+
+    # 5. Spesifik backend framework'ler
     if "nest" in task_lower or "nestjs" in task_lower:
         return "nestjs"
-    elif "laravel" in task_lower or ("php" in task_lower and "laravel" in task_lower):
-        return "laravel"
-    elif "fastapi" in task_lower:
+    if "fastapi" in task_lower:
         return "fastapi"
-    elif ".net" in task_lower or "c#" in task_lower or "csharp" in task_lower or "dotnet" in task_lower:
+    if ".net" in task_lower or "c#" in task_lower or "csharp" in task_lower or "dotnet" in task_lower:
         return "dotnet-api"
-    
-    # Backend keywords (general)
+
+    # 6. Genel backend/frontend anahtar kelimeleri
     if any(kw in task_lower for kw in ["api", "backend", "server", "endpoint", "rest"]):
         if "python" in task_lower:
             return "fastapi"
-        elif "php" in task_lower:
-            return "laravel"
-        else:
-            return "express-ts"  # Default backend
-    
-    # Frontend keywords
-    elif any(kw in task_lower for kw in ["ui", "frontend", "dashboard", "page", "component"]):
+        if "php" in task_lower:
+            return "laravel-blade"
+        return "express-ts"
+
+    if any(kw in task_lower for kw in ["ui", "component", "page"]):
         if "next" in task_lower:
             return "nextjs"
-        elif "vue" in task_lower:
+        if "vue" in task_lower:
             return "vue-vite"
-        else:
-            return "react-vite"  # Default frontend
-    
-    # DevOps keywords
-    elif any(kw in task_lower for kw in ["docker", "container", "compose"]):
+        return "react-vite"
+
+    if any(kw in task_lower for kw in ["docker", "container", "compose"]):
         return "devops-docker"
-    elif any(kw in task_lower for kw in ["ci", "cd", "github actions", "pipeline"]):
+    if any(kw in task_lower for kw in ["ci", "cd", "github actions", "pipeline"]):
         return "ci-github-actions"
-    
+
     # Default
     return "fastapi"
+
+
+# ---------------------------------------------------------------------------
+# Stack Compliance Guard
+# ---------------------------------------------------------------------------
+
+_GOLDEN_PATH_STACKS = {"laravel-blade", "flutter-laravel", "laravel-react"}
+_GOLDEN_PATH_DB = "PostgreSQL"
+
+def validate_and_correct_stack(stack_id: str, task: str) -> tuple[str, str]:
+    """
+    Golden path projeler için stack doğrulama ve otomatik düzeltme.
+
+    KURALAR (sırayla uygulanır):
+    1. Yanlış veritabanı (MySQL/MongoDB/SQLite) → PostgreSQL'e zorla + uyar
+    2. Mobil anahtar kelimesi + vanilla-html → flutter-laravel
+    3. React Native isteği → flutter-laravel golden path + uyar
+    4. Flutter + Node.js backend → flutter-laravel (Laravel backend) + uyar
+    5. React SPA + vanilla-html → laravel-react
+    6. "Web sitesi" + React → laravel-react golden path
+
+    Returns:
+        (corrected_stack_id, warning_message)
+        warning_message boşsa düzeltme yapılmamıştır.
+    """
+    task_lower = task.lower()
+    warnings: list[str] = []
+
+    # ── Kural 1: Yanlış veritabanı ────────────────────────────────────────────
+    _wrong_dbs = {
+        "mysql": "MySQL",
+        "mongodb": "MongoDB",
+        "mongo": "MongoDB",
+        "sqlite": "SQLite",
+        "mariadb": "MariaDB",
+        "mssql": "MSSQL",
+        "oracle": "Oracle DB",
+        "firebase": "Firebase Firestore",
+        "supabase": "Supabase",
+        "dynamodb": "DynamoDB",
+        "cassandra": "Cassandra",
+        "redis db": "Redis (as primary DB)",
+    }
+    detected_wrong_db = next(
+        (label for kw, label in _wrong_dbs.items() if kw in task_lower), None
+    )
+    if detected_wrong_db:
+        if stack_id not in ("vanilla-html", "devops-docker", "ci-github-actions"):
+            warnings.append(
+                f"⚠️ VERİTABANI DÜZELTMESİ: '{detected_wrong_db}' yerine "
+                f"PostgreSQL 16+ kullanılıyor. Golden path standardı PostgreSQL'dir. "
+                f"Laravel migration'ları ve Eloquent PostgreSQL için yapılandırıldı."
+            )
+            # stack_id zaten golden path ise koru, değilse uygun golden path'e çek
+            if stack_id not in _GOLDEN_PATH_STACKS:
+                # Mobil mi web mi?
+                _mobile_kws = ["mobil", "mobile", "flutter", "android", "ios", "react native"]
+                _react_kws = ["react", "spa", "dashboard", "admin", "panel"]
+                if any(kw in task_lower for kw in _mobile_kws):
+                    stack_id = "flutter-laravel"
+                elif any(kw in task_lower for kw in _react_kws):
+                    stack_id = "laravel-react"
+                else:
+                    stack_id = "laravel-blade"
+
+    # ── Kural 2: React Native → flutter-laravel ───────────────────────────────
+    _rn_kws = ["react native", "react-native", "reactnative"]
+    if any(kw in task_lower for kw in _rn_kws):
+        if stack_id != "flutter-laravel":
+            warnings.append(
+                "⚠️ STACK DÜZELTMESİ: 'React Native' yerine 'Flutter + Laravel API' "
+                "golden path kullanılıyor. Flutter, MGX'in mobil golden path standardıdır. "
+                "Backend Laravel 11+ + PostgreSQL + Sanctum olarak yapılandırıldı."
+            )
+            stack_id = "flutter-laravel"
+
+    # ── Kural 3: Mobil + vanilla-html uyumsuzluğu ─────────────────────────────
+    if stack_id == "vanilla-html":
+        _mobile_kws = ["mobil", "mobile", "flutter", "android", "ios", "uygulama", "app"]
+        if any(kw in task_lower for kw in _mobile_kws):
+            warnings.append(
+                "⚠️ STACK DÜZELTMESİ: Mobil uygulama isteği vanilla-HTML ile uyumsuz. "
+                "'flutter-laravel' golden path'e geçildi."
+            )
+            stack_id = "flutter-laravel"
+
+    # ── Kural 4: Flutter + Node.js backend → flutter-laravel ──────────────────
+    _flutter_kws = ["flutter", "dart"]
+    _node_backends = ["node.js", "nodejs", "node js", "express", "fastify", "nest"]
+    is_flutter = any(kw in task_lower for kw in _flutter_kws)
+    is_node_backend = any(kw in task_lower for kw in _node_backends)
+    if is_flutter and is_node_backend:
+        warnings.append(
+            "⚠️ BACKEND DÜZELTMESİ: Flutter projesi için Node.js yerine "
+            "Laravel 11+ API backend kullanılıyor. "
+            "Golden path: Flutter + Laravel Sanctum + PostgreSQL."
+        )
+        stack_id = "flutter-laravel"
+
+    # ── Kural 5: React SPA + web uygulaması isteği ────────────────────────────
+    _react_spa_kws = ["react spa", "react uygulama", "react app", "spa", "single page"]
+    _web_context = ["web", "site", "platform", "dashboard", "admin", "panel", "portal"]
+    if (
+        any(kw in task_lower for kw in _react_spa_kws)
+        and any(kw in task_lower for kw in _web_context)
+        and stack_id not in ("laravel-react", "laravel-blade")
+    ):
+        warnings.append(
+            "⚠️ STACK GÜNCELLEME: React SPA projesi için 'laravel-react' golden path kullanılıyor. "
+            "Backend Laravel 11+ API + PostgreSQL, frontend React 18+ + Vite + Tailwind."
+        )
+        stack_id = "laravel-react"
+
+    combined_warning = "\n".join(warnings)
+    return stack_id, combined_warning

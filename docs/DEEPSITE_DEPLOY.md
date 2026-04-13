@@ -3,7 +3,7 @@
 ## Mimari
 
 - **Frontend (Next.js):** `/deepsite` — `AppEditor` (`components/deepsite-v2/`), AI istekleri `/api/deepsite/ask-ai` üzerinden aynı origin’e gider, route FastAPI’ye proxy eder.
-- **Backend (FastAPI):** `/api/deepsite/generate` (SSE), `/api/deepsite/follow-up` (SEARCH/REPLACE), `/api/deepsite/redesign`, proje CRUD `/api/deepsite/projects/*`.
+- **Backend (FastAPI):** `/api/deepsite/generate` (SSE), `/api/deepsite/follow-up` (SEARCH/REPLACE), `/api/deepsite/redesign`, proje CRUD `/api/deepsite/projects/*`, canlı önizleme PNG’si `GET /api/deepsite/projects/{id}/screenshot` (Playwright; `playwright install chromium` gerekir).
 - **Agent modu:** `GenerateRequest.mode = "agent"` — `backend/services/deepsite/web_team.py` (Designer brief + Coder stream). Anahtarlar sunucu ortamında (`OPENROUTER_API_KEY`, vb.).
 
 ## Ortam değişkenleri

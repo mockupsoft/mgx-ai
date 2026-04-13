@@ -1181,9 +1181,12 @@ class DeepSiteProject(Base, TimestampMixin, SerializationMixin):
     slug = Column(String(255), nullable=False, unique=True, index=True)
     description = Column(Text, nullable=True)
     pages = Column(JSON, nullable=False, default=list, comment="List of Page objects with path and html")
-    files = Column(JSON, nullable=False, default=list, comment="List of File objects")
+    files = Column(JSON, nullable=False, default=list, comment="List of File objects {path, content, type}")
     commits = Column(JSON, nullable=False, default=list, comment="List of Commit objects")
     is_active = Column(Boolean, default=True, nullable=False)
+    chat_history = Column(JSON, nullable=True, comment="Serialized chat timeline: {items, artifacts}")
+    project_rules = Column(JSON, nullable=True, comment="Project-specific rules from first Mike analysis: {stack, rules_text}")
+    stack_hint = Column(String(50), nullable=True, comment="Selected stack: html/laravel-blade/flutter-laravel/laravel-react")
     
     # Relationships
     user = relationship("User", back_populates="deepsite_projects")

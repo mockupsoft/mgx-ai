@@ -131,7 +131,7 @@ async def aask_with_observability(action: Action, prompt: str) -> str:
 
 
 class AnalyzeTask(Action):
-    """Görevi analiz et (stack-aware)"""
+    """Görevi analiz et (stack-aware, proje kuralları çıkar)"""
     
     PROMPT_TEMPLATE: str = """Görev: {task}
 {stack_context}
@@ -144,11 +144,23 @@ DOSYA_MANİFESTO:
 - [dosya1.ext]: [açıklama]
 - [dosya2.ext]: [açıklama]
 TEST_STRATEJİSİ: [hangi test framework kullanılacak ve kaç test]
+PROJE_KURALLARI:
+- Stack: [seçilen teknolojiler, framework versiyonları]
+- Auth: [kimlik doğrulama yöntemi]
+- Veritabanı: [tablolar, ilişkiler]
+- Paketler: [kullanılacak kütüphaneler]
+- Modüller: [oluşturulacak modül/sayfa listesi]
+- Mimari Kararlar: [önemli tasarım kararları]
 
 Kurallar:
-- KARMAŞIKLIK: XS (tek fonksiyon), S (birkaç fonksiyon), M (modül), L (çoklu modül), XL (sistem)
+- KARMAŞIKLIK: XS (tek fonksiyon), S (birkaç fonksiyon), M (modül), L (çoklu modül), XL (tam sistem)
+  → Pano, yönetim paneli, çok modüllü uygulama, CRUD sistemi = XL
+  → 3+ modül/sayfa/bölüm = L
+  → Tek özellikli modül = M
+  → Küçük bileşen/fonksiyon = S
 - ÖNERİLEN_STACK: {available_stacks} listesinden seç
-- DOSYA_MANİFESTO: Oluşturulacak/değiştirilecek dosyaları listele
+- DOSYA_MANİFESTO: Oluşturulacak/değiştirilecek tüm dosyaları listele
+- PROJE_KURALLARI: Projeye özel teknik kararları yaz — bunlar gelecek isteklerde kullanılacak
 - TEST_STRATEJİSİ: Hangi test framework ve kaç test yazılacağını belirt"""
     
     name: str = "AnalyzeTask"
@@ -156,7 +168,6 @@ Kurallar:
     @llm_retry()
     async def run(self, task: str, target_stack: str = None) -> str:
         try:
-            # Stack context oluştur
             from .stack_specs import STACK_SPECS, infer_stack_from_task
             
             available_stacks = ", ".join(STACK_SPECS.keys())
@@ -166,11 +177,11 @@ Kurallar:
             else:
                 inferred = infer_stack_from_task(task)
                 stack_context = f"\nÖnerilen Stack: {inferred} (görev açıklamasından tahmin edildi)"
-            
+
             prompt = self.PROMPT_TEMPLATE.format(
-                task=task,
+                task=task[:4000],  # uzun görev metnini kırp ama yeterli bağlam bırak
                 stack_context=stack_context,
-                available_stacks=available_stacks
+                available_stacks=available_stacks,
             )
             rsp = await aask_with_observability(self, prompt)
             return rsp
@@ -1487,85 +1498,168 @@ async def run_sandbox_project_result(
 
 
 class ReviewCode(Action):
-    """Kodu incele ve geri bildirim ver (stack-aware)"""
-    
+    """Kodu incele ve geri bildirim ver (stack-aware, structured output)"""
+
     PROMPT_TEMPLATE: str = """
     Kod:
     {code}
-    
+
     Testler:
     {tests}
     {sandbox_section}
     Stack: {stack_name}
     {stack_specific_checks}
-    
-    Bu kodu ve testleri DİKKATLİCE incele (varsa Sandbox bölümü gerçek konteyner çalıştırmasıdır):
-    1. Kod kalitesi nasıl? Hata yönetimi var mı? Input validation var mı?
-    2. Test coverage yeterli mi? Edge case'ler test edilmiş mi?
-    3. Docstring'ler/Comment'ler var mı? Kod dokümantasyonu yeterli mi?
-    4. Stack-specific best practices uygulanmış mı?
-    5. Güvenlik: Environment variables, secrets, input sanitization kontrol edilmiş mi?
-    6. Build/Test/Run komutları doğru mu? (package.json, composer.json, requirements.txt vs.)
-    7. İyileştirme gereken noktalar var mı?
-    
-    ÖNEMLİ: Eğer kodda eksiklikler, hatalar veya iyileştirme gereken noktalar varsa MUTLAKA "DEĞİŞİKLİK GEREKLİ" yaz.
-    Sadece kod mükemmel ve hiçbir sorun yoksa "ONAYLANDI" yaz.
-    
+
+    Bu kodu DİKKATLİCE incele. Aşağıdaki 5 alanda her biri için [PASS] veya [FAIL] yaz, ardından kısa açıklama ekle:
+
+    REVIEW SONUCU:
+    1. SECURITY: [PASS/FAIL] — Hardcoded secret yok mu? SQL injection, XSS, CSRF koruması var mı? Input validation yapılmış mı? .env kullanılıyor mu?
+    2. CODE_QUALITY: [PASS/FAIL] — Hata yönetimi var mı? Edge case'ler ele alınmış mı? Kod okunabilir mi? Gereksiz tekrar var mı?
+    3. STACK_COMPLIANCE: [PASS/FAIL] — Stack-specific best practices uygulanmış mı? Doğru kütüphaneler kullanılıyor mu? PostgreSQL + golden path standartlarına uygun mu?
+    4. TEST_COVERAGE: [PASS/FAIL] — Testler yeterli mi? Happy path + hata senaryoları test edilmiş mi?
+    5. BUILD_READINESS: [PASS/FAIL] — package.json / composer.json / requirements.txt eksiksiz mi? Build/Run komutları doğru mu?
+
+    {sandbox_verdict}
+
+    KARAR KURALLARI (HER BİRİNİ UYGULA):
+    ⛔ HARD GATE — Şu alanlarda FAIL varsa SONUÇ her zaman DEĞİŞİKLİK GEREKLİ'dir (diğer PASS'lar önemsiz):
+       - SECURITY = [FAIL] → mutlaka DEĞİŞİKLİK GEREKLİ
+       - STACK_COMPLIANCE = [FAIL] → mutlaka DEĞİŞİKLİK GEREKLİ
+       - BUILD_READINESS = [FAIL] → mutlaka DEĞİŞİKLİK GEREKLİ
+    ✅ Diğer durumlar: 5 alandan 4+ PASS ise ONAYLANDI, 3 veya daha az PASS ise DEĞİŞİKLİK GEREKLİ.
+
+    ÖNEMLİ: MUTLAKA şu kelimelerden birini yaz: "ONAYLANDI" veya "DEĞİŞİKLİK GEREKLİ"
+
     SONUÇ: [ONAYLANDI / DEĞİŞİKLİK GEREKLİ]
-    
-    YORUMLAR:
-    - [yorum 1]
-    - [yorum 2]
-    - [yorum 3]
+
+    DÜZELTİLMESİ GEREKENLER (FAIL olan her alan için somut adım):
+    - [somut düzeltme 1]
+    - [somut düzeltme 2]
     """
     
     name: str = "ReviewCode"
     
     def _get_stack_checks(self, stack_id: str) -> str:
-        """Stack-specific kontrol listesi"""
+        """Stack-specific acceptance gate kontrol listesi.
+
+        Golden path stack'ler (laravel-blade, flutter-laravel, laravel-react) için
+        STACK_COMPLIANCE FAIL tetikleyen hard kriterleri içerir.
+        """
         checks = {
+            # ── Golden Path Stacks ─────────────────────────────────────────────
+            "laravel-blade": """
+STACK_COMPLIANCE Kontrol Listesi (Laravel + Blade + PostgreSQL) — HARD GATE:
+
+ÖNCE — TAMAMLANMA KONTROLÜ (Kod metninde dosya varlığı; biri eksikse STACK_COMPLIANCE = [FAIL], SONUÇ = DEĞİŞİKLİK GEREKLİ):
+Kodda şu dosyaların/desenlerin VAR OLUP OLMADIĞINI kontrol et (FILE: satırı veya dosya yolu geçerli sayılır):
+- [ ] routes/web.php (veya routes/api.php) — "FILE: routes/web.php", "routes/web.php" veya benzeri; içinde Route:: tanımı olmalı → [PASS/FAIL]
+- [ ] app/Http/Controllers/ — en az bir controller sınıfı (FILE: app/Http/Controllers/... veya namespace App\\Http\\Controllers) → [PASS/FAIL]
+- [ ] resources/views/ — en az bir .blade.php (FILE: resources/views/... veya .blade.php içeren view) → [PASS/FAIL]
+- [ ] resources/views/layouts/app.blade.php — ana layout (FILE: resources/views/layouts/app.blade.php veya layouts/app) → [PASS/FAIL]
+
+BU TAMAMLANMA SATIRLARINDAN BİRİ [FAIL] İSE:
+→ STACK_COMPLIANCE = [FAIL]
+→ SONUÇ mutlaka DEĞİŞİKLİK GEREKLİ
+→ DÜZELTİLMESİ GEREKENLER: Eksik dosya yollarını tek tek yaz; Alex'in routes, controllers ve Blade view'ları eklemesi gerekir.
+
+SONRA — ZORUNLU (yukarıdaki tamamlanma PASS iken; biri eksikse STACK_COMPLIANCE = [FAIL]):
+- [ ] PostgreSQL kullanılıyor (MySQL/SQLite yoktur)
+- [ ] Laravel Sanctum auth mevcut (session veya token)
+- [ ] Tüm formlar @csrf direktifini içeriyor
+- [ ] Controller'lar FormRequest ile validation yapıyor (inline $request->validate() değil)
+- [ ] Eloquent model $fillable tanımlı (mass assignment koruması)
+- [ ] N+1 önleme: ilişkiler with() ile eager load ediliyor
+- [ ] .env'de hardcoded credential yok (DB_PASSWORD, APP_KEY vb.)
+- [ ] Migration dosyaları PostgreSQL uyumlu (jsonb, timestamptz kullanımı)
+- [ ] PHPUnit / Pest test dosyaları mevcut (en az 1 Feature test)
+
+TERCIH EDİLEN (olmazsa CODE_QUALITY olumsuz etkilenir):
+- Policy veya Gate kullanımı (inline role check değil)
+- Service katmanı (thin controller)
+- Route model binding""",
+
+            "flutter-laravel": """
+STACK_COMPLIANCE Kontrol Listesi (Flutter + Laravel API + PostgreSQL) — HARD GATE:
+ZORUNLU (biri eksikse STACK_COMPLIANCE = [FAIL]):
+- [ ] Flutter: riverpod veya provider state management kullanılıyor
+- [ ] Flutter: Dio kullanılıyor (http paketi değil) + AuthInterceptor
+- [ ] Flutter: flutter_secure_storage (SharedPreferences değil) token için
+- [ ] Flutter: go_router navigation (Navigator.push dağıtık kullanımı değil)
+- [ ] Laravel: API-only backend (Sanctum token-based auth)
+- [ ] Laravel: Resource sınıfları Eloquent cevaplarını dönüştürüyor
+- [ ] Laravel: PostgreSQL kullanılıyor (MySQL/MongoDB yoktur)
+- [ ] Laravel: FormRequest API validation
+- [ ] API contract: Flutter ↔ Laravel endpoint URL'leri tutarlı
+- [ ] CORS: Laravel cors.php'de Flutter origin'i izin veriyor
+
+TERCIH EDİLEN:
+- Feature-based Flutter klasör yapısı (lib/features/<feature>/)
+- json_serializable + freezed model tipleri
+- Flutter widget testleri + Laravel Feature testleri""",
+
+            "laravel-react": """
+STACK_COMPLIANCE Kontrol Listesi (Laravel API + React + PostgreSQL) — HARD GATE:
+ZORUNLU (biri eksikse STACK_COMPLIANCE = [FAIL]):
+- [ ] Laravel: Sanctum SPA mode — stateful domain ayarı
+- [ ] React: Axios withCredentials: true (Sanctum cookie için)
+- [ ] React: CSRF cookie fetch (/sanctum/csrf-cookie) mutating istekten önce
+- [ ] React: TanStack Query server state için (useEffect+useState değil)
+- [ ] React: Zustand global state için
+- [ ] Laravel: PostgreSQL kullanılıyor (MySQL/MongoDB yoktur)
+- [ ] Laravel: API resource sınıfları (ham Eloquent response yok)
+- [ ] CORS: config/cors.php'de React dev origin izin veriliyor
+- [ ] TypeScript: API response tiplemeleri tanımlanmış (any kullanılmıyor)
+- [ ] Form: Zod veya React Hook Form + validation
+
+TERCIH EDİLEN:
+- Feature-based React klasör yapısı (src/features/<feature>/)
+- Lazy loading ile route-level code splitting
+- TanStack Query prefetching""",
+
+            # ── Standart Stacks ───────────────────────────────────────────────
             "express-ts": """
 Kontrol listesi (Express-TS):
 - Middleware sırası doğru mu? (body-parser, cors, helmet)
 - Error handling middleware var mı?
 - TypeScript tipleri tam mı?
 - .env için dotenv kullanılmış mı?""",
-            
+
             "nestjs": """
 Kontrol listesi (NestJS):
 - Module/Controller/Service yapısı doğru mu?
 - Dependency Injection kullanılmış mı?
 - DTO validation var mı?
 - Exception filters uygun mu?""",
-            
+
             "laravel": """
 Kontrol listesi (Laravel):
 - Eloquent relationships doğru mu?
 - Request validation kullanılmış mı?
 - Route tanımları RESTful mi?
-- Migration dosyaları var mı?""",
-            
+- Migration dosyaları var mı?
+- CSRF koruması aktif mi?""",
+
             "fastapi": """
 Kontrol listesi (FastAPI):
 - Pydantic model'ler kullanılmış mı?
 - Async/await doğru kullanılmış mı?
 - Dependency Injection var mı?
 - Response model'ler tanımlanmış mı?""",
-            
+
             "react-vite": """
 Kontrol listesi (React-Vite):
 - Component yapısı temiz mi?
 - Props type checking (TypeScript) var mı?
 - State management doğru mu?
 - useEffect dependency array'leri doğru mu?""",
-            
+
             "nextjs": """
 Kontrol listesi (Next.js):
 - App Router / Pages Router kullanımı doğru mu?
 - Server/Client component ayrımı yapılmış mı?
 - API routes doğru tanımlanmış mı?
 - Metadata/SEO ayarları var mı?""",
-            
+
             "vue-vite": """
 Kontrol listesi (Vue-Vite):
 - Composition API doğru kullanılmış mı?
@@ -1573,7 +1667,7 @@ Kontrol listesi (Vue-Vite):
 - Component props/emits tanımlanmış mı?
 - Script setup syntax kullanılmış mı?""",
         }
-        
+
         return checks.get(stack_id, "")
     
     @llm_retry()
@@ -1587,7 +1681,7 @@ Kontrol listesi (Vue-Vite):
         try:
             # Stack bilgisi
             from .stack_specs import get_stack_spec
-            
+
             if target_stack:
                 spec = get_stack_spec(target_stack)
                 if spec:
@@ -1603,13 +1697,35 @@ Kontrol listesi (Vue-Vite):
             sandbox_section = ""
             if sandbox_report and str(sandbox_report).strip():
                 sandbox_section = "\n\n" + str(sandbox_report).strip()
-            
+
+            # Sandbox FAIL ise Charlie'yi otomatik olarak CHANGES REQUIRED yazmaya yönlendir
+            sandbox_verdict = ""
+            if sandbox_report and str(sandbox_report).strip():
+                report_upper = str(sandbox_report).upper()
+                sandbox_failed = any(
+                    kw in report_upper for kw in [
+                        "FAILED", "FAILURE", "ERROR", "HATA", "BAŞARISIZ",
+                        "EXIT CODE: 1", "EXIT CODE 1", "TEST FAILED",
+                    ]
+                )
+                if sandbox_failed:
+                    sandbox_verdict = (
+                        "\n⚠️ SANDBOX UYARISI: Sandbox testleri BAŞARISIZ oldu. "
+                        "Bu durumda BUILD_READINESS alanı otomatik olarak [FAIL] sayılır ve "
+                        "SONUÇ mutlaka DEĞİŞİKLİK GEREKLİ olmalıdır."
+                    )
+                else:
+                    sandbox_verdict = "\n✅ SANDBOX: Testler başarıyla geçti."
+            else:
+                sandbox_verdict = "\n⚪ SANDBOX: Test çalıştırılamadı (dosya manifesti yok veya sandbox devre dışı)."
+
             prompt = self.PROMPT_TEMPLATE.format(
                 code=code,
                 tests=tests,
                 sandbox_section=sandbox_section,
                 stack_name=stack_name,
-                stack_specific_checks=stack_specific_checks
+                stack_specific_checks=stack_specific_checks,
+                sandbox_verdict=sandbox_verdict,
             )
             rsp = await aask_with_observability(self, prompt)
             return rsp

@@ -5,14 +5,15 @@ DeepSite Projects Router
 Handles CRUD operations for DeepSite projects stored in PostgreSQL.
 """
 
+import asyncio
 import json
 import logging
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 from uuid import uuid4
 import re
 
-from fastapi import APIRouter, HTTPException, Depends, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, HTTPException, Depends, Request, Query, status
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -35,7 +36,15 @@ DEEPSITE_SYSTEM_INSTRUCTIONS = """You are DeepSite, an expert web developer AI.
 Output a single complete HTML5 document only. Do not wrap the output in markdown code fences.
 Use semantic HTML, embed CSS in <style> and JavaScript in <script> when needed.
 Make the page responsive, accessible, and visually modern unless the user asks otherwise.
-If the user asks for multiple pages, still return one HTML file; you may use simple client-side routing comments in HTML comments."""
+If the user asks for multiple pages, still return one HTML file; you may use simple client-side routing comments in HTML comments.
+
+CRITICAL IMAGE RULES — always follow:
+- NEVER use placeholder images, local paths, or broken img tags.
+- For ALL <img> tags use real Unsplash CDN URLs: https://images.unsplash.com/photo-{PHOTO_ID}?w={WIDTH}&h={HEIGHT}&fit=crop&auto=format
+- Choose photo IDs matching the content (fashion, food, tech, nature, etc.).
+- Set width and height HTML attributes on every <img> tag.
+- Add descriptive alt text to every image.
+- Fashion photo IDs: photo-1558618666-fcd25c85cd64 (hero 1600x900), photo-1539109136881-3be0616acf4b (dress 800x1000), photo-1469334031218-e382a71b716b (model 800x1000), photo-1523381210434-271e8be1f52b (summer 800x600), photo-1467043237213-65f2da53396f (winter 800x600), photo-1542291026-7eec264c27ff (shoes 800x600), photo-1515562141207-7a88fb7ce338 (accessories 800x600), photo-1483985988355-763728e1935b (shopping 800x600), photo-1490481651871-ab68de25d43d (lookbook 800x1000), photo-1507003211169-0a1dd7228f2d (square 600x600)."""
 
 
 # Pydantic models
@@ -71,6 +80,9 @@ class ProjectUpdate(BaseModel):
     pages: Optional[List[Page]] = None
     files: Optional[List[File]] = None
     is_active: Optional[bool] = None
+    chat_history: Optional[dict] = Field(
+        None, description="Serialized chat timeline: {items, artifacts}"
+    )
 
 
 class ProjectResponse(BaseModel):
@@ -83,6 +95,7 @@ class ProjectResponse(BaseModel):
     files: List[File]
     commits: List[Commit]
     is_active: bool
+    chat_history: Optional[dict] = None
     created_at: str
     updated_at: str
 
@@ -100,7 +113,7 @@ class AutosaveRequest(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    """Request body for AI HTML generation (streaming)."""
+    """Request body for AI HTML/project generation (streaming)."""
 
     prompt: str = Field(..., min_length=1, max_length=32000)
     context: Optional[str] = Field(
@@ -113,8 +126,29 @@ class GenerateRequest(BaseModel):
     temperature: float = Field(default=0.65, ge=0.0, le=2.0)
     max_tokens: int = Field(default=8192, ge=256, le=32768)
     mode: Literal["direct", "agent"] = Field(
-        default="direct",
-        description="direct: single LLM stream; agent: designer+coder pipeline",
+        default="agent",
+        description="direct: single LLM stream; agent: MGX multi-agent pipeline (Mike+Alex+Bob+Charlie)",
+    )
+    stack_type: Optional[Literal["html", "web", "mobile", "special"]] = Field(
+        default=None,
+        description=(
+            "Project type hint for golden path selection. "
+            "html=vanilla HTML, web=Laravel+Blade+PostgreSQL, "
+            "mobile=Flutter+Laravel+PostgreSQL, special=Laravel+React+PostgreSQL"
+        ),
+    )
+    prompt_history: Optional[List[str]] = Field(
+        default=None,
+        max_length=20,
+        description="Previous prompts for this project (cross-run memory context)",
+    )
+    project_id: Optional[str] = Field(
+        default=None,
+        description="DeepSite project ID — used to save generated files and project rules",
+    )
+    existing_files: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Mevcut proje dosyaları (path → içerik özeti) — AI bağlamı",
     )
 
 
@@ -141,7 +175,7 @@ class RedesignRequest(BaseModel):
     model: Optional[str] = None
     temperature: float = Field(default=0.65, ge=0.0, le=2.0)
     max_tokens: int = Field(default=8192, ge=256, le=32768)
-    mode: Literal["direct", "agent"] = "direct"
+    mode: Literal["direct", "agent"] = "agent"
 
 
 def _normalize_model(model: Optional[str]) -> Optional[str]:
@@ -202,9 +236,10 @@ async def generate_slug(name: str, user_id: str, session: AsyncSession) -> str:
 async def generate_stream(
     body: GenerateRequest,
     current_user: User = Depends(get_deepsite_user),
+    session: AsyncSession = Depends(get_session),
 ):
     """
-    Stream AI-generated HTML for DeepSite (Server-Sent Events).
+    Stream AI-generated HTML/project for DeepSite (Server-Sent Events).
 
     Each line is `data: {"text":"..."}` JSON chunks; final message includes `"done": true`.
     On error: `data: {"error":"..."}`.
@@ -222,17 +257,50 @@ async def generate_stream(
     if provider is None and model is None:
         provider, model = _default_provider_model()
 
+    # Projeye özgü kuralları DB'den çek
+    project_rules_text: Optional[str] = None
+    if body.project_id:
+        try:
+            from sqlalchemy import select as sa_select
+            pr_query = sa_select(DeepSiteProject).where(DeepSiteProject.id == body.project_id)
+            pr_result = await session.execute(pr_query)
+            pr_project = pr_result.scalar_one_or_none()
+            if pr_project and pr_project.project_rules:
+                project_rules_text = pr_project.project_rules.get("rules_text")
+        except Exception as _pr_err:
+            logger.debug("Could not load project rules: %s", _pr_err)
+
     async def event_stream():
         try:
             if body.mode == "agent":
-                async for chunk in web_team.stream_agent_html(
-                    user_prompt=body.prompt,
-                    context=body.context,
-                    provider=provider,
-                    model=model,
-                    temperature=body.temperature,
-                    max_tokens=body.max_tokens,
-                ):
+                try:
+                    from backend.services.deepsite.mgx_bridge import stream_mgx_html as _mgx_stream
+                    _gen = _mgx_stream(
+                        user_prompt=body.prompt,
+                        context=body.context,
+                        provider=provider,
+                        model=model,
+                        temperature=body.temperature,
+                        max_tokens=body.max_tokens,
+                        prompt_history=body.prompt_history,
+                        stack_type=body.stack_type,
+                        project_id=body.project_id,
+                        project_rules=project_rules_text,
+                        existing_files=body.existing_files,
+                    )
+                except Exception as _mgx_import_err:
+                    logger.warning(
+                        "MGX bridge unavailable, falling back to web_team: %s", _mgx_import_err
+                    )
+                    _gen = web_team.stream_agent_html(
+                        user_prompt=body.prompt,
+                        context=body.context,
+                        provider=provider,
+                        model=model,
+                        temperature=body.temperature,
+                        max_tokens=body.max_tokens,
+                    )
+                async for chunk in _gen:
                     yield f"data: {json.dumps({'text': chunk})}\n\n"
             else:
                 async for chunk in llm.stream_generate(
@@ -372,11 +440,16 @@ async def list_projects(
     session: AsyncSession = Depends(get_session)
 ):
     """Get all projects for the current user."""
-    result = await session.execute(
-        select(DeepSiteProject)
-        .where(DeepSiteProject.user_id == current_user.id)
-        .order_by(DeepSiteProject.updated_at.desc())
-    )
+    # skip_auth modunda tüm projeler listelenir (geliştirme/demo ortamı)
+    if settings.deepsite_skip_auth:
+        lq = select(DeepSiteProject).order_by(DeepSiteProject.updated_at.desc())
+    else:
+        lq = (
+            select(DeepSiteProject)
+            .where(DeepSiteProject.user_id == current_user.id)
+            .order_by(DeepSiteProject.updated_at.desc())
+        )
+    result = await session.execute(lq)
     projects = result.scalars().all()
     
     return [
@@ -446,12 +519,15 @@ async def get_project(
     session: AsyncSession = Depends(get_session)
 ):
     """Get a specific project by ID."""
-    result = await session.execute(
-        select(DeepSiteProject).where(
+    # skip_auth modunda herhangi bir projeye ID ile erişilebilir (user_id filtresi yok)
+    if settings.deepsite_skip_auth:
+        q = select(DeepSiteProject).where(DeepSiteProject.id == project_id)
+    else:
+        q = select(DeepSiteProject).where(
             DeepSiteProject.id == project_id,
-            DeepSiteProject.user_id == current_user.id
+            DeepSiteProject.user_id == current_user.id,
         )
-    )
+    result = await session.execute(q)
     project = result.scalar_one_or_none()
     
     if not project:
@@ -470,6 +546,7 @@ async def get_project(
         files=project.files or [],
         commits=project.commits or [],
         is_active=project.is_active,
+        chat_history=project.chat_history,
         created_at=project.created_at.isoformat(),
         updated_at=project.updated_at.isoformat()
     )
@@ -483,12 +560,15 @@ async def update_project(
     session: AsyncSession = Depends(get_session)
 ):
     """Update a project."""
-    result = await session.execute(
-        select(DeepSiteProject).where(
+    # skip_auth modunda herhangi bir projeye ID ile güncelleme yapılabilir
+    if settings.deepsite_skip_auth:
+        uq = select(DeepSiteProject).where(DeepSiteProject.id == project_id)
+    else:
+        uq = select(DeepSiteProject).where(
             DeepSiteProject.id == project_id,
-            DeepSiteProject.user_id == current_user.id
+            DeepSiteProject.user_id == current_user.id,
         )
-    )
+    result = await session.execute(uq)
     project = result.scalar_one_or_none()
     
     if not project:
@@ -507,6 +587,9 @@ async def update_project(
         project.files = [file.dict() for file in project_data.files]
     if project_data.is_active is not None:
         project.is_active = project_data.is_active
+    # chat_history: None → silme (DB'de null yap); dict → üstüne yaz
+    if "chat_history" in project_data.model_fields_set:
+        project.chat_history = project_data.chat_history
     
     await session.commit()
     await session.refresh(project)
@@ -523,6 +606,7 @@ async def update_project(
         files=project.files or [],
         commits=project.commits or [],
         is_active=project.is_active,
+        chat_history=project.chat_history,
         created_at=project.created_at.isoformat(),
         updated_at=project.updated_at.isoformat()
     )
@@ -659,6 +743,386 @@ async def autosave_project(
         created_at=project.created_at.isoformat(),
         updated_at=project.updated_at.isoformat()
     )
+
+
+
+def _extract_files_from_pages_html(project) -> dict:
+    """
+    Dosya gezgini HTML'inden `const files = {...}` JSON bloğunu çıkar.
+    Bu, AI üretimi sırasında `files` DB alanı kaydedilmemiş projeleri kurtarır.
+    """
+    import re as _re
+    pages = project.pages or []
+    for page in pages:
+        html = page.get("html", "") if isinstance(page, dict) else ""
+        if 'data-deepsite-preview="project-files"' not in html:
+            continue
+        # `const files = ` başlangıcını bul, ardından JSON decoder ile parse et
+        marker = "const files = "
+        idx = html.find(marker)
+        if idx == -1:
+            continue
+        json_start = idx + len(marker)
+        try:
+            decoder = json.JSONDecoder()
+            files_data, _ = decoder.raw_decode(html, json_start)
+            if isinstance(files_data, dict) and files_data:
+                logger.info("Extracted %d files from pages HTML for project %s", len(files_data), project.id)
+                return files_data
+        except Exception as _ex:
+            logger.debug("JSON decode failed for pages HTML: %s", _ex)
+    return {}
+
+
+def _generate_setup_instructions(project_name: str, stack: str) -> str:
+    """Proje dosyaları DB'de yokken gösterilecek kurulum talimatları HTML'i."""
+    stack_display = {
+        "laravel-blade": "Laravel + Blade + PostgreSQL",
+        "laravel-react": "Laravel API + React + PostgreSQL",
+        "flutter-laravel": "Flutter + Laravel API + PostgreSQL",
+    }.get(stack, stack)
+
+    return f"""<!DOCTYPE html>
+<html lang="tr" data-deepsite-preview="project-files">
+<head><meta charset="UTF-8"><title>{project_name}</title>
+<script src="https://cdn.tailwindcss.com"></script></head>
+<body class="bg-slate-900 text-slate-200 p-8 font-mono">
+  <div class="max-w-2xl mx-auto">
+    <div class="mb-6">
+      <span class="bg-indigo-600 text-white text-xs px-3 py-1 rounded-full">{stack_display}</span>
+      <h1 class="text-2xl font-bold mt-3">{project_name}</h1>
+    </div>
+    <div class="bg-amber-900/30 border border-amber-600 rounded-lg p-4 mb-6">
+      <p class="text-amber-400 text-sm">⚠ Proje dosyaları henüz veritabanına kaydedilmemiş.</p>
+      <p class="text-amber-300 text-xs mt-1">Canlı önizleme için "Web App" seçerek yeniden üretim başlatın.</p>
+    </div>
+    <h2 class="text-slate-400 text-sm uppercase tracking-widest mb-3">Yerel Kurulum</h2>
+    <div class="bg-slate-800 rounded-lg p-4 space-y-2 text-sm">
+      <div class="text-green-400"># 1. Bağımlılıkları yükle</div>
+      <div class="text-slate-300">composer install</div>
+      <div class="text-green-400 mt-2"># 2. Ortam dosyasını hazırla</div>
+      <div class="text-slate-300">cp .env.example .env && php artisan key:generate</div>
+      <div class="text-green-400 mt-2"># 3. Veritabanını oluştur (PostgreSQL)</div>
+      <div class="text-slate-300">php artisan migrate</div>
+      <div class="text-green-400 mt-2"># 4. Geliştirme sunucusunu başlat</div>
+      <div class="text-slate-300">php artisan serve</div>
+    </div>
+    <h2 class="text-slate-400 text-sm uppercase tracking-widest mb-3 mt-6">Docker ile Çalıştır</h2>
+    <div class="bg-slate-800 rounded-lg p-4 text-sm text-slate-300">docker-compose up -d</div>
+  </div>
+</body></html>"""
+
+
+# ---------------------------------------------------------------------------
+# Project Runner endpoints (Docker-based live preview)
+# ---------------------------------------------------------------------------
+
+# Proje başına lock: paralel POST /run isteklerini serialize et
+_run_locks: dict[str, asyncio.Lock] = {}
+
+def _get_run_lock(project_id: str) -> asyncio.Lock:
+    if project_id not in _run_locks:
+        _run_locks[project_id] = asyncio.Lock()
+    return _run_locks[project_id]
+
+
+@router.post("/projects/{project_id}/run")
+async def run_project(
+    project_id: str,
+    current_user: User = Depends(get_deepsite_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Start a Docker container for the project and return the preview URL.
+    Works only for non-HTML stacks (laravel-blade, laravel-react, flutter-laravel).
+    """
+    if settings.deepsite_skip_auth:
+        q = select(DeepSiteProject).where(DeepSiteProject.id == project_id)
+    else:
+        q = select(DeepSiteProject).where(
+            DeepSiteProject.id == project_id,
+            DeepSiteProject.user_id == current_user.id,
+        )
+    result = await session.execute(q)
+    project = result.scalar_one_or_none()
+
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    stack = project.stack_hint or "laravel-blade"
+
+    # Convert file list to dict
+    files_dict: dict[str, str] = {}
+    for f in (project.files or []):
+        if isinstance(f, dict) and "path" in f and "content" in f:
+            files_dict[f["path"]] = f["content"]
+
+    # Dosyalar DB'de yoksa → pages HTML'inden çıkarmaya çalış
+    if not files_dict:
+        files_dict = _extract_files_from_pages_html(project)
+        if files_dict:
+            # Çıkarılan dosyaları DB'ye kaydet
+            try:
+                from backend.services.deepsite.mgx_bridge import _save_project_files
+                await _save_project_files(
+                    project_id, files_dict, stack,
+                    project.project_rules.get("rules_text") if project.project_rules else None,
+                )
+                logger.info("Extracted and saved %d files from pages HTML for %s", len(files_dict), project_id)
+            except Exception as _ex:
+                logger.warning("Could not save extracted files: %s", _ex)
+        else:
+            return {
+                "ok": True,
+                "port": None,
+                "url": None,
+                "message": "Proje dosyaları henüz kaydedilmemiş. Lütfen yeni bir AI üretimi yapın.",
+            }
+
+    try:
+        from backend.services.deepsite.project_runner import start_project
+        # Lock: aynı proje için paralel run isteklerini serialize et
+        lock = _get_run_lock(project_id)
+        async with lock:
+            # Image pull + container başlatma — 5 dakikaya kadar sürebilir
+            runner_result = await asyncio.wait_for(
+                start_project(project_id, files_dict, stack),
+                timeout=300,
+            )
+        port = runner_result["port"]
+        return {
+            "ok": True,
+            "port": port,
+            "url": f"http://localhost:{port}",
+            "proxy_url": f"/api/deepsite/projects/{project_id}/proxy/",
+            "container": runner_result["container"],
+        }
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Container başlatma timeout (5 dakika)")
+    except Exception as e:
+        logger.error("Project run failed for %s: %s", project_id, e)
+        raise HTTPException(status_code=500, detail=f"Container başlatılamadı: {e}")
+
+
+@router.delete("/projects/{project_id}/run")
+async def stop_project_run(
+    project_id: str,
+    current_user: User = Depends(get_deepsite_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Stop the Docker container for the project."""
+    if not settings.deepsite_skip_auth:
+        q = select(DeepSiteProject).where(
+            DeepSiteProject.id == project_id,
+            DeepSiteProject.user_id == current_user.id,
+        )
+        result = await session.execute(q)
+        if not result.scalar_one_or_none():
+            raise HTTPException(status_code=404, detail="Project not found")
+
+    try:
+        from backend.services.deepsite.project_runner import stop_project
+        stopped = await stop_project(project_id)
+        return {"ok": True, "stopped": stopped}
+    except Exception as e:
+        logger.error("Project stop failed for %s: %s", project_id, e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/projects/{project_id}/run/status")
+async def get_project_run_status(
+    project_id: str,
+    current_user: User = Depends(get_deepsite_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get the running status and preview URL for the project container."""
+    try:
+        from backend.services.deepsite.project_runner import get_project_status
+        status = await get_project_status(project_id)
+        return {"ok": True, **status}
+    except Exception as e:
+        return {"ok": False, "running": False, "error": str(e)}
+
+
+@router.get("/projects/{project_id}/screenshot")
+async def get_project_preview_screenshot(
+    project_id: str,
+    full_page: bool = Query(False, description="Tam sayfa uzunluğunda PNG"),
+    width: int = Query(1280, ge=320, le=3840, description="Viewport genişliği"),
+    height: int = Query(720, ge=240, le=2160, description="Viewport yüksekliği"),
+    wait_ms: int = Query(2000, ge=0, le=60_000, description="Yükleme sonrası ek bekleme (ms)"),
+    current_user: User = Depends(get_deepsite_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """
+    Çalışan önizleme konteynerinin URL'sine Playwright ile gidip PNG ekran görüntüsü döndürür.
+    Önizleme çalışmıyorsa veya Playwright kurulu değilse 4xx/5xx.
+    """
+    if settings.deepsite_skip_auth:
+        q = select(DeepSiteProject).where(DeepSiteProject.id == project_id)
+    else:
+        q = select(DeepSiteProject).where(
+            DeepSiteProject.id == project_id,
+            DeepSiteProject.user_id == current_user.id,
+        )
+    result = await session.execute(q)
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    from backend.services.deepsite.project_runner import get_project_status
+    from backend.services.deepsite.preview_screenshot import (
+        capture_url_png,
+        describe_playwright_setup,
+    )
+
+    st = await get_project_status(project_id)
+    if not st.get("running"):
+        raise HTTPException(
+            status_code=409,
+            detail="Önizleme çalışmıyor. Önce POST /api/deepsite/projects/{id}/run ile başlatın.",
+        )
+    preview_url = st.get("preview_url") or st.get("url")
+    if not preview_url or not isinstance(preview_url, str):
+        raise HTTPException(status_code=503, detail="preview_url alınamadı")
+
+    try:
+        png = await capture_url_png(
+            preview_url,
+            viewport_width=width,
+            viewport_height=height,
+            full_page=full_page,
+            wait_ms=wait_ms,
+        )
+    except RuntimeError as e:
+        logger.warning("Screenshot runtime (Playwright eksik?): %s", e)
+        raise HTTPException(status_code=501, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Screenshot failed for %s: %s", project_id, e)
+        raise HTTPException(
+            status_code=503,
+            detail=describe_playwright_setup(),
+        ) from e
+
+    return Response(content=png, media_type="image/png")
+
+
+import httpx as _httpx_module
+
+
+async def _do_proxy(project_id: str, path: str, request: Request) -> Response:
+    """Reverse proxy iç implementasyonu."""
+    from backend.services.deepsite.project_runner import get_project_status
+
+    status = await get_project_status(project_id)
+    if not status.get("running"):
+        return _FastAPIResponse(
+            content=b"<h1>Container not running</h1>",
+            status_code=503,
+            media_type="text/html",
+        )
+
+    port = status.get("port")
+    if not port:
+        return _FastAPIResponse(content=b"<h1>No port</h1>", status_code=503, media_type="text/html")
+
+    import os as _os_mod
+    dind_host = _os_mod.getenv("DIND_HOST", "dind")
+    target_url = f"http://{dind_host}:{port}/{path}"
+    if request.url.query:
+        target_url += f"?{request.url.query}"
+
+    body = await request.body()
+    skip_headers = {"host", "content-length", "transfer-encoding"}
+    fwd_headers = {
+        k: v for k, v in request.headers.items()
+        if k.lower() not in skip_headers
+    }
+
+    try:
+        async with _httpx_module.AsyncClient(timeout=30) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                headers=fwd_headers,
+                content=body,
+                follow_redirects=True,
+            )
+
+        content_type = resp.headers.get("content-type", "")
+        content = resp.content
+
+        if "text/html" in content_type:
+            proxy_base = f"/api/deepsite/projects/{project_id}/proxy"
+            content_str = content.decode("utf-8", errors="replace")
+            for attr in ('href="/', 'src="/', 'action="/'):
+                content_str = content_str.replace(attr, f'{attr[:-1]}{proxy_base}/')
+            content = content_str.encode("utf-8")
+
+        skip_resp = {"transfer-encoding", "content-encoding", "content-length", "x-frame-options"}
+        resp_headers = {
+            k: v for k, v in resp.headers.items()
+            if k.lower() not in skip_resp
+        }
+        # Proxy içerik iframe içinde gösterilebilsin
+        resp_headers["X-Frame-Options"] = "SAMEORIGIN"
+
+        return Response(
+            content=content,
+            status_code=resp.status_code,
+            headers=resp_headers,
+            media_type=content_type.split(";")[0] if content_type else None,
+        )
+    except _httpx_module.ConnectError:
+        return Response(
+            content=b"<h1>Container not reachable</h1>",
+            status_code=502,
+            media_type="text/html",
+        )
+    except Exception as e:
+        logger.error("Proxy error for %s: %s", project_id, e)
+        return Response(
+            content=f"<h1>Proxy error: {e}</h1>".encode(),
+            status_code=502,
+            media_type="text/html",
+        )
+
+
+@router.api_route(
+    "/projects/{project_id}/proxy",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+@router.api_route(
+    "/projects/{project_id}/proxy/",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+    include_in_schema=False,
+)
+async def proxy_project_preview_root(
+    project_id: str,
+    request: Request,
+):
+    """Proxy root — boş path için ayrı route."""
+    return await _do_proxy(project_id, "", request)
+
+
+@router.api_route(
+    "/projects/{project_id}/proxy/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+)
+async def proxy_project_preview(
+    project_id: str,
+    path: str,
+    request: Request,
+):
+    """
+    Reverse proxy: browser'dan gelen istekleri DinD içindeki container'a iletir.
+    Bu sayede tarayıcı localhost:8000 üzerinden projeye erişebilir.
+    """
+    return await _do_proxy(project_id, path, request)
+
+
 
 
 __all__ = ["router"]

@@ -1,0 +1,64 @@
+{
+  "name": "Laravel + Blade + PostgreSQL",
+  "stack": "laravel-blade",
+  "version": "1.0.0",
+  "description": "Laravel 11 web application with Blade templates and PostgreSQL database",
+  "files": {
+    "composer.json": "laravel/composer.json.template",
+    "artisan": "laravel/artisan.template",
+    ".env.example": "laravel/.env.example.template",
+    "routes/web.php": "laravel/routes/web.php.template",
+    "routes/api.php": "laravel/routes/api.php.template",
+    "app/Http/Controllers/Controller.php": "laravel/app/Http/Controllers/Controller.php.template",
+    "app/Http/Middleware/Authenticate.php": "laravel/app/Http/Middleware/Authenticate.php.template",
+    "app/Models/User.php": "laravel/app/Models/User.php.template",
+    "resources/views/layouts/app.blade.php": "laravel/resources/views/layouts/app.blade.php.template",
+    "resources/views/welcome.blade.php": "laravel/resources/views/welcome.blade.php.template",
+    "database/migrations/0001_01_01_000000_create_users_table.php": "laravel/database/migrations/create_users_table.php.template",
+    "config/app.php": "laravel/config/app.php.template",
+    "config/database.php": "laravel/config/database.php.template",
+    "Dockerfile": "laravel/Dockerfile.template",
+    "docker-compose.yml": "laravel/docker-compose.yml.template",
+    "README.md": "laravel/README.md.template"
+  },
+  "docker": {
+    "base_image": "php:8.3-fpm-alpine",
+    "dev_command": "php artisan serve --host=0.0.0.0 --port=8000",
+    "port": 8000
+  },
+  "scripts": {
+    "dev": "php artisan serve --host=0.0.0.0 --port=8000",
+    "setup": "composer install && php artisan key:generate && php artisan migrate",
+    "test": "php artisan test",
+    "build": "npm run build",
+    "migrate": "php artisan migrate"
+  },
+  "env_vars": [
+    "APP_NAME",
+    "APP_KEY",
+    "APP_ENV",
+    "APP_DEBUG",
+    "APP_URL",
+    "DB_CONNECTION",
+    "DB_HOST",
+    "DB_PORT",
+    "DB_DATABASE",
+    "DB_USERNAME",
+    "DB_PASSWORD",
+    "SESSION_DRIVER",
+    "CACHE_STORE",
+    "QUEUE_CONNECTION"
+  ],
+  "default_features": ["auth", "database", "blade", "testing"],
+  "supported_features": [
+    "auth",
+    "database",
+    "blade",
+    "api",
+    "testing",
+    "docker",
+    "queue",
+    "mail",
+    "storage"
+  ]
+}
